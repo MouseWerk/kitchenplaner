@@ -6,6 +6,7 @@ import { currentLang, useT } from "../lib/i18n";
 import { baseName } from "../lib/platform";
 import { updateSettings, useSettings } from "../lib/settings";
 import { keyLabel } from "../lib/shortcuts";
+import { useCanCapture3d } from "../three/capture";
 import { useStore, type Layout } from "../store/store";
 import { Menu } from "./Menu";
 
@@ -30,6 +31,8 @@ export function Toolbar(props: { roomEdit: boolean; onRoomEdit: (v: boolean) => 
   const facing = useStore((s) => s.facing);
   const prefs = useStore((s) => s.prefs);
   const settings = useSettings();
+  // The 3D export renders the mounted 3D pane; layouts without one have nothing to capture.
+  const can3d = useCanCapture3d();
   const st = useStore.getState();
   const k = (c: string) => keyLabel(c, lang);
   const facingName = t(`facing.${facing}` as const);
@@ -91,7 +94,7 @@ export function Toolbar(props: { roomEdit: boolean; onRoomEdit: (v: boolean) => 
             { label: t("export.elevationDxf", { facing: facingName }), onSelect: () => void runExport("elevation-dxf", facing) },
             { label: t("export.elevationsSvg"), onSelect: () => void runExport("elevations-svg", facing) },
             "sep",
-            { label: t("export.png3d"), onSelect: () => void runExport("3d-png", facing) },
+            { label: t("export.png3d"), disabled: !can3d, onSelect: () => void runExport("3d-png", facing) },
             "sep",
             { label: t("export.listCsv"), onSelect: () => void runExport("list-csv", facing) },
           ]}

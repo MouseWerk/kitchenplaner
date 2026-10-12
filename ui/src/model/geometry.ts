@@ -4,6 +4,12 @@ import type { Item, Opening, Room, Vec2 } from "./types";
 
 export const EPS = 1e-6;
 
+/**
+ * Largest length the app accepts for a size or distance (mm, 100 m): far beyond any kitchen,
+ * small enough that a typo or a damaged file cannot produce drawings that are unusable.
+ */
+export const MAX_LENGTH = 100_000;
+
 export const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
 export const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
 export const scale = (a: Vec2, k: number): Vec2 => ({ x: a.x * k, y: a.y * k });
@@ -224,6 +230,10 @@ export function snapItem(
   // The wall nearest to the item's back (or to its centre when it may turn).
   let best: { wall: Wall; gap: number; rotation: number } | null = null;
   for (const wall of walls(room)) {
+    // A zero-length wall (two corners on the same spot) has no direction and no inward normal:
+    // its gap would be 0 wherever the item is, so it would always win and pull the item onto
+    // that corner.
+    if (wall.length < EPS) continue;
     const rot = normalizeAngle((Math.atan2(-wall.inward.x, wall.inward.y) * 180) / Math.PI);
     if (!autoRotate && angleDiff(rot, item.rotation) > 1) continue;
     const back = sub({ x: item.x, y: item.y }, scale(wall.inward, item.depth / 2));

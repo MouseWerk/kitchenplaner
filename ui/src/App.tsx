@@ -37,12 +37,9 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [roomEdit]);
 
-  // A new or opened project is fitted into every view.
-  const path = useStore((s) => s.path);
-  const loadedAt = useStore((s) => s.past.length === 0 && s.future.length === 0);
-  useEffect(() => {
-    if (loadedAt) setFitSignal((n) => n + 1);
-  }, [path, loadedAt]);
+  // A new or opened project is fitted into every view, also when it replaces an identical one.
+  const loadCount = useStore((s) => s.loadCount);
+  useEffect(() => setFitSignal((n) => n + 1), [loadCount]);
 
   useDesktopIntegration();
 
@@ -54,7 +51,7 @@ export function App() {
   const three = (
     <Pane title={t("view.3d")} key="3d">
       <Suspense fallback={<div className="pane-loading">{t("view.loading3d")}</div>}>
-        <View3D />
+        <View3D fitSignal={fitSignal} />
       </Suspense>
     </Pane>
   );
@@ -191,12 +188,23 @@ function useDesktopIntegration() {
         event.preventDefault();
         if (await confirmDiscard()) await win.destroy();
       });
-      if (cancelled) off();
-      else unlisten = off;
+      // Quitting the app (Cmd+Q on macOS) closes no window first, so the shell holds the exit and
+      // asks here; "confirm_exit" lets it go.
+      const { listen } = await import("@tauri-apps/api/event");
+      const offExit = await listen("exit-requested", async () => {
+        if (await confirmDiscard()) await invoke("confirm_exit");
+      });
+      if (cancelled) {
+        off();
+        offExit();
+      } else
+        unlisten = () => {
+          off();
+          offExit();
+        };
       const startup = await invoke<string | null>("startup_file").catch(() => null);
       if (startup && !cancelled) void openPath(startup);
       // macOS hands files opened while the app runs over as an event (the shell's "open-file").
-      const { listen } = await import("@tauri-apps/api/event");
       const offOpen = await listen<string>("open-file", (e) => void openPath(e.payload));
       if (cancelled) offOpen();
       else {

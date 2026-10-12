@@ -89,3 +89,20 @@ describe("elevationDrawing", () => {
     expect(ds.map((d) => d.text)).toEqual(["8000", "3000"]);
   });
 });
+
+describe("elevationDrawing sinks", () => {
+  it("draws as many hidden bowls as the plan and 3D (sinkBowlCount), by width not catalog id", () => {
+    const bowls = (catalogId: string, width: number) => {
+      const p = testProject([testItem("s", catalogId, 3000, 350, 0, { width })]);
+      return polys(elevationDrawing(p, "north", { showDims: false }).shapes).filter((x) => x.itemId === "s" && x.pen === "hidden");
+    };
+    expect(bowls("sink-1", 1200)).toHaveLength(1);
+    expect(bowls("sink-1", 1600)).toHaveLength(2);
+    expect(bowls("sink-2", 1200)).toHaveLength(1);
+    // Two bowls side by side at the right end, inside the item.
+    const two = bowls("sink-2", 1600).map(extent);
+    expect(two[0][1]).toBeLessThanOrEqual(3800);
+    expect(two[1][1]).toBeLessThanOrEqual(two[0][0]);
+    expect(two[1][0]).toBeGreaterThanOrEqual(2200);
+  });
+});

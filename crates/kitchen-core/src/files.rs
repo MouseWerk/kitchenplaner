@@ -15,11 +15,41 @@ const PROJECT_FORMAT: &str = "kitchenplaner";
 
 const UTF8_BOM: &str = "\u{feff}";
 
+/// What the shell may read as a project. The extension lists name the only files the UI ever
+/// produces; limiting the commands to them keeps a compromised WebView from reading or
+/// overwriting arbitrary files (`.bashrc`, a DLL next to an executable).
+pub const PROJECT_EXTENSIONS: &[&str] = &["kplan"];
+/// What the shell may write as text: the project and the SVG, DXF and CSV exports.
+pub const TEXT_FILE_EXTENSIONS: &[&str] = &["kplan", "svg", "dxf", "csv"];
+/// What the shell may write as binary: the PNG exports.
+pub const BINARY_FILE_EXTENSIONS: &[&str] = &["png"];
+
+/// Accepts only an absolute path without NUL whose extension is one of `allowed`, ignoring case
+/// (save dialogs keep whatever case the user typed). Relative paths are refused because they
+/// would resolve against the app's working directory, which the user never chose.
+pub fn check_path(path: impl AsRef<Path>, allowed: &[&str]) -> Result<(), FileError> {
+    let path = path.as_ref();
+    let shown = || path.display().to_string();
+    // The OS APIs reject an embedded NUL anyway; refusing it here gives a clear kind and keeps a
+    // truncated name from ever reaching a lower layer.
+    if path.as_os_str().as_encoded_bytes().contains(&0) || !path.is_absolute() {
+        return Err(FileError::BadPath { path: shown() });
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    if !allowed.iter().any(|a| a.eq_ignore_ascii_case(ext)) {
+        let allowed = allowed.iter().map(|a| format!(".{a}")).collect::<Vec<_>>().join(", ");
+        return Err(FileError::BadExtension { path: shown(), allowed });
+    }
+    Ok(())
+}
+
 /// Reads a project file and checks its envelope: a JSON object with `"format": "kitchenplaner"`
 /// and a numeric `"version"`. The UI validates and migrates the content itself; this only makes
 /// sure it receives text that is meant to be a project. Returns the text without a UTF-8 BOM.
+/// Only absolute `.kplan` paths are read (see [`check_path`]).
 pub fn read_project(path: impl AsRef<Path>) -> Result<String, FileError> {
     let path = path.as_ref();
+    check_path(path, PROJECT_EXTENSIONS)?;
     let file = File::open(path).map_err(|e| FileError::io("Öffnen von", path, e))?;
     let size = file.metadata().map_err(|e| FileError::io("Lesen von", path, e))?.len();
     if size > MAX_PROJECT_BYTES {
@@ -60,7 +90,8 @@ fn check_envelope(text: &str) -> Result<(), String> {
 /// Writes `bytes` to `path` so that the file afterwards holds either the old or the new content,
 /// never a mix: a temp file in the same directory (same volume, so the rename is atomic) is
 /// written and flushed to disk, then renamed over the target. On any failure the temp file is
-/// removed and the target is untouched.
+/// removed and the target is untouched. Takes any path (the recent list lives outside the user's
+/// folders): callers passing a path from the UI check it with [`check_path`] first.
 pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileError> {
     let path = path.as_ref();
     // Windows refuses to replace a read-only file with a bare "access denied", and Unix would
@@ -221,10 +252,11 @@ mod tests {
     }
 
     #[test]
-    fn missing_file_is_io() {
+    fn missing_file_is_not_found() {
         let dir = tempfile::tempdir().unwrap();
         let err = read_project(dir.path().join("fehlt.kplan")).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Io);
+        assert_eq!(err.kind(), ErrorKind::NotFound);
+        assert_eq!(err.file_name(), "fehlt.kplan");
         assert!(err.to_string().contains("fehlt.kplan"));
     }
 
@@ -264,7 +296,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("gibt es nicht").join("plan.kplan");
         let err = write_atomic(&path, b"neu").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Io);
+        assert_eq!(err.kind(), ErrorKind::NotFound);
         assert!(!path.exists());
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
     }
@@ -277,7 +309,8 @@ mod tests {
         fs::create_dir(&target).unwrap();
         fs::write(target.join("inhalt.txt"), "alt").unwrap();
         let err = write_atomic(&target, b"neu").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Io);
+        // Windows reports "access denied", Unix "is a directory".
+        assert!(matches!(err.kind(), ErrorKind::Io | ErrorKind::PermissionDenied), "{err}");
         assert_eq!(fs::read_to_string(target.join("inhalt.txt")).unwrap(), "alt");
         assert!(temp_entries(dir.path()).is_empty());
     }
@@ -291,7 +324,7 @@ mod tests {
 
         let err = write_atomic(&path, b"neu").unwrap_err();
         assert!(matches!(err, FileError::ReadOnly { .. }));
-        assert_eq!(err.kind(), ErrorKind::Io);
+        assert_eq!(err.kind(), ErrorKind::ReadOnly);
         assert!(err.to_string().contains("schreibgeschützt"));
         assert_eq!(fs::read_to_string(&path).unwrap(), "alt");
         assert!(temp_entries(dir.path()).is_empty());
@@ -306,5 +339,52 @@ mod tests {
         let path = dir.path().join("Ölküche – Entwurf 2.kplan");
         write_atomic(&path, VALID.as_bytes()).unwrap();
         assert_eq!(read_project(&path).unwrap(), VALID);
+    }
+
+    #[test]
+    fn check_path_accepts_allowed_extensions_in_any_case() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["a.kplan", "b.SVG", "c.Dxf", "d.csv", "Küche Ü.KPLAN"] {
+            check_path(dir.path().join(name), TEXT_FILE_EXTENSIONS).unwrap();
+        }
+        check_path(dir.path().join("bild.PNG"), BINARY_FILE_EXTENSIONS).unwrap();
+    }
+
+    #[test]
+    fn check_path_refuses_other_extensions() {
+        let dir = tempfile::tempdir().unwrap();
+        let refused: [(&str, &[&str]); 7] = [
+            ("a.png", TEXT_FILE_EXTENSIONS),
+            ("a.exe", TEXT_FILE_EXTENSIONS),
+            ("a.kplan.bat", TEXT_FILE_EXTENSIONS),
+            ("ohne_endung", TEXT_FILE_EXTENSIONS),
+            // A dot file has no extension: ".kplan" is a name, not a project.
+            (".kplan", PROJECT_EXTENSIONS),
+            ("a.svg", PROJECT_EXTENSIONS),
+            ("a.kplan", BINARY_FILE_EXTENSIONS),
+        ];
+        for (name, allowed) in refused {
+            let err = check_path(dir.path().join(name), allowed).unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::BadExtension, "{name}");
+        }
+    }
+
+    #[test]
+    fn check_path_refuses_relative_paths_and_nul() {
+        for path in ["plan.kplan", "../plan.kplan", "sub/plan.kplan"] {
+            assert_eq!(check_path(path, PROJECT_EXTENSIONS).unwrap_err().kind(), ErrorKind::BadPath, "{path}");
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let with_nul = dir.path().join("a\0b.kplan");
+        assert_eq!(check_path(with_nul, PROJECT_EXTENSIONS).unwrap_err().kind(), ErrorKind::BadPath);
+    }
+
+    #[test]
+    fn read_project_refuses_other_files_before_opening_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notiz.txt");
+        fs::write(&path, VALID).unwrap();
+        assert_eq!(read_project(&path).unwrap_err().kind(), ErrorKind::BadExtension);
+        assert_eq!(read_project("plan.kplan").unwrap_err().kind(), ErrorKind::BadPath);
     }
 }

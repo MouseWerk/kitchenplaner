@@ -1,8 +1,8 @@
 // Form controls of the inspector. Number and text fields apply on Enter or when they lose focus
 // (every change is one undo step); Escape restores the shown value.
 
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { num } from "../lib/i18n";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { currentLang, num, type Lang } from "../lib/i18n";
 
 export function Field(props: { label: string; children: (id: string) => ReactNode; wide?: boolean }) {
   const id = useId();
@@ -14,14 +14,33 @@ export function Field(props: { label: string; children: (id: string) => ReactNod
   );
 }
 
-/** Parses a number typed in German or English style ("1.200,5", "1,200.5", "1200,5"). */
-export function parseNumber(text: string): number | null {
+/** Digits grouped by thousands with `sep`, as `num` shows them ("1.200", "12,345,678"). */
+const grouped = (s: string, sep: "." | ",") => (sep === "." ? /^-?\d{1,3}(\.\d{3})+$/ : /^-?\d{1,3}(,\d{3})+$/).test(s);
+
+/**
+ * Parses a number as `num` shows it in `lang` ("1.200,5" in German, "1,200.5" in English), so the
+ * shown text reads back as the same value. The other style is accepted where it is unambiguous: with
+ * both separators the last one is the decimal point, and a lone separator that cannot be thousands
+ * grouping ("0.5" in German, "0,5" in English) is the decimal point.
+ */
+export function parseNumber(text: string, lang: Lang = currentLang()): number | null {
   let s = text.trim().replace(/\s|mm$/gi, "");
   if (!s) return null;
+  const [dec, group]: [string, "." | ","] = lang === "de" ? [",", "."] : [".", ","];
   const comma = s.lastIndexOf(",");
-  const dotAt = s.lastIndexOf(".");
-  if (comma > dotAt) s = s.replace(/\./g, "").replace(",", ".");
-  else s = s.replace(/,/g, "");
+  const dot = s.lastIndexOf(".");
+  if (comma >= 0 && dot >= 0) {
+    const last = comma > dot ? "," : ".";
+    const other = last === "," ? "." : ",";
+    s = s.split(other).join("");
+    if (s.indexOf(last) !== s.lastIndexOf(last)) return null;
+    s = s.replace(last, ".");
+  } else if (s.includes(group) && grouped(s, group)) s = s.split(group).join("");
+  else if (s.includes(dec) || s.includes(group)) {
+    const sep = s.includes(dec) ? dec : group;
+    if (s.indexOf(sep) !== s.lastIndexOf(sep)) return null;
+    s = s.replace(sep, ".");
+  }
   const v = Number(s);
   return Number.isFinite(v) ? v : null;
 }
@@ -41,16 +60,27 @@ export function NumberField(props: {
   const show = (v: number) => num(v, digits);
   const [text, setText] = useState(show(value));
   const [editing, setEditing] = useState(false);
+  // Escape blurs the field, and blur commits the typed text unless this is set.
+  const cancelled = useRef(false);
   useEffect(() => {
     if (!editing) setText(show(value));
   }, [value, editing, digits]);
 
   const commit = (raw: string) => {
+    // The untouched shown text is rounded to `digits`; reading it back must not change the value.
+    if (raw === show(value)) {
+      setText(raw);
+      return;
+    }
     const v = parseNumber(raw);
     if (v === null) {
       setText(show(value));
       return;
     }
+    commitValue(v);
+  };
+
+  const commitValue = (v: number) => {
     const clamped = Math.min(props.max ?? Infinity, Math.max(props.min ?? -Infinity, v));
     if (clamped !== value) props.onChange(clamped);
     setText(show(clamped));
@@ -66,26 +96,29 @@ export function NumberField(props: {
             value={text}
             disabled={props.disabled}
             onFocus={(e) => {
+              cancelled.current = false;
               setEditing(true);
               e.currentTarget.select();
             }}
             onChange={(e) => setText(e.target.value)}
             onBlur={(e) => {
               setEditing(false);
-              commit(e.target.value);
+              if (cancelled.current) {
+                cancelled.current = false;
+                setText(show(value));
+              } else commit(e.target.value);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               else if (e.key === "Escape") {
-                setText(show(value));
-                setEditing(false);
+                cancelled.current = true;
                 (e.target as HTMLInputElement).blur();
                 e.stopPropagation();
               } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                 e.preventDefault();
                 const step = (props.step ?? 1) * (e.shiftKey ? 10 : 1);
-                const v = (parseNumber(text) ?? value) + (e.key === "ArrowUp" ? step : -step);
-                commit(String(v));
+                const typed = text === show(value) ? value : parseNumber(text);
+                commitValue((typed ?? value) + (e.key === "ArrowUp" ? step : -step));
               }
             }}
           />

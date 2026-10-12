@@ -35,8 +35,9 @@ CLAUDE.md first); this file wins where it is more specific.
   current states; quiet neutral tint and text weight instead. Focus visible only on `:focus-visible`,
   neutral. No colored bars on the left anywhere.
 - File IO only through the app commands in `src-tauri/src/lib.rs` (no fs plugin). Command errors
-  reach the UI as `{ kind: "tooLarge" | "notUtf8" | "notProject" | "io", message }`; the UI maps
-  `kind` to its i18n key.
+  reach the UI as `{ kind, path, detail }` (kinds in `crates/kitchen-core/src/error.rs`); the UI
+  maps `kind` to its i18n key in `ui/src/lib/errors.ts`. Commands accept only absolute paths with
+  the expected extensions (kplan, svg, dxf, csv, png).
 - CSP is strict (`src-tauri/tauri.conf.json`): no remote origins, no inline scripts; images may be
   `blob:` and `data:`.
 - Release notes: `docs/releases/v<version>.md` with "## Improved", "## Fixed" and

@@ -2,7 +2,7 @@
 //
 // Every change to the project goes through `change(label, fn)`, which records the previous
 // project for undo. A drag records one step: `beginGesture()` at the start, `change(..., {gesture:
-// true})` while moving, so all the moves of one drag undo together.
+// true})` while moving, so all the moves of one drag undo together; `endGesture()` when it ends.
 
 import { create } from "zustand";
 import type { Facing, Item, Opening, Project, Room } from "../model/types";
@@ -31,6 +31,8 @@ export interface Prefs {
 
 export interface AppState {
   project: Project;
+  /** Counts `load` calls, so views can refit when a project is opened or created (even an identical one). */
+  loadCount: number;
   /** Path of the file the project was opened from or saved to; null for a new project. */
   path: string | null;
   /** True when the project changed since it was opened or saved. */
@@ -46,6 +48,10 @@ export interface AppState {
   change: (fn: (p: Project) => Project, opts?: { gesture?: boolean }) => void;
   /** Starts a drag: the next gesture change records the state before it. */
   beginGesture: () => void;
+  /** Ends a drag started with `beginGesture`. */
+  endGesture: () => void;
+  /** True between `beginGesture` and `endGesture`; undo and redo wait until the drag ends. */
+  isGestureActive: () => boolean;
   undo: () => void;
   redo: () => void;
   load: (project: Project, path: string | null) => void;
@@ -63,10 +69,14 @@ export interface AppState {
   updateOpening: (id: string, patch: Partial<Opening>, opts?: { gesture?: boolean }) => void;
 }
 
+/** The next gesture change records the state before it (set by `beginGesture`). */
 let gestureOpen = false;
+/** A drag is in progress. */
+let gestureActive = false;
 
 export const useStore = create<AppState>((set, get) => ({
   project: newProject(),
+  loadCount: 0,
   path: null,
   dirty: false,
   past: [],
@@ -86,15 +96,28 @@ export const useStore = create<AppState>((set, get) => ({
       project: after,
       dirty: true,
       past: record ? [...s.past, before].slice(-HISTORY_LIMIT) : s.past,
-      future: record ? [] : s.future,
+      // Any change makes the redo steps stale, recorded or not.
+      future: [],
     }));
   },
 
   beginGesture() {
     gestureOpen = true;
+    gestureActive = true;
+  },
+
+  endGesture() {
+    gestureOpen = false;
+    gestureActive = false;
+  },
+
+  isGestureActive() {
+    return gestureActive;
   },
 
   undo() {
+    // Mid-drag the next move would apply onto the restored project and skip recording it.
+    if (gestureActive) return;
     const { past, project, future } = get();
     const prev = past[past.length - 1];
     if (!prev) return;
@@ -102,6 +125,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   redo() {
+    if (gestureActive) return;
     const { past, project, future } = get();
     const next = future[0];
     if (!next) return;
@@ -109,7 +133,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   load(project, path) {
-    set({ project, path, dirty: false, past: [], future: [], selection: { items: [], opening: null } });
+    gestureOpen = false;
+    gestureActive = false;
+    set((s) => ({ project, path, dirty: false, past: [], future: [], selection: { items: [], opening: null }, loadCount: s.loadCount + 1 }));
   },
 
   markSaved(path) {

@@ -29,9 +29,9 @@ export function handleShortcut(e: KeyboardEvent, fit: () => void): boolean {
   const st = useStore.getState();
 
   if (mod) {
-    if (key === "s") return run(() => void saveFile(e.shiftKey));
-    if (key === "o") return run(() => void openFile());
-    if (key === "n") return run(() => void newFile());
+    if (key === "s") return run(() => void saveFile(e.shiftKey), true);
+    if (key === "o") return run(() => void openFile(), true);
+    if (key === "n") return run(() => void newFile(), true);
     if (typing) return false;
     if (key === "z" && !e.shiftKey) return run(st.undo);
     if ((key === "z" && e.shiftKey) || key === "y") return run(st.redo);
@@ -65,8 +65,10 @@ export function handleShortcut(e: KeyboardEvent, fit: () => void): boolean {
   if (LAYOUT_KEYS[key]) return run(() => st.setLayout(LAYOUT_KEYS[key]));
   return false;
 
-  function run(f: () => void): true {
+  /** `commitField`: blur the focused field first, so its pending edit is applied before saving. */
+  function run(f: () => void, commitField = false): true {
     e.preventDefault();
+    if (commitField && document.activeElement instanceof HTMLElement) document.activeElement.blur();
     f();
     return true;
   }

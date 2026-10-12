@@ -118,7 +118,8 @@ export function equipmentCsv(project: Project, lang: Lang): string {
   const rows = equipmentRows(project);
   const lines: string[][] = [COLUMNS.map((k) => t(k, undefined, lang))];
   for (const r of rows) {
-    lines.push([String(r.pos), r.name, dimensionsText(r), n(r.electricKw), n(r.voltage), n(r.gasKw), waterText(r, lang), drainText(r, lang), n(r.exhaustM3h), r.note]);
+    // Name and note are typed by the user; every other cell is a number or a fixed label.
+    lines.push([String(r.pos), csvText(r.name), dimensionsText(r), n(r.electricKw), n(r.voltage), n(r.gasKw), waterText(r, lang), drainText(r, lang), n(r.exhaustM3h), csvText(r.note)]);
   }
   const tot = equipmentTotals(rows);
   const counted = (pairs: [TKey, number][]) =>
@@ -151,4 +152,20 @@ export function formatNumber(v: number, lang: Lang): string {
 export function csvField(v: string, sep: string): string {
   if (!v.includes(sep) && !/["\r\n]/.test(v)) return v;
   return `"${v.replace(/"/g, '""')}"`;
+}
+
+/**
+ * Starts of a cell that a spreadsheet runs as a formula (= + - @), or that Excel strips before
+ * checking for one (tab, carriage return).
+ */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * A free-text cell that opens as text, never as a formula: a leading apostrophe, which
+ * spreadsheets hide, defuses a name like "=HYPERLINK(...)" (CSV injection). Only for text the user
+ * typed: numbers are written by `formatNumber` and must stay numbers, so a negative value keeps
+ * its minus sign.
+ */
+export function csvText(v: string): string {
+  return FORMULA_START.test(v) ? `'${v}` : v;
 }

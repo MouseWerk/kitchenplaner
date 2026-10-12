@@ -11,7 +11,7 @@
 
 import * as THREE from "three";
 import type { Item } from "../model/types";
-import { kindOf, type ItemKind } from "../model/catalog";
+import { kindOf, sinkBowlCount, type ItemKind } from "../model/catalog";
 import { rad } from "../model/geometry";
 
 /** Millimetres per three.js unit (metre). */
@@ -289,7 +289,7 @@ function tap(p: Parts, x: number, zBack: number, y0: number, rise: number): void
 }
 
 const sink: Builder = (p, s, item) => {
-  const count = item.catalogId === "sink-2" ? 2 : 1;
+  const count = sinkBowlCount(item.width);
   const bw = Math.min(BOWL.w, (s.w - BOWL.margin * (count + 1)) / count);
   const bd = Math.min(BOWL.d, s.d - 2 * BOWL.margin - UPSTAND);
   const zc = UPSTAND / 2;

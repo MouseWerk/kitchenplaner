@@ -7,5 +7,8 @@ mod error;
 pub mod files;
 pub mod recent;
 
-pub use error::{ErrorKind, FileError};
-pub use files::{MAX_PROJECT_BYTES, read_project, write_atomic};
+pub use error::{ErrorKind, FileError, file_name_of};
+pub use files::{
+    BINARY_FILE_EXTENSIONS, MAX_PROJECT_BYTES, PROJECT_EXTENSIONS, TEXT_FILE_EXTENSIONS, check_path, read_project,
+    write_atomic,
+};

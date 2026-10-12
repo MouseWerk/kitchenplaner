@@ -99,4 +99,13 @@ describe("snapItem", () => {
     const s = snapItem(item({ x: 4012, y: 3038, rotation: 30 }), room, [], 50, true);
     expect(s).toMatchObject({ x: 4000, y: 3050, rotation: 30, wall: null });
   });
+
+  it("ignores a zero-length wall (a corner repeated on the spot)", () => {
+    // Without the guard the zero wall has gap 0 everywhere and pulls the item onto its corner.
+    const pts = rectRoom(8000, 6000);
+    const doubled = { points: [pts[0], pts[1], { ...pts[1] }, pts[2], pts[3]] };
+    expect(snapItem(item({ x: 4012, y: 3038, rotation: 30 }), doubled, [], 50, true)).toMatchObject({ x: 4000, y: 3050, rotation: 30, wall: null });
+    // Real walls still snap.
+    expect(snapItem(item({ x: 2030, y: 420, rotation: 0 }), doubled, [], 50, true)).toMatchObject({ y: 350, wall: 0 });
+  });
 });

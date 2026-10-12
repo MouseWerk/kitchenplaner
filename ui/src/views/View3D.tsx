@@ -56,7 +56,8 @@ const PRESET_DIRECTION: Record<Preset, THREE.Vector3> = {
 
 type Status = "ok" | "unavailable" | "lost";
 
-export function View3D(props: { className?: string }) {
+/** `fitSignal`: a change re-frames the view (fit shortcut, another project opened). */
+export function View3D(props: { className?: string; fitSignal?: number }) {
   const t = useT();
   const hostRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Engine | null>(null);
@@ -94,6 +95,18 @@ export function View3D(props: { className?: string }) {
   useEffect(() => engineRef.current?.setProject(project), [project]);
   useEffect(() => engineRef.current?.setSelection(selectedIds), [selectedIds]);
   useEffect(() => engineRef.current?.setCutaway(cutaway), [cutaway]);
+
+  // The engine frames the first project itself; later loads start from the perspective view again,
+  // the fit shortcut keeps the direction. Only changes after mounting count.
+  const loadCount = useStore((s) => s.loadCount);
+  const seen = useRef({ loadCount, fitSignal: props.fitSignal });
+  useEffect(() => {
+    const engine = engineRef.current;
+    const last = seen.current;
+    if (loadCount !== last.loadCount) engine?.preset("perspective");
+    else if (props.fitSignal !== last.fitSignal) engine?.fit();
+    seen.current = { loadCount, fitSignal: props.fitSignal };
+  }, [loadCount, props.fitSignal]);
 
   const buttons: { key: TKey; icon: typeof Box; run: () => void }[] = [
     { key: "view3d.perspective", icon: Box, run: () => engineRef.current?.preset("perspective") },

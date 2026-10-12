@@ -4,7 +4,7 @@ import { elevationDrawing } from "../model/elevation";
 import { equipmentCsv } from "../model/equipment";
 import { planDrawing } from "../model/plan";
 import { newProject } from "../model/project";
-import { parseProject, ProjectError, serializeProject } from "../model/serialize";
+import { parseProject, serializeProject } from "../model/serialize";
 import { FACINGS, type Facing, type Project } from "../model/types";
 import { drawingBounds, TEXT, type Drawing, type Shape } from "../render/drawing";
 import { drawingToDxf } from "../render/dxf";
@@ -12,6 +12,7 @@ import { svgToPng } from "../render/png";
 import { drawingToSvg, sheetDrawing } from "../render/svg";
 import { capture3dPng } from "../three/capture";
 import { useStore } from "../store/store";
+import { errorText } from "./errors";
 import { currentLang, t } from "./i18n";
 import { addRecentFile, baseName, confirmDialog, openProjectFile, PROJECT_FILTER, readProjectPath, safeFileName, saveBinary, saveText, type FileFilter } from "./platform";
 import { toast } from "./toast";
@@ -170,12 +171,5 @@ function translate(s: Shape, dx: number, dy: number): Shape {
   }
 }
 
-/** A message for the user from any error: project errors by their key, others with their text. */
-export function errorText(e: unknown): string {
-  if (e instanceof ProjectError) return t(e.key);
-  const kind = typeof e === "object" && e && "kind" in e ? String((e as { kind: unknown }).kind) : null;
-  if (kind === "tooLarge") return t("error.tooLarge");
-  if (kind === "notUtf8" || kind === "notProject") return t("error.notProject");
-  const msg = typeof e === "object" && e && "message" in e ? String((e as { message: unknown }).message) : String(e);
-  return t("error.generic", { message: msg });
-}
+// Lives in errors.ts so it can be tested without the renderers; re-exported for existing callers.
+export { errorText };

@@ -97,10 +97,21 @@ export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-/** A file name without characters Windows, macOS or Linux refuse. */
+/**
+ * Device names Windows reserves in every folder, whatever the case and extension ("nul.txt"
+ * is the device too): saving a project named "Con" would fail or write to the device.
+ */
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)$/i;
+
+/** A file name without characters or names Windows, macOS or Linux refuse. */
 export function safeFileName(name: string): string {
   const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, "").trim();
-  return cleaned || "Kitchenplaner";
+  if (!cleaned) return "Kitchenplaner";
+  // Windows matches the part before the first dot, ignoring spaces before that dot.
+  const dot = cleaned.indexOf(".");
+  const stem = dot < 0 ? cleaned : cleaned.slice(0, dot);
+  if (!WINDOWS_RESERVED.test(stem.trimEnd())) return cleaned;
+  return `${stem}_${cleaned.slice(stem.length)}`;
 }
 
 function mimeOf(filter: FileFilter): string {

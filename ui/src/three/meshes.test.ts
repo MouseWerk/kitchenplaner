@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { CATALOG, isOverhead, kindOf } from "../model/catalog";
+import { CATALOG, isOverhead, kindOf, sinkBowlCount } from "../model/catalog";
 import { frontOf } from "../model/geometry";
 import type { Item } from "../model/types";
 import { buildItemObject, itemIdOf, TAP_RISE } from "./meshes";
@@ -120,5 +120,22 @@ describe("buildItemObject", () => {
     expect(kindOf("from-a-newer-version")).toBe("worktable");
     const b = boxOf(buildItemObject(item("table", { catalogId: "from-a-newer-version" })));
     expect(b.max.y).toBeCloseTo(0.9, 4);
+  });
+});
+
+describe("sink bowls", () => {
+  it("follow the width like the plan and the elevations (one tap per bowl)", () => {
+    const taps = (catalogId: string, width: number) => {
+      let n = 0;
+      buildItemObject(item(catalogId, { width })).traverse((o) => {
+        if (o instanceof THREE.Mesh && o.geometry instanceof THREE.CylinderGeometry) n++;
+      });
+      return n;
+    };
+    expect(taps("sink-1", 1200)).toBe(sinkBowlCount(1200));
+    expect(taps("sink-1", 1200)).toBe(1);
+    expect(taps("sink-1", 1600)).toBe(2);
+    expect(taps("sink-2", 1200)).toBe(1);
+    expect(taps("sink-2", 1600)).toBe(2);
   });
 });

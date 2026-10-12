@@ -52,8 +52,10 @@ files. Every layer depends only on the layers above it in this list.
   | `add_recent_file` | `path: string` | nothing |
   | `startup_file` | none | `string \| null`: the `.kplan` the app was started with |
 
-  Errors are `{ kind: "tooLarge" | "notUtf8" | "notProject" | "io", message }`; the UI shows its
-  own translated text per `kind` and may add `message` (German, names the file) as detail.
+  Errors are `{ kind, path, detail }` with `kind` one of tooLarge, notUtf8, notProject, readOnly,
+  notFound, permissionDenied, badExtension, badPath, io; `path` is the file name only and
+  `detail` the OS error text (only for `io`). The UI shows its own translated text per `kind`
+  (`ui/src/lib/errors.ts`). Paths must be absolute and carry an allowed extension.
   On macOS a `.kplan` opened while the app runs arrives as the event `open-file` (payload: the
   path); Windows and Linux start a new window with the path as argument.
 

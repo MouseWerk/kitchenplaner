@@ -103,6 +103,19 @@ export function kindOf(catalogId: string): ItemKind {
   return BY_ID.get(catalogId)?.kind ?? "worktable";
 }
 
+/**
+ * Sink width from which the unit has two bowls. Two 500 mm bowls with their rims take about
+ * 1150 mm; from 1400 mm a usable drainer is left beside them (catalog: 1200 mm = 1, 1600 mm = 2).
+ * The plan, the elevations and 3D all count bowls with `sinkBowlCount`, so a resized sink shows
+ * the same number of bowls in every view.
+ */
+const SINK_TWO_BOWLS_FROM = 1400;
+
+/** Number of bowls of a sink unit of the given width (mm). */
+export function sinkBowlCount(width: number): number {
+  return width >= SINK_TWO_BOWLS_FROM ? 2 : 1;
+}
+
 /** Items that hang above the floor and do not block the floor area (hoods, wall shelves). */
 export function isOverhead(kind: ItemKind): boolean {
   return kind === "hood" || kind === "wallShelf" || kind === "handwash";

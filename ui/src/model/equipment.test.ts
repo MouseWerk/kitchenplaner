@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvField, equipmentCsv, equipmentRows, equipmentTotals } from "./equipment";
+import { csvField, csvText, equipmentCsv, equipmentRows, equipmentTotals } from "./equipment";
 import { testItem, testProject } from "./testProject";
 
 function sample() {
@@ -51,5 +51,23 @@ describe("equipmentCsv", () => {
     expect(csvField('a"b', ",")).toBe('"a""b"');
     expect(csvField("a\rb", ",")).toBe('"a\rb"');
     expect(csvField("Ä;Ö", ";")).toBe('"Ä;Ö"');
+  });
+
+  it("defuses names and notes a spreadsheet would run as a formula", () => {
+    for (const start of ["=", "+", "-", "@", "\t", "\r"]) expect(csvText(`${start}1+1`)).toBe(`'${start}1+1`);
+    expect(csvText("Herd")).toBe("Herd");
+    expect(csvText("")).toBe("");
+    // Only the first character matters.
+    expect(csvText("A=B")).toBe("A=B");
+
+    const p = testProject([
+      testItem("x", "table", 1000, 350, 0, { name: '=HYPERLINK("http://example.invalid","x")', note: "@SUM(1)" }),
+      testItem("y", "range-6", 3000, 450, 0, { name: "-Herd" }),
+    ]);
+    const lines = equipmentCsv(p, "en").slice(1).split("\r\n");
+    // Defused first, then quoted as usual (the quotes and comma inside need it).
+    expect(lines[1]).toBe(`1,"'=HYPERLINK(""http://example.invalid"",""x"")",1200 × 700 × 900,,,,,,,'@SUM(1)`);
+    // Numbers stay numbers: no apostrophe in front of the values.
+    expect(lines[2]).toBe("2,'-Herd,1200 × 900 × 900,22.4,400,,,,,");
   });
 });

@@ -1,12 +1,13 @@
 // The floor plan: the drawing of `model/plan.ts`, plus selecting, dragging (with wall and edge
 // snapping), dropping catalog entries, editing the room's corners and moving openings.
 
-import { useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
 import { catalogEntry, isOverhead, kindOf } from "../model/catalog";
 import { checkProject } from "../model/checks";
 import { add, area, bounds, dot, footprint, openingSpan, pointInPolygon, round, scale, snapItem, snapValue, sub, walls, type Box } from "../model/geometry";
 import { planDrawing } from "../model/plan";
+import { insertCorner, moveCorner } from "../model/roomEdit";
 import { itemFromCatalog } from "../model/project";
 import type { Item, Project, Vec2 } from "../model/types";
 import { drawingBounds, mm, type Drawing, type Shape } from "../render/drawing";
@@ -40,6 +41,11 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
   const { ref, vp, setVp, size } = useViewport(box, props.fitSignal);
   const drag = useRef<Drag | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  // Switching the layout (keys 1-4) mid-drag unmounts the plan without a pointer-up: end the gesture
+  // so undo is not left blocked.
+  useEffect(() => () => {
+    if (drag.current) useStore.getState().endGesture();
+  }, []);
 
   const warned = useMemo(() => new Set(issues.flatMap((i) => i.itemIds)), [issues]);
   const selected = useMemo(() => project.items.filter((i) => selection.items.includes(i.id)), [project.items, selection.items]);
@@ -140,7 +146,7 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
       case "corner": {
         const grid = e.altKey ? 0 : st.prefs.grid;
         const q = { x: snapValue(p.x, grid), y: snapValue(p.y, grid) };
-        st.updateRoom((r) => ({ points: r.points.map((pt, i) => (i === d.index ? q : pt)) }), { gesture: true });
+        st.updateRoom((r) => moveCorner(r, d.index, q), { gesture: true });
         break;
       }
       case "opening": {
@@ -158,6 +164,7 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
 
   const onPointerUp = () => {
     drag.current = null;
+    useStore.getState().endGesture();
   };
 
   const onDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -175,16 +182,10 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
     }
     if (!best) return;
     const at = { x: round(snapValue(best.at.x, st.prefs.grid)), y: round(snapValue(best.at.y, st.prefs.grid)) };
-    const idx = best.index;
-    st.change((pr) => ({
-      ...pr,
-      room: {
-        ...pr.room,
-        points: [...pr.room.points.slice(0, idx + 1), at, ...pr.room.points.slice(idx + 1)],
-        // Openings on later walls move one index on; openings on the split wall stay on its first half.
-        openings: pr.room.openings.map((o) => (o.wall > idx ? { ...o, wall: o.wall + 1 } : o)),
-      },
-    }));
+    const split = insertCorner(st.project.room, best.index, at, st.prefs.grid);
+    // Too close to an existing corner: nothing to add (and no empty undo step).
+    if (!split) return;
+    st.change((pr) => ({ ...pr, room: split }));
   };
 
   const onDragOver = (e: DragEvent) => {

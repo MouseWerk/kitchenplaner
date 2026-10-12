@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { AlertTriangle, CheckCircle2, Copy, DoorOpen, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import { catalogEntry, isOverhead, kindOf } from "../model/catalog";
 import { checkProject } from "../model/checks";
-import { bounds, clampOpening, lRoom, normalizeAngle, rectRoom, walls } from "../model/geometry";
+import { bounds, clampOpening, MAX_LENGTH, lRoom, normalizeAngle, rectRoom, walls } from "../model/geometry";
 import { newId, positions } from "../model/project";
 import type { Connections, Item, Opening, OpeningKind, Project } from "../model/types";
 import { selectedItems, useStore } from "../store/store";
@@ -13,8 +13,6 @@ import { num, useT, type TKey } from "../lib/i18n";
 import { CheckField, NumberField, SelectField, TextField } from "./Fields";
 import { duplicateSelected, rotateSelected } from "../lib/commands";
 
-/** Largest length accepted in a field (mm): 100 m. */
-const MAX_LEN = 100_000;
 /** Smallest item size (mm). */
 const MIN_SIZE = 10;
 
@@ -76,10 +74,10 @@ function ItemPanel({ item, project }: { item: Item; project: Project }) {
       <Section title={t("inspector.item")}>
         <div className="grid">
           <TextField label={t("inspector.name")} value={item.name} onChange={(v) => set({ name: v })} wide />
-          <NumberField label={t("inspector.width")} unit="mm" value={item.width} min={MIN_SIZE} max={MAX_LEN} step={10} onChange={(v) => set({ width: v })} />
-          <NumberField label={t("inspector.depth")} unit="mm" value={item.depth} min={MIN_SIZE} max={MAX_LEN} step={10} onChange={(v) => set({ depth: v })} />
-          <NumberField label={t("inspector.height")} unit="mm" value={item.height} min={MIN_SIZE} max={MAX_LEN} step={10} onChange={(v) => set({ height: v })} />
-          <NumberField label={overhead ? t("inspector.mountHeight") : t("inspector.elevation")} unit="mm" value={item.elevation} min={0} max={MAX_LEN} step={10} onChange={(v) => set({ elevation: v })} />
+          <NumberField label={t("inspector.width")} unit="mm" value={item.width} min={MIN_SIZE} max={MAX_LENGTH} step={10} onChange={(v) => set({ width: v })} />
+          <NumberField label={t("inspector.depth")} unit="mm" value={item.depth} min={MIN_SIZE} max={MAX_LENGTH} step={10} onChange={(v) => set({ depth: v })} />
+          <NumberField label={t("inspector.height")} unit="mm" value={item.height} min={MIN_SIZE} max={MAX_LENGTH} step={10} onChange={(v) => set({ height: v })} />
+          <NumberField label={overhead ? t("inspector.mountHeight") : t("inspector.elevation")} unit="mm" value={item.elevation} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ elevation: v })} />
         </div>
         {entry?.widths && (
           <div className="chips" role="group" aria-label={t("inspector.widths")}>
@@ -195,10 +193,10 @@ function OpeningPanel({ opening, project }: { opening: Opening; project: Project
         <div className="grid">
           <SelectField label={t("inspector.kind")} value={opening.kind} options={kinds.map((k) => ({ value: k, label: t(`opening.${k}` as const) }))} onChange={(v) => set({ kind: v, sill: v === "window" ? opening.sill || 900 : 0 })} />
           <SelectField label={t("inspector.wall")} value={opening.wall} options={project.room.points.map((_, i) => ({ value: i, label: wallLabel(t, project, i) }))} onChange={(v) => set({ wall: v })} />
-          <NumberField label={t("inspector.offset")} unit="mm" value={opening.offset} min={0} max={MAX_LEN} step={10} onChange={(v) => set({ offset: v })} />
-          <NumberField label={t("inspector.width")} unit="mm" value={opening.width} min={100} max={MAX_LEN} step={10} onChange={(v) => set({ width: v })} />
-          <NumberField label={t("inspector.height")} unit="mm" value={opening.height} min={100} max={MAX_LEN} step={10} onChange={(v) => set({ height: v })} />
-          <NumberField label={t("inspector.sill")} unit="mm" value={opening.sill} min={0} max={MAX_LEN} step={10} onChange={(v) => set({ sill: v })} />
+          <NumberField label={t("inspector.offset")} unit="mm" value={opening.offset} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ offset: v })} />
+          <NumberField label={t("inspector.width")} unit="mm" value={opening.width} min={100} max={MAX_LENGTH} step={10} onChange={(v) => set({ width: v })} />
+          <NumberField label={t("inspector.height")} unit="mm" value={opening.height} min={100} max={MAX_LENGTH} step={10} onChange={(v) => set({ height: v })} />
+          <NumberField label={t("inspector.sill")} unit="mm" value={opening.sill} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ sill: v })} />
         </div>
       </Section>
       <div className="insp-actions">
@@ -258,8 +256,8 @@ function ProjectPanel({ project }: { project: Project }) {
         <div className="grid">
           {rect ? (
             <>
-              <NumberField label={t("inspector.width")} unit="mm" value={rect.w} min={1000} max={MAX_LEN} step={100} onChange={(v) => resize(v, rect.d)} />
-              <NumberField label={t("inspector.depth")} unit="mm" value={rect.d} min={1000} max={MAX_LEN} step={100} onChange={(v) => resize(rect.w, v)} />
+              <NumberField label={t("inspector.width")} unit="mm" value={rect.w} min={1000} max={MAX_LENGTH} step={100} onChange={(v) => resize(v, rect.d)} />
+              <NumberField label={t("inspector.depth")} unit="mm" value={rect.d} min={1000} max={MAX_LENGTH} step={100} onChange={(v) => resize(rect.w, v)} />
             </>
           ) : (
             <p className="hint wide">{t("inspector.freeShape", { n: project.room.points.length })}</p>

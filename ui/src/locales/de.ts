@@ -25,7 +25,13 @@ export const de = {
   "edit.redo": "Wiederholen",
 
   // Errors
-  "error.tooLarge": "Die Datei ist zu groß für ein Kitchenplaner-Projekt.",
+  "error.tooLarge": "„{name}“ ist zu groß für ein Kitchenplaner-Projekt.",
+  "error.notProjectFile": "„{name}“ ist kein Kitchenplaner-Projekt.",
+  "error.readOnly": "„{name}“ ist schreibgeschützt. Speichere unter einem anderen Namen.",
+  "error.notFound": "„{name}“ oder sein Ordner wurde nicht gefunden. Vielleicht wurde er verschoben oder gelöscht.",
+  "error.permissionDenied": "Kein Zugriff auf „{name}“. Wähle einen anderen Ort oder prüfe die Berechtigungen.",
+  "error.badExtension": "„{name}“ hat nicht die passende Dateiendung. Kitchenplaner liest nur .kplan und speichert nur .kplan, .svg, .dxf, .csv und .png.",
+  "error.badPath": "„{name}“ ist kein vollständiger Dateipfad. Wähle die Datei über den Dialog aus.",
   "error.generic": "Das hat nicht geklappt: {message}",
 
   // Export
@@ -39,6 +45,7 @@ export const de = {
   "export.png3d": "3D-Ansicht als PNG…",
   "export.listCsv": "Geräteliste als CSV…",
   "export.done": "„{name}“ exportiert.",
+  "export.no3d": "Die 3D-Ansicht ist nicht eingeblendet. Zeige sie an, um sie zu exportieren.",
 
   // Views and settings
   "view.layout": "Ansicht wählen",

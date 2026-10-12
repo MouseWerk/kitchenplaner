@@ -22,7 +22,13 @@ export const en: Record<keyof typeof de, Msg> = {
   "edit.undo": "Undo",
   "edit.redo": "Redo",
 
-  "error.tooLarge": "The file is too large for a Kitchenplaner project.",
+  "error.tooLarge": "“{name}” is too large for a Kitchenplaner project.",
+  "error.notProjectFile": "“{name}” is not a Kitchenplaner project.",
+  "error.readOnly": "“{name}” is read-only. Save it under a different name.",
+  "error.notFound": "“{name}” or its folder was not found. It may have been moved or deleted.",
+  "error.permissionDenied": "No access to “{name}”. Choose another location or check the permissions.",
+  "error.badExtension": "“{name}” does not have a suitable file extension. Kitchenplaner only opens .kplan and only saves .kplan, .svg, .dxf, .csv and .png.",
+  "error.badPath": "“{name}” is not a full file path. Choose the file in the dialog.",
   "error.generic": "That did not work: {message}",
 
   "export.title": "Export",
@@ -35,6 +41,7 @@ export const en: Record<keyof typeof de, Msg> = {
   "export.png3d": "3D view as PNG…",
   "export.listCsv": "Equipment list as CSV…",
   "export.done": "Exported “{name}”.",
+  "export.no3d": "The 3D view is not shown. Show it to export it.",
 
   "view.layout": "Choose view",
   "view.facing": "Direction",

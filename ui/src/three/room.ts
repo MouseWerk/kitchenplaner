@@ -50,6 +50,8 @@ export function buildRoomObject(room: Room): THREE.Group {
   const ws = walls(room);
   const outer = outerCorners(ws, room.wallThickness);
   for (const w of ws) {
+    // A repeated corner (an old or hand-edited file) has no wall to build; its corner stays in `outer`.
+    if (w.length < EPS) continue;
     const openings = room.openings.filter((o) => o.wall === w.index);
     g.add(buildWall(w, outer[w.index], outer[(w.index + 1) % ws.length], room, openings, wallMat, glassMat));
   }

@@ -1,7 +1,7 @@
 // The floor plan as a Drawing: cut walls with their openings, the equipment with its plan
 // symbols, position numbers and dimensions. Screen, SVG and DXF all draw this list.
 
-import { isOverhead, kindOf, type ItemKind } from "./catalog";
+import { isOverhead, kindOf, sinkBowlCount, type ItemKind } from "./catalog";
 import { add, bounds, clampOpening, dot, footprint, scale, sub, toPlan, walls, type Wall } from "./geometry";
 import { positions } from "./project";
 import type { Item, Opening, Project, Vec2 } from "./types";
@@ -35,8 +35,6 @@ const COLD_ROOM_PANEL = 100;
 const COLD_ROOM_DOOR = 800;
 /** Range width from which the hob has six plates instead of four (800 mm = 4, 1200 mm = 6). */
 const RANGE_SIX_PLATES_FROM = 1000;
-/** Sink width from which the unit has two bowls (catalog: 1200 mm = 1 bowl, 1600 mm = 2). */
-const SINK_TWO_BOWLS_FROM = 1400;
 /** Inner bowl size of a sink unit (mm, a common 500 × 400 bowl). */
 const BOWL_W = 500;
 const BOWL_D = 400;
@@ -322,7 +320,7 @@ function symbols(it: Item, kind: ItemKind, shapes: Shape[]) {
       break;
     }
     case "sink": {
-      const n = w >= SINK_TWO_BOWLS_FROM ? 2 : 1;
+      const n = sinkBowlCount(w);
       const bw = Math.min(BOWL_W, (w - (n + 1) * INSET) / n);
       const bd = Math.min(BOWL_D, d - 2 * INSET - UPSTAND);
       const cy = (B + UPSTAND + F) / 2;

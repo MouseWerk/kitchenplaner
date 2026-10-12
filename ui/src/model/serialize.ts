@@ -2,7 +2,9 @@
 // parser that turns anything read from disk into a valid Project or a ProjectError.
 
 import { catalogEntry } from "./catalog";
+import { clampOpening, MAX_LENGTH } from "./geometry";
 import { FORMAT_VERSION, newId } from "./project";
+import { isUsableOutline, removeCoincidentCorners } from "./roomEdit";
 import type { Connections, Item, Opening, OpeningKind, Project, ProjectInfo, Room, Vec2 } from "./types";
 import { t, type TKey } from "../lib/i18n";
 
@@ -130,13 +132,18 @@ function str(v: unknown, path: string, fallback?: string): string {
   return v;
 }
 
-type NumRule = "any" | "positive" | "nonNegative";
+/**
+ * "size" and "distance" are lengths in mm: positive or at least 0, and at most MAX_LENGTH, so a
+ * damaged file cannot open with a 10 km table.
+ */
+type NumRule = "any" | "positive" | "nonNegative" | "size" | "distance";
 
 function num(v: unknown, path: string, rule: NumRule, fallback?: number): number {
   if (v === undefined && fallback !== undefined) return fallback;
   if (typeof v !== "number" || !Number.isFinite(v)) invalid(path, v);
-  if (rule === "positive" && !(v > 0)) invalid(path, v);
-  if (rule === "nonNegative" && !(v >= 0)) invalid(path, v);
+  if ((rule === "positive" || rule === "size") && !(v > 0)) invalid(path, v);
+  if ((rule === "nonNegative" || rule === "distance") && !(v >= 0)) invalid(path, v);
+  if ((rule === "size" || rule === "distance") && v > MAX_LENGTH) invalid(path, v);
   return v;
 }
 
@@ -161,12 +168,17 @@ function parseRoom(v: unknown): Room {
   const openingsRaw = v.openings ?? [];
   if (!Array.isArray(openingsRaw)) invalid("room.openings", openingsRaw);
   const openings = openingsRaw.map((o, i) => parseOpening(o, `room.openings[${i}]`, points.length));
-  return {
+  // A corner repeated on the spot leaves a zero-length wall that snapping and drawing cannot
+  // use; a room without a floor area cannot be edited at all.
+  const room = removeCoincidentCorners({
     points,
-    height: num(v.height, "room.height", "positive", DEFAULT_ROOM_HEIGHT),
-    wallThickness: num(v.wallThickness, "room.wallThickness", "positive", DEFAULT_WALL_THICKNESS),
+    height: num(v.height, "room.height", "size", DEFAULT_ROOM_HEIGHT),
+    wallThickness: num(v.wallThickness, "room.wallThickness", "size", DEFAULT_WALL_THICKNESS),
     openings,
-  };
+  });
+  if (!isUsableOutline(room.points)) invalid("room.points", v.points);
+  // Openings sit inside their wall, as the editor keeps them.
+  return { ...room, openings: room.openings.map((o) => clampOpening(room, o)) };
 }
 
 function parseOpening(v: unknown, path: string, wallCount: number): Opening {
@@ -179,10 +191,10 @@ function parseOpening(v: unknown, path: string, wallCount: number): Opening {
     id: str(v.id, `${path}.id`, ""),
     kind: kind as OpeningKind,
     wall,
-    offset: num(v.offset, `${path}.offset`, "nonNegative"),
-    width: num(v.width, `${path}.width`, "positive"),
-    height: num(v.height, `${path}.height`, "positive"),
-    sill: num(v.sill, `${path}.sill`, "nonNegative", 0),
+    offset: num(v.offset, `${path}.offset`, "distance"),
+    width: num(v.width, `${path}.width`, "size"),
+    height: num(v.height, `${path}.height`, "size"),
+    sill: num(v.sill, `${path}.sill`, "distance", 0),
   };
 }
 
@@ -198,10 +210,10 @@ function parseItem(v: unknown, path: string): Item {
     x: num(v.x, `${path}.x`, "any"),
     y: num(v.y, `${path}.y`, "any"),
     rotation: num(v.rotation, `${path}.rotation`, "any", 0),
-    width: num(v.width, `${path}.width`, "positive", entry?.width),
-    depth: num(v.depth, `${path}.depth`, "positive", entry?.depth),
-    height: num(v.height, `${path}.height`, "positive", entry?.height),
-    elevation: num(v.elevation, `${path}.elevation`, "nonNegative", entry?.elevation ?? 0),
+    width: num(v.width, `${path}.width`, "size", entry?.width),
+    depth: num(v.depth, `${path}.depth`, "size", entry?.depth),
+    height: num(v.height, `${path}.height`, "size", entry?.height),
+    elevation: num(v.elevation, `${path}.elevation`, "distance", entry?.elevation ?? 0),
     connections: parseConnections(v.connections, `${path}.connections`),
   };
   if (v.note !== undefined) item.note = str(v.note, `${path}.note`);

@@ -4,7 +4,7 @@
 // Drawing coordinates: X runs along the viewer's right axis u, Y = -height (y down on screen,
 // so higher up is further up on the sheet). The floor is Y = 0.
 
-import { isOverhead, kindOf, type ItemKind } from "./catalog";
+import { isOverhead, kindOf, sinkBowlCount, type ItemKind } from "./catalog";
 import { dot, footprint, frontOf, openingSpan, walls } from "./geometry";
 import { positions } from "./project";
 import type { Facing, Item, Opening, Project, Vec2 } from "./types";
@@ -302,10 +302,15 @@ function drawItem(it: Item, kind: ItemKind, l: number, r: number, facesViewer: b
       break;
     case "sink": {
       f.box("detail", l, r, top - TOP, top);
-      // The bowl lies behind the front: hidden. Bowls at the right end as in the plan.
-      const bw = Math.min(BOWL_W, w - 2 * INSET);
-      f.box("hidden", r - INSET - bw, r - INSET, top - BOWL_DEPTH, top - TOP);
-      const tx = r - INSET - bw / 2;
+      // The bowls lie behind the front: hidden. Bowls at the right end as in the plan, the tap
+      // centred over them.
+      const n = sinkBowlCount(w);
+      const bw = Math.min(BOWL_W, (w - (n + 1) * INSET) / n);
+      for (let i = 0; i < n; i++) {
+        const x1 = r - INSET - i * (bw + INSET);
+        f.box("hidden", x1 - bw, x1, top - BOWL_DEPTH, top - TOP);
+      }
+      const tx = r - INSET - (n * bw + (n - 1) * INSET) / 2;
       f.line("detail", [tx, top], [tx, top + TAP], [tx - INSET * 3, top + TAP]);
       f.box("detail", l, l + LEG, z0, top - TOP);
       f.box("detail", r - LEG, r, z0, top - TOP);

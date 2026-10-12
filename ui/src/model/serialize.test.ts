@@ -103,6 +103,77 @@ describe("parseProject", () => {
     expect(p.info.client).toBe("");
   });
 
+  it("rejects sizes beyond 100 m", () => {
+    const cases: ((r: any) => void)[] = [
+      (r) => (r.items[0].width = 100_001),
+      (r) => (r.items[0].depth = 1e9),
+      (r) => (r.items[0].height = 2e5),
+      (r) => (r.items[0].elevation = 1e6),
+      (r) => (r.room.height = 1e7),
+      (r) => (r.room.wallThickness = 1e6),
+      (r) => (r.room.openings[0].width = 1e6),
+      (r) => (r.room.openings[0].height = 1e6),
+      (r) => (r.room.openings[0].sill = 1e6),
+      (r) => (r.room.openings[0].offset = 1e6),
+    ];
+    for (const edit of cases) expect(errorOf(withRaw(edit)).key).toBe("error.invalid");
+    // 100 m itself is still a size.
+    expect(parseProject(withRaw((r) => (r.items[0].width = 100_000))).items[0].width).toBe(100_000);
+  });
+
+  it("rejects rooms without a floor area", () => {
+    const cases: ((r: any) => void)[] = [
+      // Three corners, two of them on one spot.
+      (r) => (r.room.points = [{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 0 }]),
+      // All on one line.
+      (r) => (r.room.points = [{ x: 0, y: 0 }, { x: 2000, y: 0 }, { x: 4000, y: 0 }, { x: 3000, y: 0 }]),
+      // A sliver: 4 m long, a twentieth of a millimetre wide.
+      (r) => (r.room.points = [{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 0.05 }, { x: 0, y: 0.05 }]),
+    ];
+    for (const edit of cases) {
+      expect(
+        errorOf(
+          withRaw((r) => {
+            edit(r);
+            r.room.openings = [];
+          }),
+        ).key,
+      ).toBe("error.invalid");
+    }
+  });
+
+  it("drops corners that repeat the previous one and keeps the openings on their walls", () => {
+    const p = parseProject(
+      withRaw((r) => {
+        // The rectangle with its second corner twice and the first one repeated at the end.
+        r.room.points = [{ x: 0, y: 0 }, { x: 8000, y: 0 }, { x: 8000, y: 0 }, { x: 8000, y: 6000 }, { x: 0, y: 6000 }, { x: 0, y: 0 }];
+        // The door on the south wall, now wall 3; a window on the zero-length wall 1, which goes.
+        r.room.openings = [
+          { id: "door1", kind: "door", wall: 3, offset: 6800, width: 1010, height: 2135, sill: 0 },
+          { id: "w0", kind: "window", wall: 1, offset: 0, width: 800, height: 1200, sill: 900 },
+        ];
+      }),
+    );
+    expect(p.room.points).toEqual([{ x: 0, y: 0 }, { x: 8000, y: 0 }, { x: 8000, y: 6000 }, { x: 0, y: 6000 }]);
+    expect(p.room.openings).toEqual([{ id: "door1", kind: "door", wall: 2, offset: 6800, width: 1010, height: 2135, sill: 0 }]);
+  });
+
+  it("clamps openings into their wall", () => {
+    const p = parseProject(
+      withRaw((r) => {
+        // Wall 1 is the 6 m east wall: an offset past its end and a width longer than the wall.
+        r.room.openings = [
+          { id: "a", kind: "window", wall: 1, offset: 9000, width: 1000, height: 1200, sill: 900 },
+          { id: "b", kind: "passage", wall: 1, offset: 100, width: 7000, height: 2000, sill: 0 },
+        ];
+      }),
+    );
+    expect(p.room.openings.map((o) => [o.offset, o.width])).toEqual([
+      [5500, 1000],
+      [3000, 6000],
+    ]);
+  });
+
   it("rejects an item of an unknown kind without sizes", () => {
     const text = withRaw((r) => {
       r.items[0].catalogId = "future-robot";
