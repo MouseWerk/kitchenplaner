@@ -1,0 +1,5 @@
+# LF everywhere: rustfmt, the guard tests and CI on Linux and macOS expect it.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary

@@ -1,0 +1,118 @@
+name: Release
+
+# "Run workflow" (Actions -> Release) with a version builds Windows (NSIS, per user), Linux (.deb,
+# .AppImage) and macOS (universal .dmg, ad-hoc signed, not notarized) and attaches them to a DRAFT
+# release "Kitchenplaner v<version>" (tag v<version> on the selected commit, created when the draft
+# is published). The body comes from docs/releases/v<version>.md if that file exists. Nothing is
+# signed with a paid certificate, so no secrets are needed; publishing the draft is a manual step.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without v, e.g. 0.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+# One run per version; a second run for the same version waits instead of racing the first.
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  draft:
+    name: Draft release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_id: ${{ steps.draft.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version $INPUT_VERSION is not MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      # Created once here: three build jobs creating it themselves would race into duplicates.
+      - id: draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          NOTES="docs/releases/v$VERSION.md"
+          [ -f "$NOTES" ] || { echo "Kitchenplaner $VERSION" > "$RUNNER_TEMP/notes.md"; NOTES="$RUNNER_TEMP/notes.md"; }
+          gh release create "v$VERSION" --draft --title "Kitchenplaner v$VERSION" --notes-file "$NOTES" --target "$GITHUB_SHA"
+          ID=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.draft and .tag_name == \"v$VERSION\") | .id" | head -n1)
+          [ -n "$ID" ] || { echo "::error::Draft release v$VERSION not found after creating it"; exit 1; }
+          echo "release_id=$ID" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: draft
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            args: ""
+          - name: Linux
+            os: ubuntu-22.04
+            args: ""
+          - name: macOS
+            os: macos-latest
+            args: --target universal-apple-darwin
+    env:
+      VERSION: ${{ needs.draft.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The input is the version: written into tauri.conf.json and the workspace Cargo.toml so the
+      # installers carry it.
+      - name: Set version
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = "src-tauri/tauri.conf.json";
+            const c = JSON.parse(fs.readFileSync(p, "utf8"));
+            c.version = process.env.VERSION;
+            fs.writeFileSync(p, JSON.stringify(c, null, 2));
+            const t = "Cargo.toml";
+            fs.writeFileSync(t, fs.readFileSync(t, "utf8").replace(/^version = "[^"]*"/m, `version = "${process.env.VERSION}"`));
+          '
+
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: System packages (WebKitGTK, AppImage tooling)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+      - run: npm ci
+      - run: npm ci --prefix ui
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.draft.outputs.release_id }}
+          args: ${{ matrix.args }}

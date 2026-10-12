@@ -1,0 +1,25 @@
+[package]
+name = "kitchenplaner"
+description = "Kitchenplaner desktop shell (Tauri v2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "kitchenplaner_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kitchen-core = { path = "../crates/kitchen-core" }
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+
+[features]
+# Used by `tauri build`/`dev`; debug builds without it load the Vite dev server.
+custom-protocol = ["tauri/custom-protocol"]

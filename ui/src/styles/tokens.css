@@ -1,0 +1,219 @@
+/* Design tokens. Every other stylesheet takes its colors, sizes and layers from here;
+   styles.test.ts fails on literal colors elsewhere. Light follows the system unless the user
+   picked a theme (`data-theme` on <html>). */
+
+:root {
+  --font-ui: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", "SF Mono", Consolas, ui-monospace, monospace;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 18px;
+
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --ls-eyebrow: 0.04em;
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  --ctl-xs: 22px;
+  --ctl-sm: 26px;
+  --ctl-md: 30px;
+  --ctl-lg: 36px;
+
+  --toolbar-h: 48px;
+  --statusbar-h: 28px;
+  --sidebar-w: 272px;
+  --inspector-w: 300px;
+
+  --icon-stroke: 1.75;
+
+  --focus-ring: 2px solid var(--border-focus);
+  --focus-halo: 0 0 0 3px var(--focus-soft);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+
+  /* Layers, bottom to top. */
+  --z-inline: 20;
+  --z-popover: 40;
+  --z-menu: 70;
+  --z-dialog: 80;
+  --z-toast: 90;
+}
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #0e0f11;
+  --bg-sidebar: #131417;
+  --bg-canvas: #17181b;
+  --bg-raised: #1d1e22;
+  --bg-overlay: #222327;
+  --bg-input: #1a1b1f;
+  --bg-hover: rgb(255 255 255 / 0.05);
+  --bg-active: rgb(255 255 255 / 0.08);
+  --bg-selected: rgb(255 255 255 / 0.1);
+  --bg-current: rgb(255 255 255 / 0.12);
+
+  --border: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.14);
+  --border-focus: #8a8d96;
+  --focus-soft: rgb(255 255 255 / 0.07);
+
+  --text: #e8e9ec;
+  --text-muted: #a3a6ae;
+  --text-faint: #8a8d95;
+
+  --accent: #5b8def;
+  --accent-strong: #4a7de0;
+  --on-accent: #ffffff;
+
+  --success: #4fbf7f;
+  --warning: #e0a63a;
+  --danger: #ef6b6b;
+  --warning-soft: rgb(224 166 58 / 0.14);
+  --danger-soft: rgb(239 107 107 / 0.14);
+
+  /* The drawing on screen. */
+  --draw-paper: #17181b;
+  --draw-grid: rgb(255 255 255 / 0.035);
+  --draw-grid-major: rgb(255 255 255 / 0.07);
+  --draw-line: #d6d8dd;
+  --draw-detail: #8f939c;
+  --draw-dim: #9da1aa;
+  --draw-wall-fill: #4a4d55;
+  --draw-item-fill: #23252a;
+  --draw-item-dark: #34363c;
+  --draw-glass: rgb(130 170 210 / 0.25);
+  --draw-warning-fill: rgb(224 166 58 / 0.22);
+  /* Selected items: a neutral light tint over the fill, never a colored frame. */
+  --draw-selected-fill: rgb(255 255 255 / 0.14);
+  --draw-hover-fill: rgb(255 255 255 / 0.07);
+  --draw-handle: #e8e9ec;
+  --draw-handle-fill: #17181b;
+
+  --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
+  --scrim: rgb(0 0 0 / 0.45);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg-app: #f5f5f4;
+    --bg-sidebar: #efefee;
+    --bg-canvas: #fbfbfa;
+    --bg-raised: #ffffff;
+    --bg-overlay: #ffffff;
+    --bg-input: #ffffff;
+    --bg-hover: rgb(0 0 0 / 0.04);
+    --bg-active: rgb(0 0 0 / 0.065);
+    --bg-selected: rgb(0 0 0 / 0.075);
+    --bg-current: rgb(0 0 0 / 0.09);
+
+    --border: rgb(0 0 0 / 0.08);
+    --border-strong: rgb(0 0 0 / 0.14);
+    --border-focus: #6b6e76;
+    --focus-soft: rgb(0 0 0 / 0.06);
+
+    --text: #1d1e21;
+    --text-muted: #5c5f66;
+    --text-faint: #6e7178;
+
+    --accent: #2f62d0;
+    --accent-strong: #2553b8;
+    --on-accent: #ffffff;
+
+    --success: #1f8a4c;
+    --warning: #9a6200;
+    --danger: #c7372f;
+    --warning-soft: rgb(196 128 0 / 0.12);
+    --danger-soft: rgb(199 55 47 / 0.1);
+
+    --draw-paper: #fbfbfa;
+    --draw-grid: rgb(0 0 0 / 0.035);
+    --draw-grid-major: rgb(0 0 0 / 0.07);
+    --draw-line: #26282c;
+    --draw-detail: #6d7078;
+    --draw-dim: #55585f;
+    --draw-wall-fill: #9a9ca2;
+    --draw-item-fill: #ffffff;
+    --draw-item-dark: #e4e4e2;
+    --draw-glass: rgb(80 130 190 / 0.18);
+    --draw-warning-fill: rgb(214 140 0 / 0.2);
+    --draw-selected-fill: rgb(0 0 0 / 0.1);
+    --draw-hover-fill: rgb(0 0 0 / 0.05);
+    --draw-handle: #26282c;
+    --draw-handle-fill: #ffffff;
+
+    --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
+    --scrim: rgb(0 0 0 / 0.3);
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-app: #f5f5f4;
+  --bg-sidebar: #efefee;
+  --bg-canvas: #fbfbfa;
+  --bg-raised: #ffffff;
+  --bg-overlay: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: rgb(0 0 0 / 0.04);
+  --bg-active: rgb(0 0 0 / 0.065);
+  --bg-selected: rgb(0 0 0 / 0.075);
+  --bg-current: rgb(0 0 0 / 0.09);
+
+  --border: rgb(0 0 0 / 0.08);
+  --border-strong: rgb(0 0 0 / 0.14);
+  --border-focus: #6b6e76;
+  --focus-soft: rgb(0 0 0 / 0.06);
+
+  --text: #1d1e21;
+  --text-muted: #5c5f66;
+  --text-faint: #6e7178;
+
+  --accent: #2f62d0;
+  --accent-strong: #2553b8;
+  --on-accent: #ffffff;
+
+  --success: #1f8a4c;
+  --warning: #9a6200;
+  --danger: #c7372f;
+  --warning-soft: rgb(196 128 0 / 0.12);
+  --danger-soft: rgb(199 55 47 / 0.1);
+
+  --draw-paper: #fbfbfa;
+  --draw-grid: rgb(0 0 0 / 0.035);
+  --draw-grid-major: rgb(0 0 0 / 0.07);
+  --draw-line: #26282c;
+  --draw-detail: #6d7078;
+  --draw-dim: #55585f;
+  --draw-wall-fill: #9a9ca2;
+  --draw-item-fill: #ffffff;
+  --draw-item-dark: #e4e4e2;
+  --draw-glass: rgb(80 130 190 / 0.18);
+  --draw-warning-fill: rgb(214 140 0 / 0.2);
+  --draw-selected-fill: rgb(0 0 0 / 0.1);
+  --draw-hover-fill: rgb(0 0 0 / 0.05);
+  --draw-handle: #26282c;
+  --draw-handle-fill: #ffffff;
+
+  --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
+  --scrim: rgb(0 0 0 / 0.3);
+}

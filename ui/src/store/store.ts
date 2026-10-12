@@ -1,0 +1,183 @@
+// The app state: the open project with undo history, the selection and the view settings.
+//
+// Every change to the project goes through `change(label, fn)`, which records the previous
+// project for undo. A drag records one step: `beginGesture()` at the start, `change(..., {gesture:
+// true})` while moving, so all the moves of one drag undo together.
+
+import { create } from "zustand";
+import type { Facing, Item, Opening, Project, Room } from "../model/types";
+import { newProject } from "../model/project";
+
+/** How many steps undo keeps. */
+const HISTORY_LIMIT = 200;
+
+export type Layout = "plan" | "elevations" | "3d" | "split";
+
+export interface Selection {
+  /** Selected items (ids). */
+  items: string[];
+  /** A selected opening (id), exclusive with items. */
+  opening: string | null;
+}
+
+export interface Prefs {
+  /** Grid step for moving in the plan (mm), 0 for free placement. */
+  grid: number;
+  /** Shows item names next to the position numbers in the plan. */
+  showNames: boolean;
+  /** Shows dimensions in the plan. */
+  showDims: boolean;
+}
+
+export interface AppState {
+  project: Project;
+  /** Path of the file the project was opened from or saved to; null for a new project. */
+  path: string | null;
+  /** True when the project changed since it was opened or saved. */
+  dirty: boolean;
+  past: Project[];
+  future: Project[];
+  selection: Selection;
+  layout: Layout;
+  /** The elevation shown where only one fits (split layout, export). */
+  facing: Facing;
+  prefs: Prefs;
+
+  change: (fn: (p: Project) => Project, opts?: { gesture?: boolean }) => void;
+  /** Starts a drag: the next gesture change records the state before it. */
+  beginGesture: () => void;
+  undo: () => void;
+  redo: () => void;
+  load: (project: Project, path: string | null) => void;
+  markSaved: (path: string) => void;
+  select: (sel: Partial<Selection>) => void;
+  setLayout: (layout: Layout) => void;
+  setFacing: (facing: Facing) => void;
+  setPrefs: (prefs: Partial<Prefs>) => void;
+
+  // Shortcuts over `change`.
+  updateItems: (ids: readonly string[], patch: (it: Item) => Partial<Item>, opts?: { gesture?: boolean }) => void;
+  addItems: (items: Item[]) => void;
+  removeSelected: () => void;
+  updateRoom: (patch: (r: Room) => Partial<Room>, opts?: { gesture?: boolean }) => void;
+  updateOpening: (id: string, patch: Partial<Opening>, opts?: { gesture?: boolean }) => void;
+}
+
+let gestureOpen = false;
+
+export const useStore = create<AppState>((set, get) => ({
+  project: newProject(),
+  path: null,
+  dirty: false,
+  past: [],
+  future: [],
+  selection: { items: [], opening: null },
+  layout: "split",
+  facing: "north",
+  prefs: { grid: 50, showNames: false, showDims: true },
+
+  change(fn, opts) {
+    const before = get().project;
+    const after = fn(before);
+    if (after === before) return;
+    const record = !opts?.gesture || gestureOpen;
+    gestureOpen = false;
+    set((s) => ({
+      project: after,
+      dirty: true,
+      past: record ? [...s.past, before].slice(-HISTORY_LIMIT) : s.past,
+      future: record ? [] : s.future,
+    }));
+  },
+
+  beginGesture() {
+    gestureOpen = true;
+  },
+
+  undo() {
+    const { past, project, future } = get();
+    const prev = past[past.length - 1];
+    if (!prev) return;
+    set({ project: prev, past: past.slice(0, -1), future: [project, ...future], dirty: true, selection: keepExisting(get().selection, prev) });
+  },
+
+  redo() {
+    const { past, project, future } = get();
+    const next = future[0];
+    if (!next) return;
+    set({ project: next, past: [...past, project], future: future.slice(1), dirty: true, selection: keepExisting(get().selection, next) });
+  },
+
+  load(project, path) {
+    set({ project, path, dirty: false, past: [], future: [], selection: { items: [], opening: null } });
+  },
+
+  markSaved(path) {
+    set({ path, dirty: false });
+  },
+
+  select(sel) {
+    set((s) => {
+      const next = { ...s.selection, ...sel };
+      if (sel.items && sel.items.length > 0) next.opening = null;
+      if (sel.opening) next.items = [];
+      return { selection: next };
+    });
+  },
+
+  setLayout(layout) {
+    set({ layout });
+  },
+
+  setFacing(facing) {
+    set({ facing });
+  },
+
+  setPrefs(prefs) {
+    set((s) => ({ prefs: { ...s.prefs, ...prefs } }));
+  },
+
+  updateItems(ids, patch, opts) {
+    const wanted = new Set(ids);
+    get().change((p) => ({ ...p, items: p.items.map((it) => (wanted.has(it.id) ? { ...it, ...patch(it) } : it)) }), opts);
+  },
+
+  addItems(items) {
+    get().change((p) => ({ ...p, items: [...p.items, ...items] }));
+    get().select({ items: items.map((i) => i.id) });
+  },
+
+  removeSelected() {
+    const { selection } = get();
+    if (selection.items.length > 0) {
+      const gone = new Set(selection.items);
+      get().change((p) => ({ ...p, items: p.items.filter((it) => !gone.has(it.id)) }));
+    } else if (selection.opening) {
+      const id = selection.opening;
+      get().change((p) => ({ ...p, room: { ...p.room, openings: p.room.openings.filter((o) => o.id !== id) } }));
+    }
+    set({ selection: { items: [], opening: null } });
+  },
+
+  updateRoom(patch, opts) {
+    get().change((p) => ({ ...p, room: { ...p.room, ...patch(p.room) } }), opts);
+  },
+
+  updateOpening(id, patch, opts) {
+    get().change((p) => ({ ...p, room: { ...p.room, openings: p.room.openings.map((o) => (o.id === id ? { ...o, ...patch } : o)) } }), opts);
+  },
+}));
+
+function keepExisting(sel: Selection, p: Project): Selection {
+  const ids = new Set(p.items.map((i) => i.id));
+  return {
+    items: sel.items.filter((id) => ids.has(id)),
+    opening: sel.opening && p.room.openings.some((o) => o.id === sel.opening) ? sel.opening : null,
+  };
+}
+
+/** The selected items of a state. */
+export function selectedItems(s: Pick<AppState, "project" | "selection">): Item[] {
+  const ids = new Set(s.selection.items);
+  return s.project.items.filter((i) => ids.has(i.id));
+}
