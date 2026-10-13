@@ -37,6 +37,29 @@ export function orthoHalfHeight(radius: number, aspect: number, margin: number):
 }
 
 /**
+ * Half the height an orthographic view along `dir` (towards the camera, y up) needs to show
+ * `box` with `margin`, centred on the box's centre. Tighter than the bounding sphere: a front
+ * view of a flat room fills the width instead of leaving room for the sphere above and below.
+ */
+export function orthoHalfHeightForBox(box: THREE.Box3, dir: THREE.Vector3, aspect: number, margin: number): number {
+  const z = dir.clone().normalize();
+  const x = new THREE.Vector3(0, 1, 0).cross(z);
+  if (x.lengthSq() < 1e-12) x.set(1, 0, 0);
+  x.normalize();
+  const y = new THREE.Vector3().crossVectors(z, x);
+  const c = box.getCenter(new THREE.Vector3());
+  let w = 0;
+  let h = 0;
+  const p = new THREE.Vector3();
+  for (let i = 0; i < 8; i++) {
+    p.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c);
+    w = Math.max(w, Math.abs(p.dot(x)));
+    h = Math.max(h, Math.abs(p.dot(y)));
+  }
+  return Math.max(h, w / aspect) * margin;
+}
+
+/**
  * Half the visible height at the target of a perspective camera `distance` away: the size an
  * orthographic view takes so switching projection keeps the target's scale.
  */

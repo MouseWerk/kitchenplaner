@@ -6,6 +6,7 @@
 // Openings with a `partition` sit in that partition; everything about outer walls ignores them.
 
 import { add, area, clampOpening, cross, dist, distToSegment, dot, norm, scale, sub, walls, type Box } from "./geometry";
+import { clampPartitionOpening, partitionLength } from "./partitions";
 import type { Opening, OpeningKind, Partition, Room, Vec2 } from "./types";
 
 /** Smallest distance (mm) of a new corner from the ends of the wall it splits. */
@@ -226,21 +227,13 @@ export function removeCoincidentCorners(room: Room): Room {
 
 // Partitions.
 
-export const partitionLength = (p: Pick<Partition, "a" | "b">) => dist(p.a, p.b);
-
-/** An opening in partition `p` clamped into its length (offset along a to b). */
-export function clampToPartition(p: Partition, o: Opening): Opening {
-  const l = partitionLength(p);
-  const width = Math.min(o.width, l);
-  const offset = Math.min(Math.max(o.offset, width / 2), l - width / 2);
-  return { ...o, width, offset };
-}
+export { partitionLength };
 
 /** An opening clamped into its host: its partition or its outer wall. */
 export function clampToHost(room: Room, o: Opening): Opening {
   if (!o.partition) return clampOpening(room, o);
   const p = room.partitions.find((w) => w.id === o.partition);
-  return p ? clampToPartition(p, o) : o;
+  return p ? clampPartitionOpening(p, o) : o;
 }
 
 /** The room with partition `id` replaced by `next`; its openings clamped into the new length. */
@@ -248,7 +241,7 @@ export function updatePartition(room: Room, id: string, patch: Partial<Partition
   const partitions = room.partitions.map((p) => (p.id === id ? { ...p, ...patch } : p));
   const p = partitions.find((w) => w.id === id);
   if (!p || partitionLength(p) < MIN_PARTITION_LENGTH) return room;
-  return { ...room, partitions, openings: room.openings.map((o) => (o.partition === id ? clampToPartition(p, o) : o)) };
+  return { ...room, partitions, openings: room.openings.map((o) => (o.partition === id ? clampPartitionOpening(p, o) : o)) };
 }
 
 /** The room with partition `id` set to `length` mm: its end b moves along the a-to-b direction. */

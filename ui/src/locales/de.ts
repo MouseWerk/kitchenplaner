@@ -206,6 +206,18 @@ export const de = {
   "view3d.cutaway": "Wände ausblenden",
   "view3d.unavailable": "3D ist hier nicht verfügbar, weil WebGL fehlt oder abgeschaltet ist. Grundriss und Ansichten kannst du weiter nutzen.",
   "view3d.contextLost": "Die 3D-Darstellung wurde vom Grafiktreiber zurückgesetzt. Sie erscheint wieder, sobald die Grafik bereit ist.",
+  "view3d.ortho": "Parallelprojektion",
+  "view3d.section": "Höhenschnitt",
+  "view3d.sectionHeight": "Schnitthöhe",
+  "view3d.walk": "Begehen",
+  "view3d.walkHint": "W A S D oder Pfeiltasten: gehen · Umschalt: schneller · Ziehen: umsehen · Esc: beenden",
+  "view3d.quality": "Hohe Qualität (Umgebungsverdeckung)",
+  "view3d.cube": "Ansichtswürfel",
+  "view3d.face.front": "Vorne",
+  "view3d.face.back": "Hinten",
+  "view3d.face.left": "Links",
+  "view3d.face.right": "Rechts",
+  "view3d.face.top": "Oben",
 
   // Openings
   "opening.door": "Tür",

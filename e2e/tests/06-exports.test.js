@@ -45,7 +45,9 @@ appTest("the equipment list exports as CSV for Excel", async (app) => {
 
 appTest("the 3D view exports as PNG when it is shown", async (app, t) => {
   await place(app, "Kombidämpfer 20 × GN 1/1");
-  // Without a 3D pane there is nothing to capture: the entry is disabled.
+  // Without a 3D pane (plan only) there is nothing to capture: the entry is disabled.
+  await pressOnViews(app, "1");
+  await app.waitUntil(async () => !(await panes(app)).includes("3D"), "the 3D pane stayed");
   await app.click("Exportieren", "header");
   const entry = await app.button("3D-Ansicht als PNG…", "[role=menu]");
   assert.equal(await entry.isEnabled(), false);

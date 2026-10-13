@@ -74,7 +74,9 @@ export function brushedSteelPixels(size = 256, seed = 7): Pixels {
   const across = periodicNoise(16, seed + 2);
   return pixels(size, size, (x, y) => {
     const streak = rows[y] * 0.6 + rows[(y + 1) % size] * 0.4;
-    const v = 0.5 + (streak - 0.5) * 0.55 + (along((x / size) * 8, (y / size) * 8) - 0.5) * 0.25 + (across(0, (y / size) * 16) - 0.5) * 0.2;
+    // Mostly fine hairlines; the slow variations only break up repetition and stay faint, or
+    // large panels read as planks.
+    const v = 0.5 + (streak - 0.5) * 0.35 + (along((x / size) * 8, (y / size) * 8) - 0.5) * 0.08 + (across(0, (y / size) * 16) - 0.5) * 0.06;
     const g = 255 * v;
     return [g, g, g];
   });

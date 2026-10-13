@@ -12,6 +12,21 @@ import { footprint } from "../model/geometry";
 import { MM_PER_UNIT } from "./meshes";
 import { floorTilePixels, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels } from "./textures";
 
+/**
+ * The light of the 3D view, shared so other renderers of the item models (catalog previews)
+ * can look the same. AgX keeps bright steel and white walls from clipping and holds the gray
+ * of the steel without the orange shift of ACES.
+ */
+export const LOOK = {
+  toneMapping: THREE.AgXToneMapping,
+  exposure: 1,
+  /** Blur of the reflected studio environment (0 sharp, 1 diffuse). */
+  environmentBlur: 0.04,
+  environmentIntensity: 0.5,
+  hemiIntensity: 0.35,
+  sunIntensity: 3,
+} as const;
+
 /** Width of the soft edge of a contact shadow beyond the footprint (m). */
 export const CONTACT_FEATHER = 0.12;
 /** Darkness of a contact shadow under the item (0 none, 1 black). */
@@ -72,7 +87,9 @@ export function applyRoomLook(room: THREE.Object3D, tex: RoomTextures): void {
       mat.bumpMap = tex.tileRough;
       mat.bumpScale = TILE_BUMP;
       mat.needsUpdate = true;
-    } else if (typeof o.userData.wall === "number" && !mat.transparent) {
+    } else if ((typeof o.userData.wall === "number" || o.userData.partition !== undefined) && !o.name && !mat.transparent) {
+      // Wall and partition pieces are unnamed; fittings in their openings (panes, hatch
+      // shelves) carry a name and keep their own material.
       mat.bumpMap = tex.paint;
       mat.bumpScale = PAINT_BUMP;
       mat.side = THREE.DoubleSide;

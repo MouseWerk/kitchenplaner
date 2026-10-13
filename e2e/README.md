@@ -79,6 +79,10 @@ three hooks, all off unless the variable is set and all compiled out of release 
   (`aside[aria-label='Katalog']`, `[role=group][aria-label='Ansicht wählen']`), the `data-item`
   ids of the plan. Add a `data-testid` only where nothing visible identifies an element.
 - Wait for conditions (`app.waitUntil`, `app.waitToast`, `app.waitFile`), never for time.
+- Type text and digits with `app.type("1000")`: `app.keys([...])` holds every key down until the
+  end, so a repeated character arrives as a key repeat (and is ignored by the operators).
+- Pointer input with `hover`, `clickAt` and `drag` (`lib/kitchen.js`), in viewport pixels taken
+  from the elements on screen (`planRect`, `itemRect`), never from fixed coordinates.
 - Files go into the test's own folder: `app.file("name.kplan")`.
 
 ## Coverage
@@ -93,7 +97,10 @@ three hooks, all off unless the variable is set and all compiled out of release 
 | 06-exports | plan SVG (mm size), DXF (layer WAENDE, EOF), CSV (BOM, header), 3D PNG (signature) |
 | 07-unsaved | the unsaved-changes question on new, open and window close; cancel and discard |
 | 08-design | no horizontal overflow at 1000/1440/1920 px in every layout; neutral `:focus-visible` ring |
+| 09-operators | G + X + typed 1000 moves exactly, Escape cancels, one undo step; R + typed 90; frame selection left to right (inside) vs right to left (touching) |
+| 10-room | Raum mode, partition tool with a typed 3000, „+ Durchreiche“ in it; the saved file holds both |
 
-Not covered yet (features still being built): the G/R operators with typed values and axis locks,
-frame selection (left-to-right vs right-to-left), the wall tool (lengths, snapping, closing),
-partitions and pass-through hatches, catalog previews, and Cmd+Q on macOS (no WebDriver there).
+Not covered yet: the outline (wall) tool (typed lengths, 45°/90° snapping, closing on the start
+point), selecting and moving walls and corners in Raum mode (G X 1000, Delete refused below three
+corners), Shift+D and A, snapping guides, the catalog's 3D previews, and Cmd+Q on macOS (no
+WebDriver there).

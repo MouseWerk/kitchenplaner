@@ -1,4 +1,5 @@
-/* The 3D view: canvas filling its box, a small toolbar in the top right corner. */
+/* The 3D view: canvas filling its box, a toolbar in the top right corner, the view cube in the
+   bottom right, a hint at the bottom while walking. */
 
 .v3d {
   position: relative;
@@ -7,6 +8,16 @@
   min-height: 0;
   overflow: hidden;
   background: var(--bg-canvas);
+  outline: none;
+}
+
+/* The canvas tells what a press will do: move an item, or orbit. */
+.v3d.is-hover .v3d-canvas {
+  cursor: pointer;
+}
+
+.v3d.is-dragging .v3d-canvas {
+  cursor: grabbing;
 }
 
 .v3d-host {
@@ -23,11 +34,27 @@
   outline: none;
 }
 
-.v3d-toolbar {
+.v3d-bar {
   position: absolute;
   top: var(--sp-2);
   right: var(--sp-2);
+  left: var(--sp-2);
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-1);
+  pointer-events: none;
+}
+
+.v3d-bar > * {
+  pointer-events: auto;
+}
+
+.v3d-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
   align-items: center;
   gap: var(--sp-1);
   padding: var(--sp-1);
@@ -86,4 +113,120 @@
   text-align: center;
   font-size: var(--fs-sm);
   color: var(--text-muted);
+}
+
+.v3d-section {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.v3d-section input {
+  width: calc(var(--ctl-lg) * 4);
+  accent-color: var(--text-muted);
+}
+
+.v3d-section output {
+  min-width: 4.5em;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* View cube: CSS 3D, turned by the engine like the world (no second WebGL context). */
+.v3d-cube-wrap {
+  --cube: calc(var(--ctl-lg) * 1.5);
+  position: absolute;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  width: var(--cube);
+  height: var(--cube);
+  perspective: none;
+}
+
+.v3d-cube {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+
+.v3d-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xs);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  backface-visibility: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+
+.v3d-face:hover {
+  background: var(--bg-overlay);
+  color: var(--text);
+}
+
+.v3d-face:focus {
+  outline: none;
+}
+
+.v3d-face:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.v3d-face-front {
+  transform: translateZ(calc(var(--cube) / 2));
+}
+
+.v3d-face-back {
+  transform: rotateY(180deg) translateZ(calc(var(--cube) / 2));
+}
+
+.v3d-face-right {
+  transform: rotateY(90deg) translateZ(calc(var(--cube) / 2));
+}
+
+.v3d-face-left {
+  transform: rotateY(-90deg) translateZ(calc(var(--cube) / 2));
+}
+
+.v3d-face-top {
+  transform: rotateX(90deg) translateZ(calc(var(--cube) / 2));
+}
+
+.v3d-face-bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--cube) / 2));
+  cursor: default;
+}
+
+.v3d-hint {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-4);
+  max-width: calc(100% - 2 * var(--sp-4) - 2 * var(--ctl-lg));
+  margin: 0;
+  padding: var(--sp-1) var(--sp-3);
+  transform: translateX(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-align: center;
+  pointer-events: none;
 }

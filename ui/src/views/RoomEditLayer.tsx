@@ -672,7 +672,8 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
         const b = S(w.b);
         if (Math.hypot(b.x - a.x, b.y - a.y) < LABEL_MIN_PX) return null;
         // Inside the room, clear of the plan's own dimensions outside the walls.
-        const m = add(scale(add(a, b), 0.5), scale(w.inward, 12));
+        // Text runs horizontally: beside a vertical wall it needs more room than above a horizontal one.
+        const m = add(scale(add(a, b), 0.5), scale(w.inward, 12 + 16 * Math.abs(w.inward.x)));
         return (
           <text key={`l${w.index}`} x={m.x} y={m.y} className="room-label" textAnchor="middle" dominantBaseline="central">
             {num(Math.round(w.length))}

@@ -124,7 +124,6 @@ function appEnv(dir) {
           // Xvfb has no GPU: WebGL (3D view) through Mesa's software renderer, no DMA-BUF.
           LIBGL_ALWAYS_SOFTWARE: "1",
           WEBKIT_DISABLE_DMABUF_RENDERER: "1",
-          LANGUAGE: "de",
         }),
   };
 }
@@ -202,7 +201,7 @@ export async function launch({ width = 1440, height = 900 } = {}) {
           ),
         { timeout: 8000, interval: 50, timeoutMsg: `no button „${text}“ in ${scope}` },
       );
-      return el;
+      return browser.$(el);
     },
     async click(text, scope) {
       const el = await app.button(text, scope);
@@ -217,7 +216,8 @@ export async function launch({ width = 1440, height = 900 } = {}) {
     },
     /** The input of the inspector field labelled `label` (the first one with that label). */
     async field(label) {
-      return app.waitUntil(
+      // A script returns a bare element reference; $() makes it a WebdriverIO element.
+      const ref = await app.waitUntil(
         () =>
           browser.execute((label) => {
             const panel = document.querySelector("aside[aria-label='Eigenschaften']");
@@ -226,6 +226,7 @@ export async function launch({ width = 1440, height = 900 } = {}) {
           }, label),
         `no inspector field „${label}“`,
       );
+      return browser.$(ref);
     },
     async fieldValue(label) {
       return browser.execute((e) => e.value, await app.field(label));
@@ -314,16 +315,21 @@ async function waitReady(app) {
   if (!hooked) throw new Error("the test hooks are off: KITCHENPLANER_APP must be a debug build (they are compiled out of release builds)");
 }
 
-/** The tests read German texts: pins the display language (stored in this run's own WebView storage). */
+/**
+ * The tests read German texts. The WebView's language follows the system (English in a bare
+ * container): switch it the way a user does, in the „View“ menu (stored in this run's own WebView
+ * storage). Not by a reload, which leaves Tauri warnings about lost callbacks in the console.
+ */
 async function ensureGerman(app) {
   if ((await app.exec(() => document.documentElement.lang)) === "de") return;
-  await app.exec(() => {
-    localStorage.setItem("kitchenplaner.settings.v1", JSON.stringify({ theme: "system", lang: "de" }));
-    location.reload();
-  });
-  await app.waitUntil(() => app.exec(() => document.documentElement.lang === "de" && !!document.querySelector("footer")).catch(() => false), "the UI did not switch to German", 20000);
-  await waitReady(app);
+  await app.menu("View", "Deutsch");
+  await app.waitUntil(() => app.exec(() => document.documentElement.lang === "de"), "the UI did not switch to German");
+  // The first project got its name in English: start a new one, named in German.
+  await app.click("Neues Projekt", "header");
+  await app.waitUntil(async () => (await germanTitle(app)) === "Unbenanntes Projekt – Kitchenplaner", "the new project is not named in German");
 }
+
+const germanTitle = (app) => app.browser.getTitle();
 
 /**
  * A test that runs against its own, freshly started app and leaves a screenshot and the page's
@@ -340,9 +346,7 @@ export function appTestWith(test) {
         // Every test also proves that nothing went wrong on the way (the shell records them).
         if (!opts.appGone) {
           const errors = await app.consoleErrors();
-          if (errors?.length) throw new Error(`console errors:
-${errors.join("
-")}`);
+          if (errors?.length) throw new Error(`console errors:\n${errors.join("\n")}`);
         }
       } catch (e) {
         const slug = name.replace(/[^a-z0-9]+/gi, "-").slice(0, 60);

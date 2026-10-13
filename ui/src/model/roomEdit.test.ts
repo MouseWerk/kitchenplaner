@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { walls } from "./geometry";
+import { clampOpening, walls } from "./geometry";
 import {
   clampToHost,
   combine,
@@ -131,6 +131,20 @@ describe("partition openings", () => {
     const r = { ...room([hatch("h", "p", 2500)]), partitions: [partition("p", [4000, 0], [4000, 3000])] };
     expect(moveCorner(r, 1, { x: 5000, y: 0 }).openings[0]).toEqual(r.openings[0]);
     expect(insertCorner(r, 0, { x: 2000, y: 0 }, 50)!.openings[0]).toEqual(r.openings[0]);
+    // Its `wall` index (0, 8 m long) must not shrink it to a 3 m wall 0, nor move it with wall indices.
+    expect(moveCorners(r, [0], { x: 5000, y: 0 }).openings[0]).toEqual(r.openings[0]);
+    expect(removeCorners(r, [1])!.openings[0]).toEqual(r.openings[0]);
+    const dup = { ...r, points: [r.points[0], r.points[0], ...r.points.slice(1)] };
+    expect(removeCoincidentCorners(dup).openings[0]).toEqual(r.openings[0]);
+  });
+
+  it("are clamped into their partition, not into the outer wall of their index", () => {
+    const r = { ...room([hatch("h", "p", 2500)]), partitions: [partition("p", [4000, 0], [4000, 3000])] };
+    // Wall 0 is 8 m long; the partition 3 m: offset 2500 with 1200 width sticks out of the partition.
+    expect(clampOpening(r, r.openings[0]).offset).toBe(2400);
+    expect(clampToHost(r, r.openings[0]).offset).toBe(2400);
+    // Without the partitions at hand it stays as it is.
+    expect(clampOpening({ points: r.points }, r.openings[0])).toEqual(r.openings[0]);
   });
 });
 
