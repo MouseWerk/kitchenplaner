@@ -23,19 +23,17 @@ export function App() {
   const t = useT();
   const layout = useStore((s) => s.layout);
   const facing = useStore((s) => s.facing);
-  const [roomEdit, setRoomEdit] = useState(false);
   const [fitSignal, setFitSignal] = useState(0);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [secondFacing, setSecondFacing] = useState<Facing>("east");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && roomEdit && !(e.target as HTMLElement)?.closest?.("input,textarea,select")) setRoomEdit(false);
       handleShortcut(e, () => setFitSignal((n) => n + 1));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [roomEdit]);
+  }, []);
 
   // A new or opened project is fitted into every view, also when it replaces an identical one.
   const loadCount = useStore((s) => s.loadCount);
@@ -45,7 +43,7 @@ export function App() {
 
   const plan = (
     <Pane title={t("view.plan")} key="plan">
-      <PlanView roomEdit={roomEdit} fitSignal={fitSignal} onCursor={setCursor} />
+      <PlanView fitSignal={fitSignal} onCursor={setCursor} />
     </Pane>
   );
   const three = (
@@ -83,11 +81,11 @@ export function App() {
 
   return (
     <div className="app">
-      <Toolbar roomEdit={roomEdit} onRoomEdit={setRoomEdit} />
+      <Toolbar />
       <CatalogPanel />
       <main className={`views layout-${layout}`}>{panes}</main>
       <Inspector />
-      <StatusBar cursor={cursor} roomEdit={roomEdit} />
+      <StatusBar cursor={cursor} />
       <Toasts />
     </div>
   );
@@ -118,17 +116,20 @@ function FacingSwitch(props: { value: Facing; onChange: (f: Facing) => void }) {
   );
 }
 
-function StatusBar(props: { cursor: Vec2 | null; roomEdit: boolean }) {
+function StatusBar(props: { cursor: Vec2 | null }) {
   const t = useT();
   const project = useStore((s) => s.project);
   const grid = useStore((s) => s.prefs.grid);
+  const mode = useStore((s) => s.mode);
+  const status = useStore((s) => s.status);
   const issues = useMemo(() => checkProject(project), [project]);
   const totals = useMemo(() => connectionTotals(project.items), [project.items]);
   return (
     <footer className="statusbar">
       <span className="status-cell mono">{props.cursor ? `X ${Math.round(props.cursor.x)}  Y ${Math.round(props.cursor.y)}` : " "}</span>
       <span className="status-cell">{grid > 0 ? t("settings.grid", { mm: grid }) : t("settings.gridOff")}</span>
-      {props.roomEdit && <span className="status-cell">{t("room.editHint")}</span>}
+      <span className="status-cell mode">{t(mode === "room" ? "mode.room" : "mode.arrange")}</span>
+      {status ? <span className="status-cell mono">{status}</span> : <span className="status-cell">{t(mode === "room" ? "mode.roomHint" : "mode.arrangeHint")}</span>}
       <span className="status-spacer" />
       <span className="status-cell">{t("status.items", { n: project.items.length })}</span>
       <span className="status-cell">{num(totals.electricKw, 1)} kW</span>

@@ -104,7 +104,35 @@ fn confirm_exit(app: tauri::AppHandle, confirmed: State<'_, ExitConfirmed>) {
 }
 
 fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, CmdError> {
+    // The end-to-end tests give every run a fresh data folder (e2e/README.md). Debug builds only:
+    // a release build always uses the app's own folder.
+    #[cfg(debug_assertions)]
+    if let Some(dir) = std::env::var_os("KITCHENPLANER_DATA_DIR").filter(|d| !d.is_empty()) {
+        return Ok(PathBuf::from(dir));
+    }
     app.path().app_data_dir().map_err(|e| CmdError::io(None, e))
+}
+
+/// Test hooks of the end-to-end tests (e2e/README.md), only in debug builds started with
+/// `KITCHENPLANER_E2E=1`: marks the page as under test, so the file and question dialogs of
+/// `ui/src/lib/platform.ts` take their answers from the test instead of opening native dialogs a
+/// WebDriver cannot reach, and records console errors and warnings for the tests to check.
+#[cfg(debug_assertions)]
+fn e2e_hooks<R: tauri::Runtime>() -> Option<tauri::plugin::TauriPlugin<R>> {
+    const SCRIPT: &str = r#"(() => {
+  window.__KITCHENPLANER_E2E__ = true;
+  const errors = (window.__E2E_ERRORS__ = []);
+  const warnings = (window.__E2E_WARNINGS__ = []);
+  const text = (args) => args.map((a) => (a instanceof Error ? a.stack || a.message : String(a))).join(" ");
+  const error = console.error.bind(console);
+  const warn = console.warn.bind(console);
+  console.error = (...a) => { errors.push(text(a)); error(...a); };
+  console.warn = (...a) => { warnings.push(text(a)); warn(...a); };
+  window.addEventListener("error", (e) => errors.push(`uncaught: ${e.message}`));
+  window.addEventListener("unhandledrejection", (e) => errors.push(`unhandled rejection: ${text([e.reason])}`));
+})();"#;
+    (std::env::var("KITCHENPLANER_E2E").as_deref() == Ok("1"))
+        .then(|| tauri::plugin::Builder::new("e2e-hooks").js_init_script(SCRIPT).build())
 }
 
 /// What to do with a request to end the app.
@@ -240,6 +268,11 @@ pub fn run() {
         ]);
     #[cfg(target_os = "macos")]
     let builder = builder.menu(app_menu);
+    #[cfg(debug_assertions)]
+    let builder = match e2e_hooks() {
+        Some(hooks) => builder.plugin(hooks),
+        None => builder,
+    };
     let app = builder.build(tauri::generate_context!()).expect("error while building the Kitchenplaner window");
 
     app.run(|app, event| match event {

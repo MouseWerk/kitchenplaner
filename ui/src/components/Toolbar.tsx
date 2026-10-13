@@ -1,6 +1,6 @@
 // The top bar: file commands, undo, layouts, room editing, export and view settings.
 
-import { FilePlus2, FolderOpen, PenLine, Redo2, Save, Undo2 } from "lucide-react";
+import { Armchair, FilePlus2, FolderOpen, PenLine, Redo2, Save, Undo2 } from "lucide-react";
 import { newFile, openFile, runExport, saveFile } from "../lib/actions";
 import { currentLang, useT } from "../lib/i18n";
 import { baseName } from "../lib/platform";
@@ -19,7 +19,7 @@ const LAYOUTS: { id: Layout; key: "view.plan" | "view.elevations" | "view.3d" | 
 
 const GRIDS = [0, 10, 50, 100, 250] as const;
 
-export function Toolbar(props: { roomEdit: boolean; onRoomEdit: (v: boolean) => void }) {
+export function Toolbar() {
   const t = useT();
   const lang = currentLang();
   const layout = useStore((s) => s.layout);
@@ -30,6 +30,8 @@ export function Toolbar(props: { roomEdit: boolean; onRoomEdit: (v: boolean) => 
   const canRedo = useStore((s) => s.future.length > 0);
   const facing = useStore((s) => s.facing);
   const prefs = useStore((s) => s.prefs);
+  const mode = useStore((s) => s.mode);
+  const roomTool = useStore((s) => s.roomTool);
   const settings = useSettings();
   // The 3D export renders the mounted 3D pane; layouts without one have nothing to capture.
   const can3d = useCanCapture3d();
@@ -78,9 +80,23 @@ export function Toolbar(props: { roomEdit: boolean; onRoomEdit: (v: boolean) => 
             </button>
           ))}
         </div>
-        <button type="button" className={props.roomEdit ? "tb-btn is-current" : "tb-btn"} aria-pressed={props.roomEdit} onClick={() => props.onRoomEdit(!props.roomEdit)} title={t("room.editHint")}>
-          <PenLine size={15} strokeWidth={1.75} aria-hidden /> {t("room.edit")}
-        </button>
+        <div className="seg" role="group" aria-label={t("mode.title")}>
+          <button type="button" className={mode === "arrange" ? "seg-btn is-current" : "seg-btn"} aria-pressed={mode === "arrange"} onClick={() => st.setMode("arrange")} title={`${t("mode.arrangeHint")} (Tab)`}>
+            <Armchair size={15} strokeWidth={1.75} aria-hidden /> {t("mode.arrange")}
+          </button>
+          <button type="button" className={mode === "room" ? "seg-btn is-current" : "seg-btn"} aria-pressed={mode === "room"} onClick={() => st.setMode("room")} title={`${t("mode.roomHint")} (Tab)`}>
+            <PenLine size={15} strokeWidth={1.75} aria-hidden /> {t("mode.room")}
+          </button>
+        </div>
+        {mode === "room" && (
+          <div className="seg small" role="group" aria-label={t("roomTool.title")}>
+            {(["select", "outline", "partition"] as const).map((tool) => (
+              <button key={tool} type="button" className={roomTool === tool ? "seg-btn is-current" : "seg-btn"} aria-pressed={roomTool === tool} onClick={() => st.setRoomTool(tool)} title={t(`roomTool.${tool}Hint` as const)}>
+                {t(`roomTool.${tool}` as const)}
+              </button>
+            ))}
+          </div>
+        )}
         <Menu
           label={t("export.title")}
           title={t("export.title")}

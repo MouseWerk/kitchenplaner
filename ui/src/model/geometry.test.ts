@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { angleDiff, convexOverlap, footprint, frontOf, lRoom, normalizeAngle, pointInPolygon, rectRoom, signedArea, snapItem, walls } from "./geometry";
+import { angleDiff, convexOverlap, footprint, frontOf, itemsInFrame, lRoom, normalizeAngle, pointInPolygon, rectRoom, signedArea, snapItem, walls } from "./geometry";
+import type { Item } from "./types";
 
 const item = (over: Partial<{ x: number; y: number; rotation: number; width: number; depth: number }> = {}) => ({ x: 0, y: 0, rotation: 0, width: 1000, depth: 700, ...over });
 
@@ -107,5 +108,42 @@ describe("snapItem", () => {
     expect(snapItem(item({ x: 4012, y: 3038, rotation: 30 }), doubled, [], 50, true)).toMatchObject({ x: 4000, y: 3050, rotation: 30, wall: null });
     // Real walls still snap.
     expect(snapItem(item({ x: 2030, y: 420, rotation: 0 }), doubled, [], 50, true)).toMatchObject({ y: 350, wall: 0 });
+  });
+});
+
+describe("snapItem against partitions", () => {
+  // A partition across the room, its centre line at y 3000, 100 mm thick: faces at 2950 and 3050.
+  const room = { points: rectRoom(8000, 6000), partitions: [{ id: "p1", a: { x: 2000, y: 3000 }, b: { x: 6000, y: 3000 }, thickness: 100, height: 3000 }] };
+
+  it("pulls an item with its back against the partition face it stands in front of", () => {
+    expect(snapItem(item({ x: 4010, y: 3430 }), room, [], 50, false)).toMatchObject({ x: 4000, y: 3400, rotation: 0, wall: null });
+  });
+
+  it("turns an item dropped north of the partition to face north", () => {
+    expect(snapItem(item({ x: 4000, y: 2580 }), room, [], 50, true)).toMatchObject({ y: 2600, rotation: 180 });
+  });
+
+  it("does not reach past the partition's ends", () => {
+    expect(snapItem(item({ x: 7000, y: 3430 }), room, [], 50, false)).toMatchObject({ y: 3450, wall: null });
+  });
+});
+
+describe("itemsInFrame", () => {
+  const box = (id: string, x: number, y: number) => ({ ...item({ x, y }), id }) as unknown as Item;
+  // a spans x 500..1500, b 2500..3500; both y 650..1350.
+  const items = [box("a", 1000, 1000), box("b", 3000, 1000)];
+
+  it("left to right picks only items fully inside (window)", () => {
+    expect(itemsInFrame(items, { x: 0, y: 0 }, { x: 3000, y: 2000 })).toEqual(["a"]);
+    expect(itemsInFrame(items, { x: 0, y: 0 }, { x: 4000, y: 2000 })).toEqual(["a", "b"]);
+  });
+
+  it("right to left picks every item it touches (crossing)", () => {
+    expect(itemsInFrame(items, { x: 3000, y: 2000 }, { x: 0, y: 0 })).toEqual(["a", "b"]);
+    expect(itemsInFrame(items, { x: 2000, y: 2000 }, { x: 1600, y: 0 })).toEqual([]);
+  });
+
+  it("is the same whichever vertical direction the frame is drawn in", () => {
+    expect(itemsInFrame(items, { x: 0, y: 2000 }, { x: 3000, y: 0 })).toEqual(["a"]);
   });
 });

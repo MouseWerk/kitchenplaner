@@ -17,6 +17,7 @@ export function testProject(items: Item[] = []): Project {
       wallThickness: 240,
       // Wall 2 runs from (8000, 6000) west to (0, 6000): offset 6800 puts the door at x 1200.
       openings: [{ id: "door1", kind: "door", wall: 2, offset: 6800, width: 1010, height: 2135, sill: 0 }],
+      partitions: [],
     },
     items,
   };

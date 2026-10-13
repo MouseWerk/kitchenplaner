@@ -13,12 +13,28 @@ const HISTORY_LIMIT = 200;
 
 export type Layout = "plan" | "elevations" | "3d" | "split";
 
+/**
+ * Editing modes, as in Blender (Tab switches): "arrange" places and moves equipment (object
+ * mode), "room" edits the room itself: outline corners, walls, partitions and openings (edit
+ * mode). Each mode selects only its own things.
+ */
+export type Mode = "arrange" | "room";
+
+/** The tool of the room mode: select and move, draw a new outline, draw partitions. */
+export type RoomTool = "select" | "outline" | "partition";
+
 export interface Selection {
-  /** Selected items (ids). */
+  /** Selected items (ids); arrange mode. */
   items: string[];
-  /** A selected opening (id), exclusive with items. */
+  /** A selected opening (id); room mode. */
   opening: string | null;
+  /** Selected outline corners (indices into room.points); room mode. */
+  corners: number[];
+  /** Selected partitions (ids); room mode. */
+  partitions: string[];
 }
+
+const EMPTY_SELECTION: Selection = { items: [], opening: null, corners: [], partitions: [] };
 
 export interface Prefs {
   /** Grid step for moving in the plan (mm), 0 for free placement. */
@@ -44,6 +60,10 @@ export interface AppState {
   /** The elevation shown where only one fits (split layout, export). */
   facing: Facing;
   prefs: Prefs;
+  mode: Mode;
+  roomTool: RoomTool;
+  /** The running operator or tool step as the status bar shows it ("G  X  500 mm"); null when idle. */
+  status: string | null;
 
   change: (fn: (p: Project) => Project, opts?: { gesture?: boolean }) => void;
   /** Starts a drag: the next gesture change records the state before it. */
@@ -60,6 +80,10 @@ export interface AppState {
   setLayout: (layout: Layout) => void;
   setFacing: (facing: Facing) => void;
   setPrefs: (prefs: Partial<Prefs>) => void;
+  /** Switches the mode; the selection of the other mode is cleared. */
+  setMode: (mode: Mode) => void;
+  setRoomTool: (tool: RoomTool) => void;
+  setStatus: (status: string | null) => void;
 
   // Shortcuts over `change`.
   updateItems: (ids: readonly string[], patch: (it: Item) => Partial<Item>, opts?: { gesture?: boolean }) => void;
@@ -81,10 +105,13 @@ export const useStore = create<AppState>((set, get) => ({
   dirty: false,
   past: [],
   future: [],
-  selection: { items: [], opening: null },
+  selection: EMPTY_SELECTION,
   layout: "split",
   facing: "north",
   prefs: { grid: 50, showNames: false, showDims: true },
+  mode: "arrange",
+  roomTool: "select",
+  status: null,
 
   change(fn, opts) {
     const before = get().project;
@@ -135,7 +162,7 @@ export const useStore = create<AppState>((set, get) => ({
   load(project, path) {
     gestureOpen = false;
     gestureActive = false;
-    set((s) => ({ project, path, dirty: false, past: [], future: [], selection: { items: [], opening: null }, loadCount: s.loadCount + 1 }));
+    set((s) => ({ project, path, dirty: false, past: [], future: [], selection: EMPTY_SELECTION, loadCount: s.loadCount + 1 }));
   },
 
   markSaved(path) {
@@ -145,10 +172,24 @@ export const useStore = create<AppState>((set, get) => ({
   select(sel) {
     set((s) => {
       const next = { ...s.selection, ...sel };
-      if (sel.items && sel.items.length > 0) next.opening = null;
-      if (sel.opening) next.items = [];
+      // Items belong to the arrange mode, the rest to the room mode: never both at once.
+      if (sel.items && sel.items.length > 0) Object.assign(next, { opening: null, corners: [], partitions: [] });
+      if (sel.opening || (sel.corners && sel.corners.length > 0) || (sel.partitions && sel.partitions.length > 0)) next.items = [];
       return { selection: next };
     });
+  },
+
+  setMode(mode) {
+    if (mode === get().mode) return;
+    set({ mode, roomTool: "select", status: null, selection: EMPTY_SELECTION });
+  },
+
+  setRoomTool(roomTool) {
+    set({ roomTool, status: null });
+  },
+
+  setStatus(status) {
+    set({ status });
   },
 
   setLayout(layout) {
@@ -178,11 +219,21 @@ export const useStore = create<AppState>((set, get) => ({
     if (selection.items.length > 0) {
       const gone = new Set(selection.items);
       get().change((p) => ({ ...p, items: p.items.filter((it) => !gone.has(it.id)) }));
-    } else if (selection.opening) {
-      const id = selection.opening;
-      get().change((p) => ({ ...p, room: { ...p.room, openings: p.room.openings.filter((o) => o.id !== id) } }));
+    } else if (selection.opening || selection.partitions.length > 0) {
+      const opening = selection.opening;
+      const parts = new Set(selection.partitions);
+      get().change((p) => ({
+        ...p,
+        room: {
+          ...p.room,
+          partitions: p.room.partitions.filter((w) => !parts.has(w.id)),
+          // Openings go with their partition.
+          openings: p.room.openings.filter((o) => o.id !== opening && !(o.partition && parts.has(o.partition))),
+        },
+      }));
     }
-    set({ selection: { items: [], opening: null } });
+    // Corners are removed by the room mode, which keeps the outline valid and moves openings.
+    set({ selection: { ...EMPTY_SELECTION, corners: selection.corners } });
   },
 
   updateRoom(patch, opts) {
@@ -196,9 +247,12 @@ export const useStore = create<AppState>((set, get) => ({
 
 function keepExisting(sel: Selection, p: Project): Selection {
   const ids = new Set(p.items.map((i) => i.id));
+  const parts = new Set(p.room.partitions.map((w) => w.id));
   return {
     items: sel.items.filter((id) => ids.has(id)),
     opening: sel.opening && p.room.openings.some((o) => o.id === sel.opening) ? sel.opening : null,
+    corners: sel.corners.filter((i) => i < p.room.points.length),
+    partitions: sel.partitions.filter((id) => parts.has(id)),
   };
 }
 

@@ -6,7 +6,7 @@ import type { Item, Project } from "./types";
 import { t } from "../lib/i18n";
 
 /** The file format version this build writes (`serialize.ts` migrates older ones). */
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 
 /** Default room: 8 × 6 m, 3 m high, 240 mm walls, one door in the south wall. */
 export function newProject(today: Date = new Date()): Project {
@@ -19,6 +19,7 @@ export function newProject(today: Date = new Date()): Project {
       height: 3000,
       wallThickness: 240,
       openings: [{ id: newId(), kind: "door", wall: 2, offset: 6800, width: 1010, height: 2135, sill: 0 }],
+      partitions: [],
     },
     items: [],
   };

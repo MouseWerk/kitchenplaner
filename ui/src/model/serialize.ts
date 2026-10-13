@@ -3,9 +3,10 @@
 
 import { catalogEntry } from "./catalog";
 import { clampOpening, MAX_LENGTH } from "./geometry";
+import { clampPartitionOpening, MAX_PARTITION_THICKNESS, MIN_PARTITION_THICKNESS } from "./partitions";
 import { FORMAT_VERSION, newId } from "./project";
-import { isUsableOutline, removeCoincidentCorners } from "./roomEdit";
-import type { Connections, Item, Opening, OpeningKind, Project, ProjectInfo, Room, Vec2 } from "./types";
+import { COINCIDENT_DISTANCE, isUsableOutline, removeCoincidentCorners } from "./roomEdit";
+import type { Connections, Item, Opening, OpeningKind, Partition, Project, ProjectInfo, Room, Vec2 } from "./types";
 import { t, type TKey } from "../lib/i18n";
 
 const FORMAT_ID = "kitchenplaner";
@@ -14,7 +15,7 @@ const FORMAT_ID = "kitchenplaner";
 const DEFAULT_ROOM_HEIGHT = 3000;
 const DEFAULT_WALL_THICKNESS = 240;
 
-const OPENING_KINDS: readonly OpeningKind[] = ["door", "window", "passage"];
+const OPENING_KINDS: readonly OpeningKind[] = ["door", "window", "passage", "hatch"];
 const CONNECTION_NUMBERS = ["electricKw", "voltage", "gasKw", "exhaustM3h"] as const;
 const CONNECTION_FLAGS = ["coldWater", "hotWater", "drain", "floorDrain"] as const;
 /** Key order of connections in the file. */
@@ -43,7 +44,17 @@ export function serializeProject(p: Project): string {
       points: p.room.points.map((q) => ({ x: q.x, y: q.y })),
       height: p.room.height,
       wallThickness: p.room.wallThickness,
-      openings: p.room.openings.map((o) => ({ id: o.id, kind: o.kind, wall: o.wall, offset: o.offset, width: o.width, height: o.height, sill: o.sill })),
+      openings: p.room.openings.map((o) => ({
+        id: o.id,
+        kind: o.kind,
+        wall: o.wall,
+        ...(o.partition !== undefined ? { partition: o.partition } : {}),
+        offset: o.offset,
+        width: o.width,
+        height: o.height,
+        sill: o.sill,
+      })),
+      partitions: p.room.partitions.map((q) => ({ id: q.id, a: { x: q.a.x, y: q.a.y }, b: { x: q.b.x, y: q.b.y }, thickness: q.thickness, height: q.height })),
     },
     items: p.items.map((it) => {
       const connections: Record<string, number | boolean> = {};
@@ -75,6 +86,9 @@ export function serializeProject(p: Project): string {
  * Kitchenplaner file, `error.tooNew` for a newer format version and `error.invalid` for a
  * damaged one. Unknown fields are dropped, missing optional ones get defaults, duplicate ids
  * are replaced by new ones, and unknown catalog ids are kept (they draw as a table).
+ *
+ * Versions: 1 has no partitions (read as none); 2 adds `room.partitions`, openings in a
+ * partition (`partition`) and the opening kind "hatch".
  */
 export function parseProject(text: string): Project {
   let raw: unknown;
@@ -93,7 +107,9 @@ export function parseProject(text: string): Project {
   if (!Array.isArray(itemsRaw)) invalid("items", itemsRaw);
   const items = itemsRaw.map((v, i) => parseItem(v, `items[${i}]`));
 
-  // Ids must be unique across openings and items: selection and hit testing rely on them.
+  // Ids must be unique across partitions, openings and items: selection and hit testing rely on
+  // them. Partitions go first and keep their ids, so an opening referring to a duplicated id
+  // stays in the first partition of that id (the one `parseRoom` placed it in).
   const seen = new Set<string>();
   const unique = <T extends { id: string }>(x: T): T => {
     let id = x.id;
@@ -101,6 +117,7 @@ export function parseProject(text: string): Project {
     seen.add(id);
     return id === x.id ? x : { ...x, id };
   };
+  room.partitions = room.partitions.map(unique);
   room.openings = room.openings.map(unique);
 
   return {
@@ -161,36 +178,71 @@ function parseInfo(v: unknown): ProjectInfo {
 function parseRoom(v: unknown): Room {
   if (!isObject(v)) invalid("room", v);
   if (!Array.isArray(v.points) || v.points.length < 3) invalid("room.points", v.points);
-  const points = v.points.map((p, i): Vec2 => {
-    if (!isObject(p)) invalid(`room.points[${i}]`, p);
-    return { x: num(p.x, `room.points[${i}].x`, "any"), y: num(p.y, `room.points[${i}].y`, "any") };
-  });
+  const points = v.points.map((p, i): Vec2 => parsePoint(p, `room.points[${i}]`));
+  const partitionsRaw = v.partitions ?? [];
+  if (!Array.isArray(partitionsRaw)) invalid("room.partitions", partitionsRaw);
+  const partitions = partitionsRaw.map((p, i) => parsePartition(p, `room.partitions[${i}]`));
   const openingsRaw = v.openings ?? [];
   if (!Array.isArray(openingsRaw)) invalid("room.openings", openingsRaw);
-  const openings = openingsRaw.map((o, i) => parseOpening(o, `room.openings[${i}]`, points.length));
+  // Each opening remembers its place in the file, so the list keeps its order below.
+  type Ordered = Opening & { order: number };
+  const openings: Ordered[] = openingsRaw.map((o, i) => ({ ...parseOpening(o, `room.openings[${i}]`, points.length), order: i }));
   // A corner repeated on the spot leaves a zero-length wall that snapping and drawing cannot
-  // use; a room without a floor area cannot be edited at all.
+  // use; a room without a floor area cannot be edited at all. Openings in a partition do not
+  // depend on the outline and stay out of that repair.
   const room = removeCoincidentCorners({
     points,
     height: num(v.height, "room.height", "size", DEFAULT_ROOM_HEIGHT),
     wallThickness: num(v.wallThickness, "room.wallThickness", "size", DEFAULT_WALL_THICKNESS),
-    openings,
+    partitions,
+    openings: openings.filter((o) => o.partition === undefined),
   });
   if (!isUsableOutline(room.points)) invalid("room.points", v.points);
-  // Openings sit inside their wall, as the editor keeps them.
-  return { ...room, openings: room.openings.map((o) => clampOpening(room, o)) };
+  // Openings sit inside their wall, as the editor keeps them. One in a partition that does not
+  // exist (a hand-edited file) has no place to go and is dropped, like one on a zero-length
+  // wall; the first partition of an id is the one that keeps it (a partition without an id
+  // gets a new one, so nothing can refer to it).
+  const byId = new Map<string, Partition>();
+  for (const p of partitions) if (p.id !== "" && !byId.has(p.id)) byId.set(p.id, p);
+  const placed: Ordered[] = (room.openings as Ordered[]).map((o) => ({ ...clampOpening(room, o), order: o.order }));
+  for (const o of openings) {
+    const host = o.partition === undefined ? undefined : byId.get(o.partition);
+    if (host) placed.push({ ...clampPartitionOpening(host, o), order: o.order });
+  }
+  placed.sort((x, y) => x.order - y.order);
+  return { ...room, openings: placed.map(({ order: _, ...o }) => o) };
+}
+
+function parsePoint(p: unknown, path: string): Vec2 {
+  if (!isObject(p)) invalid(path, p);
+  return { x: num(p.x, `${path}.x`, "any"), y: num(p.y, `${path}.y`, "any") };
+}
+
+function parsePartition(v: unknown, path: string): Partition {
+  if (!isObject(v)) invalid(path, v);
+  const a = parsePoint(v.a, `${path}.a`);
+  const b = parsePoint(v.b, `${path}.b`);
+  // A partition needs a direction (both ends apart) and a length the app can draw.
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  if (!(length >= COINCIDENT_DISTANCE && length <= MAX_LENGTH)) invalid(`${path}.b`, v.b);
+  const thickness = num(v.thickness, `${path}.thickness`, "size");
+  if (thickness < MIN_PARTITION_THICKNESS || thickness > MAX_PARTITION_THICKNESS) invalid(`${path}.thickness`, thickness);
+  return { id: str(v.id, `${path}.id`, ""), a, b, thickness, height: num(v.height, `${path}.height`, "size") };
 }
 
 function parseOpening(v: unknown, path: string, wallCount: number): Opening {
   if (!isObject(v)) invalid(path, v);
   const kind = v.kind;
   if (typeof kind !== "string" || !(OPENING_KINDS as readonly string[]).includes(kind)) invalid(`${path}.kind`, kind);
-  const wall = num(v.wall, `${path}.wall`, "nonNegative");
-  if (!Number.isInteger(wall) || wall >= wallCount) invalid(`${path}.wall`, wall);
+  const partition = v.partition === undefined ? undefined : str(v.partition, `${path}.partition`);
+  // The wall index of an opening in a partition is not used; a missing one reads as 0.
+  const wall = num(v.wall, `${path}.wall`, "nonNegative", partition !== undefined ? 0 : undefined);
+  if (!Number.isInteger(wall) || (partition === undefined && wall >= wallCount)) invalid(`${path}.wall`, wall);
   return {
     id: str(v.id, `${path}.id`, ""),
     kind: kind as OpeningKind,
     wall,
+    ...(partition !== undefined ? { partition } : {}),
     offset: num(v.offset, `${path}.offset`, "distance"),
     width: num(v.width, `${path}.width`, "size"),
     height: num(v.height, `${path}.height`, "size"),

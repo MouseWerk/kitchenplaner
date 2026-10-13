@@ -2,7 +2,8 @@
 // symbols, position numbers and dimensions. Screen, SVG and DXF all draw this list.
 
 import { isOverhead, kindOf, sinkBowlCount, type ItemKind } from "./catalog";
-import { add, bounds, clampOpening, dot, footprint, scale, sub, toPlan, walls, type Wall } from "./geometry";
+import { add, bounds, clampOpening, dot, EPS, footprint, scale, sub, toPlan, walls, type Wall } from "./geometry";
+import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, partitionBand, partitionLength } from "./partitions";
 import { positions } from "./project";
 import type { Item, Opening, Project, Vec2 } from "./types";
 import { mm, TEXT, type Drawing, type Fill, type Pen, type Shape } from "../render/drawing";
@@ -49,8 +50,14 @@ const INSET = 50;
  * The floor plan of a project.
  *
  * Walls are filled bands between the inner outline and the outline offset by the wall thickness
- * (mitered corners), split at openings. Floor items come first, overhead items (hoods, wall
- * shelves) dashed on top. Every item shape carries its `itemId`.
+ * (mitered corners), split at openings. Partitions follow as bands of their own, cut flush where
+ * they meet a wall or another partition (`partitionBand`); one lower than the room (a Brüstung,
+ * below the plan's cut) gets the lighter fill. Floor items come first, overhead items (hoods,
+ * wall shelves) dashed on top. Every item shape carries its `itemId`.
+ *
+ * Doors are hinged at the start of their opening (the end nearer the wall's or partition's
+ * start) and drawn open at 90 degrees: into the room in an outer wall, to the left of a→b in a
+ * partition.
  */
 export function planDrawing(project: Project, opts: PlanOptions): Drawing {
   const ps = opts.paperScale ?? DEFAULT_PAPER_SCALE;
@@ -59,6 +66,7 @@ export function planDrawing(project: Project, opts: PlanOptions): Drawing {
   if (room.points.length < 3) return { shapes };
 
   drawWalls(project, shapes);
+  drawPartitions(project, shapes);
 
   const pos = positions(project);
   const floor = project.items.filter((it) => !isOverhead(kindOf(it.catalogId)));
@@ -118,7 +126,7 @@ function drawWalls(project: Project, shapes: Shape[]) {
     return { p, o: sub(p, scale(w.inward, t)) };
   };
 
-  const openings = room.openings.filter((o) => ws[o.wall]).map((o) => clampOpening(room, o));
+  const openings = room.openings.filter((o) => o.partition === undefined && ws[o.wall]).map((o) => clampOpening(room, o));
   // The gaps along the loop, in order; without openings one zero-width cut at the first corner
   // closes the ring.
   const gaps = openings.map((o) => ({ a: ring[o.wall] + o.offset - o.width / 2, b: ring[o.wall] + o.offset + o.width / 2 })).sort((x, y) => x.a - y.a);
@@ -149,7 +157,52 @@ function drawWalls(project: Project, shapes: Shape[]) {
     shapes.push({ t: "poly", pen: "wall", fill: "wall", pts: [...innerPts, ...outerPts.reverse()], closed: true });
   }
 
-  for (const o of openings) drawOpening(ws[o.wall], o, t, shapes);
+  for (const o of openings) {
+    const w = ws[o.wall];
+    drawOpening(frameOn(w.a, w.dir, w.inward, o, 0, -t), o, shapes);
+  }
+}
+
+/**
+ * A partition counts as reaching the ceiling within this tolerance (mm); anything lower is a
+ * half-height wall that stays below the plan's cut and is drawn lighter.
+ */
+const FULL_HEIGHT_TOLERANCE = 1;
+
+function drawPartitions(project: Project, shapes: Shape[]) {
+  const { room } = project;
+  for (const p of room.partitions) {
+    const length = partitionLength(p);
+    if (length < EPS) continue;
+    const band = partitionBand(room, p);
+    const fill: Fill = p.height >= room.height - FULL_HEIGHT_TOLERANCE ? "wall" : "item-dark";
+    const openings = room.openings.filter((o) => o.partition === p.id).map((o) => clampPartitionOpening(p, o));
+    const gaps = openings.map((o) => [o.offset - o.width / 2, o.offset + o.width / 2]).sort((x, y) => x[0] - y[0]);
+    let s = 0;
+    for (const [g0, g1] of [...gaps, [length, length]]) {
+      if (g0 - s > 0.5) shapes.push({ t: "poly", pen: "wall", fill, pts: bandPiece(band, s, g0), closed: true });
+      s = Math.max(s, g1);
+    }
+    for (const o of openings) drawOpening(frameOn(p.a, band.dir, band.left, o, p.thickness / 2, -p.thickness / 2), o, shapes);
+  }
+}
+
+/**
+ * Where an opening lies in its wall band: `start` and `end` on the reference line (the inner face
+ * of an outer wall, the centre line of a partition), the band reaching from `near` to `far`
+ * along `normal` (mm). `normal` points to the side a door swings to, `near` is that face.
+ */
+interface OpeningFrame {
+  start: Vec2;
+  end: Vec2;
+  dir: Vec2;
+  normal: Vec2;
+  near: number;
+  far: number;
+}
+
+function frameOn(a: Vec2, dir: Vec2, normal: Vec2, o: Opening, near: number, far: number): OpeningFrame {
+  return { start: add(a, scale(dir, o.offset - o.width / 2)), end: add(a, scale(dir, o.offset + o.width / 2)), dir, normal, near, far };
 }
 
 /** Angle of a direction in degrees, clockwise on screen from +x (the arc convention). */
@@ -157,32 +210,42 @@ function angleOf(v: Vec2): number {
   return (Math.atan2(v.y, v.x) * 180) / Math.PI;
 }
 
-function drawOpening(w: Wall, o: Opening, t: number, shapes: Shape[]) {
-  const start = add(w.a, scale(w.dir, o.offset - o.width / 2));
-  const end = add(w.a, scale(w.dir, o.offset + o.width / 2));
-  const out = scale(w.inward, -t);
+function drawOpening(f: OpeningFrame, o: Opening, shapes: Shape[]) {
+  const { start, end, dir, normal, near, far } = f;
+  const at = (p: Vec2, k: number) => add(p, scale(normal, k));
   const line = (a: Vec2, b: Vec2, pen: Pen): Shape => ({ t: "poly", pen, pts: [a, b], closed: false });
+  const reveals = () => shapes.push(line(at(start, near), at(start, far), "opening"), line(at(end, near), at(end, far), "opening"));
 
   if (o.kind === "door") {
-    // Hinge at the start side, the leaf drawn open at 90 degrees into the room.
-    const leafEnd = add(start, scale(w.inward, o.width));
-    shapes.push(line(start, leafEnd, "opening"));
-    const aDir = angleOf(w.dir);
-    const aIn = angleOf(w.inward);
+    // Hinge at the start side on the swing-side face, the leaf drawn open at 90 degrees.
+    const hinge = at(start, near);
+    shapes.push(line(hinge, at(start, near + o.width), "opening"));
+    const aDir = angleOf(dir);
+    const aIn = angleOf(normal);
     // The arc runs clockwise from a0 to a1; start from whichever of both directions comes first.
     const cwFromDir = (((aIn - aDir) % 360) + 360) % 360;
     const a0 = Math.abs(cwFromDir - 90) < 1 ? aDir : aIn;
-    shapes.push({ t: "arc", pen: "swing", c: start, r: o.width, a0, a1: a0 + 90 });
+    shapes.push({ t: "arc", pen: "swing", c: hinge, r: o.width, a0, a1: a0 + 90 });
   } else if (o.kind === "window") {
     // Two panes inside the wall band, at a third and two thirds of the thickness.
-    for (const f of [1 / 3, 2 / 3]) {
-      const off = scale(out, f);
-      shapes.push(line(add(start, off), add(end, off), "opening"));
+    for (const k of [1 / 3, 2 / 3]) {
+      const off = near + (far - near) * k;
+      shapes.push(line(at(start, off), at(end, off), "opening"));
     }
-    // The reveals: the wall faces across the gap.
-    shapes.push(line(start, add(start, out), "opening"), line(end, add(end, out), "opening"));
+    reveals();
+  } else if (o.kind === "hatch") {
+    // The sill seen from above: its edges on both faces, and the shelf on each side.
+    shapes.push(line(at(start, near), at(end, near), "opening"), line(at(start, far), at(end, far), "opening"));
+    reveals();
+    for (const [face, out] of [
+      [near, Math.sign(near - far)],
+      [far, Math.sign(far - near)],
+    ]) {
+      const k = face + out * HATCH_SHELF_DEPTH;
+      shapes.push({ t: "poly", pen: "detail", pts: [at(start, face), at(start, k), at(end, k), at(end, face)], closed: false });
+    }
   } else {
-    shapes.push(line(start, end, "hidden"), line(add(start, out), add(end, out), "hidden"));
+    shapes.push(line(at(start, near), at(end, near), "hidden"), line(at(start, far), at(end, far), "hidden"));
   }
 }
 

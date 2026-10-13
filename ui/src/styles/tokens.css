@@ -107,6 +107,10 @@
   --draw-hover-fill: rgb(255 255 255 / 0.07);
   --draw-handle: #e8e9ec;
   --draw-handle-fill: #17181b;
+  /* Editing aids: snapping guides and the selection frame, neutral in both themes. */
+  --draw-guide: #b4b7bf;
+  --draw-frame-fill: rgb(255 255 255 / 0.05);
+  --draw-frame-line: rgb(255 255 255 / 0.55);
 
   --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
   --scrim: rgb(0 0 0 / 0.45);
@@ -160,6 +164,9 @@
     --draw-hover-fill: rgb(0 0 0 / 0.05);
     --draw-handle: #26282c;
     --draw-handle-fill: #ffffff;
+    --draw-guide: #6d7078;
+    --draw-frame-fill: rgb(0 0 0 / 0.04);
+    --draw-frame-line: rgb(0 0 0 / 0.5);
 
     --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
     --scrim: rgb(0 0 0 / 0.3);
@@ -213,6 +220,9 @@
   --draw-hover-fill: rgb(0 0 0 / 0.05);
   --draw-handle: #26282c;
   --draw-handle-fill: #ffffff;
+  --draw-guide: #6d7078;
+  --draw-frame-fill: rgb(0 0 0 / 0.04);
+  --draw-frame-line: rgb(0 0 0 / 0.5);
 
   --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
   --scrim: rgb(0 0 0 / 0.3);

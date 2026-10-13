@@ -9,20 +9,36 @@ export interface Vec2 {
   y: number;
 }
 
-export type OpeningKind = "door" | "window" | "passage";
+/** A hatch is a pass-through window (Durchreiche, Speisenausgabe) with a sill at counter height. */
+export type OpeningKind = "door" | "window" | "passage" | "hatch";
 
-/** A door, window or passage in one wall of the room. */
+/** A door, window, passage or hatch in an outer wall of the room or in a partition. */
 export interface Opening {
   id: string;
   kind: OpeningKind;
-  /** Index of the wall: the segment from room point `wall` to the next point. */
+  /** Index of the outer wall: the segment from room point `wall` to the next point. Ignored when `partition` is set. */
   wall: number;
-  /** Distance from the wall's start point to the opening's centre. */
+  /** The partition the opening sits in (its id); absent for openings in the outer walls. */
+  partition?: string;
+  /** Distance from the wall's start point (a partition's `a`) to the opening's centre. */
   offset: number;
   width: number;
   height: number;
   /** Height of the lower edge above the floor (0 for doors and passages). */
   sill: number;
+}
+
+/**
+ * A wall inside the room (Trennwand): a straight wall whose centre line runs from `a` to `b`,
+ * `thickness` wide. Separates areas like the dish wash or a store from the kitchen.
+ */
+export interface Partition {
+  id: string;
+  a: Vec2;
+  b: Vec2;
+  thickness: number;
+  /** Height of the wall; lower than the room for a half-height wall (Brüstung). */
+  height: number;
 }
 
 export interface Room {
@@ -31,6 +47,7 @@ export interface Room {
   height: number;
   wallThickness: number;
   openings: Opening[];
+  partitions: Partition[];
 }
 
 /** Connection values of one appliance, as an installer needs them. */

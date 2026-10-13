@@ -6,6 +6,29 @@ import { invoke } from "@tauri-apps/api/core";
 
 export const isTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/**
+ * Test hooks of the end-to-end tests (e2e/README.md). A WebDriver cannot reach native dialogs, so
+ * a debug build started with KITCHENPLANER_E2E=1 sets `__KITCHENPLANER_E2E__` (src-tauri/src/lib.rs)
+ * and the dialogs below take their answer from the test: the next file path from
+ * `__E2E_NEXT_PATH__` (none: cancelled), the next yes/no from `__E2E_NEXT_ANSWER__` (none: no),
+ * with every question asked recorded in `__E2E_ASKED__`. Never set in normal use.
+ */
+interface E2eHooks {
+  __KITCHENPLANER_E2E__?: boolean;
+  __E2E_NEXT_PATH__?: string | null;
+  __E2E_NEXT_ANSWER__?: boolean | null;
+  __E2E_ASKED__?: string[];
+}
+
+const e2e = (): E2eHooks | null => (typeof window !== "undefined" && (window as E2eHooks).__KITCHENPLANER_E2E__ === true ? (window as E2eHooks) : null);
+
+/** The path the test chose for the next file dialog (taken once; null: cancelled). */
+function e2ePath(hooks: E2eHooks): string | null {
+  const path = hooks.__E2E_NEXT_PATH__ ?? null;
+  hooks.__E2E_NEXT_PATH__ = null;
+  return path;
+}
+
 export interface FileFilter {
   name: string;
   extensions: string[];
@@ -23,8 +46,9 @@ export interface OpenedFile {
 /** Asks for a project file and reads it; null when the user cancelled. */
 export async function openProjectFile(): Promise<OpenedFile | null> {
   if (isTauri()) {
+    const hooks = e2e();
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const path = await open({ multiple: false, directory: false, filters: [PROJECT_FILTER] });
+    const path = hooks ? e2ePath(hooks) : await open({ multiple: false, directory: false, filters: [PROJECT_FILTER] });
     if (typeof path !== "string") return null;
     return readProjectPath(path);
   }
@@ -77,6 +101,13 @@ export async function addRecentFile(path: string): Promise<void> {
 
 /** A yes/no question; the native dialog in the app. */
 export async function confirmDialog(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean> {
+  const hooks = e2e();
+  if (hooks) {
+    (hooks.__E2E_ASKED__ ??= []).push(message);
+    const answer = hooks.__E2E_NEXT_ANSWER__ === true;
+    hooks.__E2E_NEXT_ANSWER__ = null;
+    return answer;
+  }
   if (isTauri()) {
     const { ask } = await import("@tauri-apps/plugin-dialog");
     return ask(message, { title, kind: "warning", okLabel, cancelLabel });
@@ -85,8 +116,9 @@ export async function confirmDialog(message: string, title: string, okLabel: str
 }
 
 async function askSavePath(suggestedName: string, filter: FileFilter): Promise<string | null> {
+  const hooks = e2e();
   const { save } = await import("@tauri-apps/plugin-dialog");
-  const path = await save({ defaultPath: suggestedName, filters: [filter] });
+  const path = hooks ? e2ePath(hooks) : await save({ defaultPath: suggestedName, filters: [filter] });
   if (!path) return null;
   // Some platforms return the name without the extension the filter asked for.
   const ext = filter.extensions[0];

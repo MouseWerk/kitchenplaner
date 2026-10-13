@@ -133,3 +133,27 @@ describe("dxfText", () => {
     expect(dxfText("plain")).toBe("plain");
   });
 });
+
+describe("drawingToDxf partitions", () => {
+  it("writes a partition's band as filled wall on layer WAENDE", () => {
+    const p = testProject();
+    p.room.openings = [];
+    p.room.partitions = [{ id: "n", a: { x: 3000, y: 0 }, b: { x: 3000, y: 2000 }, thickness: 100, height: 3000 }];
+    const dxf = drawingToDxf(planDrawing(p, { showNames: false, showDims: false }), 50);
+    const solids = entities(dxf, "SOLID");
+    expect(solids.every((e) => val(e, 8) === "WAENDE")).toBe(true);
+    const corners = (e: [number, string][]) => [10, 20, 11, 21, 12, 22].map((c) => Number(val(e, c)));
+    // The partition's triangles lie in its band, x 2950 to 3050, y 0 to -2000 (y flipped).
+    const inBand = solids.filter((e) => {
+      const [ax, , bx, , cx] = corners(e);
+      return [ax, bx, cx].every((x) => x >= 2950 - 1e-6 && x <= 3050 + 1e-6);
+    });
+    const triArea = (e: [number, string][]) => {
+      const [ax, ay, bx, by, cx, cy] = corners(e);
+      return Math.abs((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) / 2;
+    };
+    expect(inBand.reduce((s, e) => s + triArea(e), 0)).toBeCloseTo(100 * 2000, 0);
+    // Its outline as a closed polyline on the same layer.
+    expect(entities(dxf, "POLYLINE").filter((e) => val(e, 8) === "WAENDE")).toHaveLength(2);
+  });
+});

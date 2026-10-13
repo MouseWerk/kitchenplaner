@@ -1,0 +1,113 @@
+/* The catalog rows with their 3D thumbnails and the larger preview next to the sidebar. The rest
+   of the sidebar (search, groups) is in app.css; this sheet loads after it. */
+
+.cat-list .cat-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 4px var(--sp-2) 4px 6px;
+}
+
+.cat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* Fixed size whether loading, drawn or a fallback, so nothing moves when the image arrives. */
+.cat-thumb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--r-xs);
+}
+
+.cat-thumb.is-loading {
+  background: var(--bg-hover);
+}
+
+.cat-thumb img {
+  display: block;
+  pointer-events: none;
+}
+
+.cat-thumb-plan {
+  display: block;
+  fill: var(--draw-item-fill);
+  stroke: var(--text-faint);
+  stroke-width: 1;
+}
+
+.cat-thumb-plan line {
+  stroke-dasharray: 2 2;
+}
+
+/* The hover and focus preview: positioned by the panel, never in the pointer's way. */
+.cat-preview {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: calc(240px + 2 * var(--sp-3));
+  max-height: calc(100vh - 2 * var(--sp-2));
+  overflow: hidden;
+  padding: var(--sp-3);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  animation: cat-preview-in var(--dur-fast) var(--ease-out);
+}
+
+@keyframes cat-preview-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.cat-preview .cat-thumb {
+  align-self: center;
+  border-radius: var(--r-sm);
+}
+
+.cat-preview-name {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  line-height: 1.3;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.cat-preview-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px var(--sp-3);
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+}
+
+.cat-preview-row {
+  display: contents;
+}
+
+.cat-preview-facts dt {
+  color: var(--text-muted);
+}
+
+.cat-preview-facts dd {
+  margin: 0;
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cat-preview-none {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}

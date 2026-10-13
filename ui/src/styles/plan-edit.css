@@ -1,0 +1,81 @@
+/* Arranging equipment in the floor plan (views/PlanView.tsx): selection corners, the selection
+   frame, snapping guides and marks, the operator line and the readout at the cursor. All neutral:
+   the drawing keeps its colors for the plan itself. */
+
+.view2d svg.is-operating {
+  cursor: move;
+}
+
+.view2d svg.is-framing {
+  cursor: crosshair;
+}
+
+.plan-edit {
+  pointer-events: none;
+}
+
+.plan-corner {
+  fill: var(--draw-handle-fill);
+  stroke: var(--draw-handle);
+  stroke-width: 1px;
+}
+
+.plan-frame {
+  fill: var(--draw-frame-fill);
+  stroke: var(--draw-frame-line);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+}
+
+/* Right to left picks everything it touches: a looser dash tells the two apart. */
+.plan-frame.is-crossing {
+  stroke-dasharray: 2 4;
+}
+
+.plan-guide {
+  fill: none;
+  stroke: var(--draw-guide);
+  stroke-width: 1px;
+}
+
+.plan-guide.is-centre {
+  stroke-dasharray: 6 3;
+}
+
+.plan-mark {
+  fill: none;
+  stroke: var(--draw-guide);
+  stroke-width: 1.5px;
+}
+
+.plan-axis {
+  fill: none;
+  stroke: var(--draw-guide);
+  stroke-width: 1px;
+  opacity: 0.5;
+}
+
+.plan-op-line {
+  fill: none;
+  stroke: var(--draw-guide);
+  stroke-width: 1px;
+  stroke-dasharray: 5 4;
+}
+
+.plan-readout {
+  position: absolute;
+  padding: 2px var(--sp-2);
+  border-radius: var(--r-xs);
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  z-index: var(--z-inline);
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { elevationDrawing, facingAxes } from "./elevation";
 import { bounds } from "./geometry";
 import { testItem, testProject } from "./testProject";
+import type { Opening, Partition } from "./types";
 import type { DimShape, PolyShape, Shape } from "../render/drawing";
 
 const polys = (s: Shape[]) => s.filter((x): x is PolyShape => x.t === "poly");
@@ -104,5 +105,72 @@ describe("elevationDrawing sinks", () => {
     expect(two[0][1]).toBeLessThanOrEqual(3800);
     expect(two[1][1]).toBeLessThanOrEqual(two[0][0]);
     expect(two[1][0]).toBeGreaterThanOrEqual(2200);
+  });
+});
+
+describe("elevationDrawing partitions", () => {
+  /** East-west across the room at y 3000, x 2000 to 6000: seen face-on from north and south. */
+  const EW: Partition = { id: "ew", a: { x: 2000, y: 3000 }, b: { x: 6000, y: 3000 }, thickness: 100, height: 3000 };
+  /** North-south from the north wall: seen end-on from north and south. */
+  const NS: Partition = { id: "ns", a: { x: 1000, y: 0 }, b: { x: 1000, y: 2000 }, thickness: 120, height: 2000 };
+
+  function project(items = [] as ReturnType<typeof testItem>[], openings: Opening[] = []) {
+    const p = testProject(items);
+    p.room.partitions = [EW, NS];
+    p.room.openings = [...p.room.openings, ...openings];
+    return p;
+  }
+  const surfaces = (s: Shape[]) => polys(s).filter((x) => x.pen === "wall" && x.closed && !x.itemId);
+
+  it("shows a partition seen face-on as a covering wall surface and one seen end-on as a section band", () => {
+    const shapes = elevationDrawing(project(), "north", { showDims: false }).shapes;
+    const own = surfaces(shapes).slice(2);
+    const face = own.find((s) => s.fill === "item")!;
+    expect(extent(face)).toEqual([2000, 6000, -3000, 0]);
+    const end = own.find((s) => s.fill === "wall")!;
+    expect(extent(end)).toEqual([940, 1060, -2000, 0]);
+  });
+
+  it("paints a partition between the items behind it and those in front of it", () => {
+    const p = project([testItem("behind", "table", 4000, 2600), testItem("front", "table", 4000, 3500)]);
+    const shapes = elevationDrawing(p, "north", { showDims: false }).shapes;
+    const face = shapes.indexOf(surfaces(shapes).find((s) => s.fill === "item")!);
+    expect(shapes.indexOf(body(shapes, "behind"))).toBeLessThan(face);
+    expect(shapes.indexOf(body(shapes, "front"))).toBeGreaterThan(face);
+  });
+
+  it("draws the openings of a partition seen face-on, from either side", () => {
+    const door: Opening = { id: "d", kind: "door", wall: 0, partition: "ew", offset: 1000, width: 900, height: 2100, sill: 0 };
+    const p = project([], [door]);
+    const fromNorth = polys(elevationDrawing(p, "north", { showDims: false }).shapes).filter((s) => s.pen === "opening");
+    // The door spans x 2550 to 3450; looking north the right axis is east.
+    expect(fromNorth.map(extent)).toContainEqual([2550, 3450, -2100, 0]);
+    const fromSouth = polys(elevationDrawing(p, "south", { showDims: false }).shapes).filter((s) => s.pen === "opening");
+    // The south view also shows the outer door; the partition door appears mirrored.
+    expect(fromSouth.map(extent)).toContainEqual([-3450, -2550, -2100, 0]);
+    // Seen end-on (from the east) no opening of the partition shows.
+    expect(polys(elevationDrawing(p, "east", { showDims: false }).shapes).some((s) => s.pen === "opening")).toBe(false);
+  });
+
+  it("draws a hatch with its counter shelf on the sill, in an outer wall and in a partition", () => {
+    const hatches: Opening[] = [
+      { id: "h", kind: "hatch", wall: 0, partition: "ew", offset: 3000, width: 1200, height: 800, sill: 900 },
+      { id: "h2", kind: "hatch", wall: 0, offset: 7000, width: 1000, height: 800, sill: 900 },
+    ];
+    const shapes = elevationDrawing(project([], hatches), "north", { showDims: false }).shapes;
+    const shelves = polys(shapes).filter((s) => s.fill === "item-dark" && !s.itemId).map(extent);
+    expect(shelves).toEqual([
+      [6500, 7500, -900, -870],
+      [4400, 5600, -900, -870],
+    ]);
+  });
+
+  it("cuts an opening off at the top of a half-height partition", () => {
+    const low = { ...EW, height: 1200 };
+    const p = testProject();
+    p.room.partitions = [low];
+    p.room.openings.push({ id: "h", kind: "hatch", wall: 0, partition: "ew", offset: 2000, width: 1200, height: 800, sill: 900 });
+    const frame = polys(elevationDrawing(p, "north", { showDims: false }).shapes).find((s) => s.pen === "opening")!;
+    expect(extent(frame)).toEqual([3400, 4600, -1200, -900]);
   });
 });

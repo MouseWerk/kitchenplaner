@@ -1,36 +1,89 @@
-// The floor plan: the drawing of `model/plan.ts`, plus selecting, dragging (with wall and edge
-// snapping), dropping catalog entries, editing the room's corners and moving openings.
+// The floor plan: the drawing of `model/plan.ts` and, in the arrange mode, selecting and moving
+// equipment as in Blender: click and frame selection, dragging with snapping guides, the modal
+// G (grab) and R (rotate) operators, Shift+D, and dropping catalog entries. In the room mode the
+// room editor (RoomEditLayer.tsx) lies above the drawing and takes all input; the plan only draws.
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
 import { catalogEntry, isOverhead, kindOf } from "../model/catalog";
 import { checkProject } from "../model/checks";
-import { add, area, bounds, dot, footprint, openingSpan, pointInPolygon, round, scale, snapItem, snapValue, sub, walls, type Box } from "../model/geometry";
+import { add, area, bounds, footprint, itemsInFrame, partitionOutline, pointInPolygon, round, scale, snapItem, snapValue, sub, walls, type Box } from "../model/geometry";
+import { snapGroupGuides, snapItemGuides, type Guide } from "../model/snapGuides";
 import { planDrawing } from "../model/plan";
-import { insertCorner, moveCorner } from "../model/roomEdit";
+import { RoomEditLayer } from "./RoomEditLayer";
 import { itemFromCatalog } from "../model/project";
 import type { Item, Project, Vec2 } from "../model/types";
 import { drawingBounds, mm, type Drawing, type Shape } from "../render/drawing";
 import { useStore } from "../store/store";
-import { toWorld, useViewport } from "../lib/viewport";
-import { useT } from "../lib/i18n";
+import { toScreen, toWorld, useViewport, type Viewport } from "../lib/viewport";
+import { num, useT } from "../lib/i18n";
+import { grabDelta, operatorKey, operatorLabel, rotateAngle, startGrab, startRotate, type ModalOp } from "../lib/modal";
+import { setModeKeyHandler } from "../lib/shortcuts";
+import {
+  applyTransform,
+  beginDuplicate,
+  beginTransform,
+  cancelTransform,
+  combineSelection,
+  confirmTransform,
+  rotateItemAround,
+  selectionCentre,
+  type SelectMode,
+  type TransformSession,
+} from "../lib/commands";
 
 /** MIME type of a catalog entry dragged from the sidebar. */
 export const CATALOG_DRAG_TYPE = "application/x-kitchenplaner-catalog";
-/** Pointer movement (px) before a press on an item becomes a drag. */
+/** Pointer movement (px) before a press becomes a drag or a selection frame. */
 const DRAG_THRESHOLD = 3;
-/** Radius of the room corner handles (px). */
-const HANDLE_R = 5;
 /** Distance dimensions of the selected item reach this far at most (mm). */
 const MAX_DISTANCE_DIM = 20_000;
+/** Snapping reaches this far on screen (px), at most `SNAP_MAX_MM`. */
+const SNAP_PX = 8;
+const SNAP_MAX_MM = 150;
+/** Guide lines reach this far beyond what they align (px). */
+const GUIDE_OVERSHOOT = 12;
+/** Half the size of the snap marks and the selection corner handles (px). */
+const MARK_R = 3.5;
+const CORNER_R = 2.5;
+/** The readout sits this far right and below the cursor (px). */
+const READOUT_OFFSET = 16;
 
 type Drag =
   | { kind: "pan"; start: Vec2; ox: number; oy: number }
-  | { kind: "items"; start: Vec2; origin: Map<string, Vec2>; moved: boolean; screen: Vec2 }
-  | { kind: "corner"; index: number }
-  | { kind: "opening"; id: string; wall: number };
+  | {
+      kind: "items";
+      start: Vec2;
+      screen: Vec2;
+      /** Set when the press became a drag. */
+      session: TransformSession | null;
+      /** A Shift/Ctrl click on a selected item takes it out of the selection, unless it becomes a drag. */
+      toggleOff: string | null;
+    }
+  | { kind: "frame"; start: Vec2; screen: Vec2; end: Vec2; active: boolean; mode: SelectMode };
 
-export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor?: (p: Vec2 | null) => void }) {
+/** A running G or R operator. */
+interface Running {
+  op: ModalOp;
+  session: TransformSession;
+  /** Centre of the selection at the start: where the grab line starts. */
+  anchor: Vec2;
+}
+
+/** What the plan draws over the drawing while editing (all in plan millimetres). */
+interface Live {
+  guides: Guide[];
+  marks: Vec2[];
+  frame: { a: Vec2; b: Vec2; crossing: boolean } | null;
+  readout: { at: Vec2; text: string } | null;
+  /** The line of a running operator: from the anchor to where it is now, and its locked axis. */
+  opLine: { a: Vec2; b: Vec2; axis: "x" | "y" | null } | null;
+}
+
+const IDLE: Live = { guides: [], marks: [], frame: null, readout: null, opLine: null };
+
+export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null) => void }) {
+  const roomEdit = useStore((s) => s.mode === "room");
   const t = useT();
   const project = useStore((s) => s.project);
   const selection = useStore((s) => s.selection);
@@ -40,12 +93,19 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
   const box = useMemo(() => drawingBounds(drawing, SCREEN_PAPER_SCALE), [drawing]);
   const { ref, vp, setVp, size } = useViewport(box, props.fitSignal);
   const drag = useRef<Drag | null>(null);
+  const running = useRef<Running | null>(null);
+  /** The cursor on the plan (mm); null while it is outside. */
+  const cursor = useRef<Vec2 | null>(null);
+  const lastCursor = useRef<Vec2>({ x: 0, y: 0 });
+  const alt = useRef(false);
+  const space = useRef(false);
+  /** B was pressed: the next press draws a selection frame, also on an item. */
+  const boxPending = useRef(false);
+  const vpRef = useRef(vp);
+  vpRef.current = vp;
   const [hover, setHover] = useState<string | null>(null);
-  // Switching the layout (keys 1-4) mid-drag unmounts the plan without a pointer-up: end the gesture
-  // so undo is not left blocked.
-  useEffect(() => () => {
-    if (drag.current) useStore.getState().endGesture();
-  }, []);
+  const [live, setLive] = useState<Live>(IDLE);
+  const [panning, setPanning] = useState(false);
 
   const warned = useMemo(() => new Set(issues.flatMap((i) => i.itemIds)), [issues]);
   const selected = useMemo(() => project.items.filter((i) => selection.items.includes(i.id)), [project.items, selection.items]);
@@ -55,137 +115,304 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
     for (const it of project.items) {
       if (warned.has(it.id)) shapes.push({ t: "poly", pen: "detail", pts: footprint(it), closed: true, fill: "warning" });
     }
-    if (selected.length === 1 && !isOverhead(kindOf(selected[0].catalogId))) shapes.push(...distanceDims(project, selected[0]));
+    if (!roomEdit && selected.length === 1 && !isOverhead(kindOf(selected[0].catalogId))) shapes.push(...distanceDims(project, selected[0]));
     return { shapes };
-  }, [project, selected, warned]);
+  }, [project, selected, warned, roomEdit]);
 
   const point = (e: { clientX: number; clientY: number }): Vec2 => {
     const r = ref.current!.getBoundingClientRect();
-    return toWorld(vp, { x: e.clientX - r.left, y: e.clientY - r.top });
+    return toWorld(vpRef.current, { x: e.clientX - r.left, y: e.clientY - r.top });
   };
 
-  const onPointerDown = (e: RPointerEvent<SVGSVGElement>) => {
-    const target = e.target as Element;
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  const reach = () => Math.min(SNAP_PX / vpRef.current.k, SNAP_MAX_MM);
+
+  /** Moves the items of a session by a raw offset, snapped unless `free`; returns the applied offset and the guides. */
+  const moveSession = (session: TransformSession, raw: Vec2, free: boolean, axis: "x" | "y" | null) => {
     const st = useStore.getState();
+    const origin = [...session.origin.values()];
+    const others = st.project.items.filter((i) => !session.origin.has(i.id));
+    const grid = free ? 0 : st.prefs.grid;
+    let delta = raw;
+    let guides: Guide[] = [];
+    let marks: Vec2[] = [];
+    let rotation: number | null = null;
+    if (!free && origin.length === 1) {
+      const o = origin[0];
+      const s = snapItemGuides({ ...o, x: o.x + raw.x, y: o.y + raw.y }, st.project.room, others, grid, reach());
+      delta = { x: s.x - o.x, y: s.y - o.y };
+      rotation = s.rotation;
+      guides = s.guides;
+      marks = s.marks;
+    } else if (!free) {
+      const d = { x: snapValue(raw.x, grid), y: snapValue(raw.y, grid) };
+      const s = snapGroupGuides(
+        origin.map((o) => ({ ...o, x: o.x + d.x, y: o.y + d.y })),
+        st.project.room,
+        others,
+        reach(),
+      );
+      delta = { x: d.x + s.dx, y: d.y + s.dy };
+      guides = s.guides;
+      marks = s.marks;
+    }
+    // A locked axis keeps the other coordinate, and only the guides along the free axis.
+    if (axis === "x") {
+      delta = { x: delta.x, y: 0 };
+      guides = guides.filter((g) => Math.abs(g.a.x - g.b.x) < 0.5);
+    } else if (axis === "y") {
+      delta = { x: 0, y: delta.y };
+      guides = guides.filter((g) => Math.abs(g.a.y - g.b.y) < 0.5);
+    }
+    if (axis) marks = marks.filter((m) => guides.some((g) => Math.abs((axis === "x" ? g.a.x : g.a.y) - (axis === "x" ? m.x : m.y)) < 0.5));
+    delta = { x: round(delta.x), y: round(delta.y) };
+    applyTransform(session, (o) => ({ x: round(o.x + delta.x), y: round(o.y + delta.y), ...(rotation !== null && axis === null ? { rotation } : {}) }));
+    return { delta, guides, marks };
+  };
+
+  /** Applies a running operator for the cursor and shows its line, readout and status. */
+  const updateOperator = (run: Running, at: Vec2) => {
+    const st = useStore.getState();
+    const { op, session } = run;
+    const screenAt = toScreen(vpRef.current, at);
+    if (op.kind === "grab") {
+      const typed = op.typed !== "" && op.typed !== "-";
+      const axis = op.axis === "free" ? null : op.axis;
+      // A typed value is exact; otherwise the move snaps like a mouse drag (Alt: free).
+      const { delta, guides, marks } = moveSession(session, grabDelta(op, at, 0), alt.current || typed, axis);
+      const text = axis === "x" ? `X ${num(delta.x)} mm` : axis === "y" ? `Y ${num(delta.y)} mm` : `${num(Math.hypot(delta.x, delta.y))} mm`;
+      setLive({ guides, marks, frame: null, readout: { at: screenAt, text: op.typed ? `${text}  [${op.typed}]` : text }, opLine: { a: run.anchor, b: add(run.anchor, delta), axis } });
+      // The label from the applied offset, so it shows what snapping made of the mouse move.
+      st.setStatus(typed ? operatorLabel(op, at, st.prefs.grid, alt.current) : operatorLabel(op, add(op.start, delta), 0, alt.current));
+    } else {
+      const angle = rotateAngle(op, at, alt.current);
+      applyTransform(session, (o) => rotateItemAround(o, op.pivot, angle));
+      setLive({ ...IDLE, readout: { at: screenAt, text: `${num(angle, Number.isInteger(angle) ? 0 : 1)}°` }, opLine: { a: op.pivot, b: at, axis: null } });
+      st.setStatus(operatorLabel(op, at, 0, alt.current));
+    }
+  };
+
+  const endOperator = (confirm: boolean) => {
+    const run = running.current;
+    if (!run) return;
+    running.current = null;
+    if (confirm) confirmTransform(run.session);
+    else cancelTransform(run.session);
+    setLive(IDLE);
+    useStore.getState().setStatus(null);
+  };
+
+  const startOperator = (kind: "grab" | "rotate" | "duplicate") => {
+    const at = cursor.current;
+    if (!at) return false;
+    const session = kind === "duplicate" ? beginDuplicate() : beginTransform();
+    if (!session) return false;
+    const anchor = selectionCentre([...session.origin.values()]);
+    const op = kind === "rotate" ? startRotate(anchor, at) : startGrab(at);
+    running.current = { op, session, anchor };
+    setHover(null);
+    updateOperator(running.current, at);
+    return true;
+  };
+
+  const endDrag = (confirm: boolean) => {
+    const d = drag.current;
+    drag.current = null;
+    setPanning(false);
+    if (d?.kind === "items" && d.session) {
+      if (confirm) confirmTransform(d.session);
+      else cancelTransform(d.session);
+    }
+    if (d && d.kind !== "pan") {
+      setLive(IDLE);
+      useStore.getState().setStatus(null);
+    }
+  };
+
+  // The keys of the arrange mode, seen before the generic shortcuts (lib/shortcuts.ts).
+  const keyHandler = useRef<(e: KeyboardEvent) => boolean>(() => false);
+  keyHandler.current = (e) => {
+    const run = running.current;
+    if (run) {
+      const r = operatorKey(run.op, e.key);
+      if (r === "confirm" || r === "cancel") endOperator(r === "confirm");
+      else if (r) {
+        run.op = r.op;
+        updateOperator(run, lastCursor.current);
+      }
+      // Every other key waits until the operator ends.
+      return true;
+    }
+    if (drag.current) {
+      if (e.key === "Escape") endDrag(false);
+      return true;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod || e.altKey || e.repeat) return false;
+    const key = e.key.toLowerCase();
+    if (boxPending.current && e.key === "Escape") {
+      boxPending.current = false;
+      useStore.getState().setStatus(null);
+      return true;
+    }
+    // The operators work where the cursor is: over the plan.
+    if (!cursor.current) return false;
+    if (key === "g" && !e.shiftKey) return startOperator("grab");
+    if (key === "r" && !e.shiftKey) return startOperator("rotate");
+    if (key === "d" && e.shiftKey) return startOperator("duplicate");
+    if (key === "b" && !e.shiftKey) {
+      boxPending.current = true;
+      useStore.getState().setStatus(t("plan.boxHint"));
+      return true;
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    if (roomEdit) return;
+    return setModeKeyHandler((e) => keyHandler.current(e));
+  }, [roomEdit]);
+
+  // Space held over the plan pans with the left button; Alt is tracked for the operators.
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      alt.current = e.altKey;
+      const target = e.target as HTMLElement | null;
+      const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName));
+      if (e.key === " " && cursor.current && !running.current && !typing) {
+        space.current = true;
+        e.preventDefault();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      alt.current = e.altKey;
+      if (e.key === " ") space.current = false;
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, []);
+
+  // Leaving the arrange mode (or the plan) in the middle of an operator or drag keeps its result
+  // and ends the gesture, so undo is not left blocked.
+  const finishAll = useRef(() => {});
+  finishAll.current = () => {
+    if (running.current) endOperator(true);
+    if (drag.current) endDrag(true);
+    boxPending.current = false;
+    setHover(null);
+  };
+  useEffect(() => {
+    if (roomEdit) finishAll.current();
+  }, [roomEdit]);
+  useEffect(() => () => finishAll.current(), []);
+
+  const onPointerDown = (e: RPointerEvent<SVGSVGElement>) => {
+    if (roomEdit) return;
+    const st = useStore.getState();
+    alt.current = e.altKey;
+    if (running.current) {
+      e.preventDefault();
+      if (e.button === 0) endOperator(true);
+      else if (e.button === 2) endOperator(false);
+      return;
+    }
+    if (drag.current?.kind === "items" && e.button === 2) {
+      endDrag(false);
+      return;
+    }
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
     // Middle or right button, or Space held: pan.
-    if (e.button === 1 || e.button === 2) {
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && space.current)) {
       drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, ox: vp.ox, oy: vp.oy };
+      setPanning(true);
       return;
     }
     if (e.button !== 0) return;
-    const corner = target.getAttribute("data-corner");
-    if (corner !== null) {
-      st.beginGesture();
-      drag.current = { kind: "corner", index: Number(corner) };
-      return;
-    }
-    const openingId = target.getAttribute("data-opening");
-    if (openingId) {
-      const o = st.project.room.openings.find((x) => x.id === openingId);
-      st.select({ opening: openingId });
-      if (o) {
-        st.beginGesture();
-        drag.current = { kind: "opening", id: openingId, wall: o.wall };
-      }
-      return;
-    }
     const p = point(e);
-    const hit = hitItem(st.project.items, p, st.selection.items);
+    cursor.current = p;
+    lastCursor.current = p;
+    const screen = { x: e.clientX, y: e.clientY };
+    const toggle = e.ctrlKey || e.metaKey;
+    const hit = boxPending.current ? null : hitItem(st.project.items, p, st.selection.items);
     if (hit) {
-      let ids = st.selection.items;
-      if (e.shiftKey || e.ctrlKey || e.metaKey) {
-        ids = ids.includes(hit.id) ? ids.filter((x) => x !== hit.id) : [...ids, hit.id];
-      } else if (!ids.includes(hit.id)) ids = [hit.id];
-      st.select({ items: ids, opening: null });
-      const origin = new Map(st.project.items.filter((i) => ids.includes(i.id)).map((i) => [i.id, { x: i.x, y: i.y }]));
-      drag.current = { kind: "items", start: p, origin, moved: false, screen: { x: e.clientX, y: e.clientY } };
+      const ids = st.selection.items;
+      let toggleOff: string | null = null;
+      if (e.shiftKey || toggle) {
+        // Shift or Ctrl click toggles; a selected item leaves the selection on release, so it can still be dragged.
+        if (ids.includes(hit.id)) toggleOff = hit.id;
+        else st.select({ items: [...ids, hit.id], opening: null });
+      } else if (!ids.includes(hit.id)) st.select({ items: [hit.id], opening: null });
+      drag.current = { kind: "items", start: p, screen, session: null, toggleOff };
       return;
     }
-    if (!e.shiftKey) st.select({ items: [], opening: null });
-    drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, ox: vp.ox, oy: vp.oy };
+    boxPending.current = false;
+    if (st.status) st.setStatus(null);
+    const mode: SelectMode = toggle ? "toggle" : e.shiftKey ? "add" : "replace";
+    drag.current = { kind: "frame", start: p, screen, end: p, active: false, mode };
   };
 
   const onPointerMove = (e: RPointerEvent<SVGSVGElement>) => {
+    if (roomEdit) return;
     const p = point(e);
+    cursor.current = p;
+    lastCursor.current = p;
+    alt.current = e.altKey;
     props.onCursor?.(p);
+    const run = running.current;
+    if (run) {
+      updateOperator(run, p);
+      return;
+    }
     const d = drag.current;
     const st = useStore.getState();
     if (!d) {
       setHover(hitItem(st.project.items, p, st.selection.items)?.id ?? null);
       return;
     }
+    const far = Math.hypot(e.clientX - (d.kind === "pan" ? d.start.x : d.screen.x), e.clientY - (d.kind === "pan" ? d.start.y : d.screen.y)) >= DRAG_THRESHOLD;
     switch (d.kind) {
       case "pan":
         setVp({ ...vp, ox: d.ox + e.clientX - d.start.x, oy: d.oy + e.clientY - d.start.y });
         break;
       case "items": {
-        if (!d.moved && Math.hypot(e.clientX - d.screen.x, e.clientY - d.screen.y) < DRAG_THRESHOLD) return;
-        if (!d.moved) {
-          st.beginGesture();
-          d.moved = true;
+        if (!d.session) {
+          if (!far) return;
+          d.session = beginTransform();
+          d.toggleOff = null;
+          if (!d.session) return;
+          setHover(null);
         }
-        const grid = e.altKey ? 0 : st.prefs.grid;
-        const delta = sub(p, d.start);
-        const ids = [...d.origin.keys()];
-        if (ids.length === 1) {
-          const it = st.project.items.find((i) => i.id === ids[0]);
-          const o = d.origin.get(ids[0])!;
-          if (!it) return;
-          const moving = { ...it, x: o.x + delta.x, y: o.y + delta.y };
-          const others = st.project.items.filter((i) => i.id !== it.id && isOverhead(kindOf(i.catalogId)) === isOverhead(kindOf(it.catalogId)));
-          const snapped = e.altKey ? { x: round(moving.x), y: round(moving.y), rotation: it.rotation } : snapItem(moving, st.project.room, others, grid, false);
-          st.updateItems(ids, () => ({ x: snapped.x, y: snapped.y, rotation: snapped.rotation }), { gesture: true });
-        } else {
-          const dx = snapValue(delta.x, grid);
-          const dy = snapValue(delta.y, grid);
-          st.updateItems(ids, (it) => ({ x: round(d.origin.get(it.id)!.x + dx), y: round(d.origin.get(it.id)!.y + dy) }), { gesture: true });
-        }
+        const { delta, guides, marks } = moveSession(d.session, sub(p, d.start), e.altKey, null);
+        setLive({ ...IDLE, guides, marks, readout: { at: toScreen(vp, p), text: `${num(Math.hypot(delta.x, delta.y))} mm` } });
         break;
       }
-      case "corner": {
-        const grid = e.altKey ? 0 : st.prefs.grid;
-        const q = { x: snapValue(p.x, grid), y: snapValue(p.y, grid) };
-        st.updateRoom((r) => moveCorner(r, d.index, q), { gesture: true });
-        break;
-      }
-      case "opening": {
-        const w = walls(st.project.room)[d.wall];
-        const o = st.project.room.openings.find((x) => x.id === d.id);
-        if (!w || !o) return;
-        const grid = e.altKey ? 0 : st.prefs.grid;
-        const along = snapValue(dot(sub(p, w.a), w.dir), grid);
-        const offset = Math.min(Math.max(along, o.width / 2), w.length - o.width / 2);
-        st.updateOpening(d.id, { offset: round(offset) }, { gesture: true });
+      case "frame": {
+        if (!d.active && !far) return;
+        d.active = true;
+        d.end = p;
+        setHover(null);
+        setLive({ ...IDLE, frame: { a: d.start, b: p, crossing: p.x < d.start.x } });
         break;
       }
     }
   };
 
   const onPointerUp = () => {
-    drag.current = null;
-    useStore.getState().endGesture();
-  };
-
-  const onDoubleClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!props.roomEdit) return;
-    // A double click on a wall adds a corner there.
-    const p = point(e);
+    if (roomEdit) return;
+    const d = drag.current;
     const st = useStore.getState();
-    const ws = walls(st.project.room);
-    let best: { index: number; at: Vec2; d: number } | null = null;
-    for (const w of ws) {
-      const along = Math.min(Math.max(dot(sub(p, w.a), w.dir), 0), w.length);
-      const at = add(w.a, scale(w.dir, along));
-      const d = Math.hypot(at.x - p.x, at.y - p.y);
-      if (d < st.project.room.wallThickness * 2 && (!best || d < best.d)) best = { index: w.index, at, d };
+    if (d?.kind === "items" && !d.session && d.toggleOff) {
+      st.select({ items: st.selection.items.filter((id) => id !== d.toggleOff) });
+    } else if (d?.kind === "frame") {
+      if (d.active) {
+        const hits = itemsInFrame(st.project.items, d.start, d.end);
+        st.select({ items: combineSelection(st.selection.items, hits, d.mode), opening: null });
+      } else if (d.mode === "replace") st.select({ items: [], opening: null });
     }
-    if (!best) return;
-    const at = { x: round(snapValue(best.at.x, st.prefs.grid)), y: round(snapValue(best.at.y, st.prefs.grid)) };
-    const split = insertCorner(st.project.room, best.index, at, st.prefs.grid);
-    // Too close to an existing corner: nothing to add (and no empty undo step).
-    if (!split) return;
-    st.change((pr) => ({ ...pr, room: split }));
+    endDrag(true);
   };
 
   const onDragOver = (e: DragEvent) => {
@@ -202,6 +429,8 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
     e.preventDefault();
     const p = point(e);
     const st = useStore.getState();
+    // Equipment belongs to the arrange mode: dropping some there switches to it.
+    st.setMode("arrange");
     const draft = itemFromCatalog(entry, p.x, p.y);
     const others = st.project.items.filter((i) => isOverhead(kindOf(i.catalogId)) === isOverhead(entry.kind));
     const s = snapItem(draft, st.project.room, others, st.prefs.grid, true);
@@ -209,13 +438,13 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
   };
 
   const transform = `translate(${vp.ox} ${vp.oy}) scale(${vp.k})`;
-  const room = project.room;
-  const showRoomHandles = props.roomEdit;
+  const operating = running.current !== null;
+  const svgClass = roomEdit ? undefined : operating ? "is-operating" : live.frame || boxPending.current ? "is-framing" : hover ? "is-hovering-item" : undefined;
 
   return (
     <div
       ref={ref}
-      className="view2d"
+      className={panning ? "view2d is-panning" : "view2d"}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onContextMenu={(e) => e.preventDefault()}
@@ -227,41 +456,78 @@ export function PlanView(props: { roomEdit: boolean; fitSignal: number; onCursor
         <svg
           width={size.w}
           height={size.h}
-          className={hover ? "is-hovering-item" : undefined}
+          className={svgClass}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          onDoubleClick={onDoubleClick}
+          onPointerLeave={() => {
+            cursor.current = null;
+            setHover(null);
+          }}
         >
           <GridPattern vp={vp} />
           <rect width={size.w} height={size.h} fill="url(#plan-grid)" />
           <g transform={transform}>
             <DrawingShapes drawing={drawing} />
             <DrawingShapes drawing={overlay} />
-            {selected.map((it) => (
-              <path key={it.id} d={polyPath(footprint(it))} className="draw-selected" />
-            ))}
-            {hover && !selection.items.includes(hover) && <HoverOutline item={project.items.find((i) => i.id === hover)} />}
-            {room.openings.map((o) => {
-              const span = openingSpan(room, o);
-              const w = walls(room)[o.wall];
-              if (!span || !w) return null;
-              const out = scale(w.inward, -room.wallThickness);
-              const pts = [span[0], span[1], add(span[1], out), add(span[0], out)];
-              const sel = selection.opening === o.id;
-              return <path key={o.id} d={polyPath(pts)} data-opening={o.id} className={sel ? "draw-opening-hit is-selected" : "draw-opening-hit"} />;
-            })}
+            {!roomEdit && selected.map((it) => <path key={it.id} d={polyPath(footprint(it))} className="draw-selected" />)}
+            {!roomEdit && hover && !selection.items.includes(hover) && <HoverOutline item={project.items.find((i) => i.id === hover)} />}
           </g>
-          {showRoomHandles &&
-            room.points.map((p, i) => {
-              const sp = { x: vp.ox + p.x * vp.k, y: vp.oy + p.y * vp.k };
-              return <circle key={i} cx={sp.x} cy={sp.y} r={HANDLE_R} data-corner={i} className="draw-handle" />;
-            })}
+          {!roomEdit && <EditOverlay vp={vp} width={size.w} height={size.h} selected={selected} live={live} />}
         </svg>
       )}
+      {!roomEdit && live.readout && (
+        <div className="plan-readout" style={{ left: live.readout.at.x + READOUT_OFFSET, top: live.readout.at.y + READOUT_OFFSET }} aria-hidden>
+          {live.readout.text}
+        </div>
+      )}
+      {/* Room mode: the room editor lies above the plan and takes all pointer input (RoomEditLayer.tsx). */}
+      {roomEdit && size.w > 0 && <RoomEditLayer vp={vp} width={size.w} height={size.h} setVp={setVp} onCursor={props.onCursor} />}
     </div>
   );
+}
+
+/** Selection corners, snapping guides, the selection frame and the operator line, in screen pixels. */
+function EditOverlay({ vp, width, height, selected, live }: { vp: Viewport; width: number; height: number; selected: readonly Item[]; live: Live }) {
+  const s = (p: Vec2) => toScreen(vp, p);
+  const frame = live.frame && bounds([s(live.frame.a), s(live.frame.b)]);
+  const line = live.opLine;
+  return (
+    <g className="plan-edit" aria-hidden>
+      {selected.flatMap((it) =>
+        footprint(it).map((c, i) => {
+          const p = s(c);
+          return <rect key={`${it.id}-${i}`} x={p.x - CORNER_R} y={p.y - CORNER_R} width={CORNER_R * 2} height={CORNER_R * 2} className="plan-corner" />;
+        }),
+      )}
+      {line?.axis && (
+        <path
+          d={line.axis === "x" ? `M0 ${s(line.a).y}H${width}` : `M${s(line.a).x} 0V${height}`}
+          className="plan-axis"
+        />
+      )}
+      {line && <path d={`M${s(line.a).x} ${s(line.a).y}L${s(line.b).x} ${s(line.b).y}`} className="plan-op-line" />}
+      {live.guides.map((g, i) => {
+        const a = s(g.a);
+        const b = s(g.b);
+        const dir = norm2(sub(b, a));
+        const p = sub(a, scale(dir, GUIDE_OVERSHOOT));
+        const q = add(b, scale(dir, GUIDE_OVERSHOOT));
+        return <path key={i} d={`M${p.x} ${p.y}L${q.x} ${q.y}`} className={`plan-guide is-${g.kind}`} />;
+      })}
+      {live.marks.map((m, i) => {
+        const p = s(m);
+        return <path key={i} d={`M${p.x - MARK_R} ${p.y - MARK_R}L${p.x + MARK_R} ${p.y + MARK_R}M${p.x - MARK_R} ${p.y + MARK_R}L${p.x + MARK_R} ${p.y - MARK_R}`} className="plan-mark" />;
+      })}
+      {frame && <rect x={frame.minX} y={frame.minY} width={frame.maxX - frame.minX} height={frame.maxY - frame.minY} className={live.frame!.crossing ? "plan-frame is-crossing" : "plan-frame"} />}
+    </g>
+  );
+}
+
+function norm2(v: Vec2): Vec2 {
+  const l = Math.hypot(v.x, v.y);
+  return l < 1e-9 ? { x: 0, y: 0 } : { x: v.x / l, y: v.y / l };
 }
 
 function HoverOutline({ item }: { item: Item | undefined }) {
@@ -312,23 +578,26 @@ export function hitItem(items: readonly Item[], p: Vec2, selected: readonly stri
 }
 
 /**
- * Dimensions from the selected item's bounding box to the nearest wall or floor item in each
- * of the four directions: what a planner checks while placing (aisle widths, gaps).
+ * Dimensions from the selected item's bounding box to the nearest wall, partition or floor item
+ * in each of the four directions: what a planner checks while placing (aisle widths, gaps).
  */
 export function distanceDims(project: Project, item: Item): Shape[] {
   const b = bounds(footprint(item));
   const obstacles: [Vec2, Vec2][] = walls(project.room).map((w) => [w.a, w.b]);
+  const outline = (pts: Vec2[]) => {
+    for (let i = 0; i < pts.length; i++) obstacles.push([pts[i], pts[(i + 1) % pts.length]]);
+  };
+  for (const p of project.room.partitions ?? []) outline(partitionOutline(p));
   for (const o of project.items) {
     if (o.id === item.id || isOverhead(kindOf(o.catalogId))) continue;
-    const fp = footprint(o);
-    for (let i = 0; i < fp.length; i++) obstacles.push([fp[i], fp[(i + 1) % fp.length]]);
+    outline(footprint(o));
   }
   const mid = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
-  const rays: { from: Vec2; dir: Vec2; offsetSign: number }[] = [
-    { from: { x: b.minX, y: mid.y }, dir: { x: -1, y: 0 }, offsetSign: 1 },
-    { from: { x: b.maxX, y: mid.y }, dir: { x: 1, y: 0 }, offsetSign: 1 },
-    { from: { x: mid.x, y: b.minY }, dir: { x: 0, y: -1 }, offsetSign: 1 },
-    { from: { x: mid.x, y: b.maxY }, dir: { x: 0, y: 1 }, offsetSign: 1 },
+  const rays: { from: Vec2; dir: Vec2 }[] = [
+    { from: { x: b.minX, y: mid.y }, dir: { x: -1, y: 0 } },
+    { from: { x: b.maxX, y: mid.y }, dir: { x: 1, y: 0 } },
+    { from: { x: mid.x, y: b.minY }, dir: { x: 0, y: -1 } },
+    { from: { x: mid.x, y: b.maxY }, dir: { x: 0, y: 1 } },
   ];
   const shapes: Shape[] = [];
   for (const r of rays) {
@@ -357,4 +626,3 @@ function castRay(from: Vec2, dir: Vec2, segments: readonly [Vec2, Vec2][], own: 
   }
   return best;
 }
-

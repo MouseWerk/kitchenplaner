@@ -1,6 +1,6 @@
 // Plan geometry: footprints, walls, snapping and overlap tests. Pure functions over the model.
 
-import type { Item, Opening, Room, Vec2 } from "./types";
+import type { Item, Opening, Partition, Room, Vec2 } from "./types";
 
 export const EPS = 1e-6;
 
@@ -180,12 +180,24 @@ export function openingSpan(room: Pick<Room, "points">, o: Pick<Opening, "wall" 
   return [start, end];
 }
 
-/** Keeps an opening inside its wall: the offset is clamped so the whole width fits. */
-export function clampOpening(room: Pick<Room, "points">, o: Opening): Opening {
-  const w = walls(room)[o.wall];
-  if (!w) return o;
-  const width = Math.min(o.width, w.length);
-  const offset = Math.min(Math.max(o.offset, width / 2), w.length - width / 2);
+/**
+ * Keeps an opening inside its host: the offset is clamped so the whole width fits. An opening in a
+ * partition is clamped into that partition (its `wall` index means nothing); without the room's
+ * partitions at hand it is left as it is.
+ */
+export function clampOpening(room: Pick<Room, "points"> & Partial<Pick<Room, "partitions">>, o: Opening): Opening {
+  let length: number;
+  if (o.partition !== undefined) {
+    const p = room.partitions?.find((w) => w.id === o.partition);
+    if (!p) return o;
+    length = dist(p.a, p.b);
+  } else {
+    const w = walls(room)[o.wall];
+    if (!w) return o;
+    length = w.length;
+  }
+  const width = Math.min(o.width, length);
+  const offset = Math.min(Math.max(o.offset, width / 2), length - width / 2);
   return { ...o, width, offset };
 }
 
@@ -203,21 +215,106 @@ export interface SnapResult {
   x: number;
   y: number;
   rotation: number;
-  /** The wall the item was placed against, if any. */
+  /** The wall the item was placed against, if any (index of an outer wall; null for none or a partition). */
   wall: number | null;
 }
 
 /**
- * Where a dragged item lands: its back against the nearest wall when it comes close (turned to
- * face into the room), its sides flush with neighbouring items, otherwise on the grid.
+ * A wall face an item can stand against: the inner face of an outer wall or one of the two faces
+ * of a partition. `inward` points away from the wall, into the free space in front of the face.
+ */
+export interface Face {
+  a: Vec2;
+  b: Vec2;
+  dir: Vec2;
+  inward: Vec2;
+  length: number;
+  /** Index of the outer wall, or null for a partition face. */
+  wall: number | null;
+  /** Id of the partition, for a partition face. */
+  partition?: string;
+}
+
+/** The two long faces of a partition, each facing away from its centre line. */
+export function partitionFaces(p: Partition): Face[] {
+  const dir = norm(sub(p.b, p.a));
+  const length = dist(p.a, p.b);
+  if (length < EPS) return [];
+  const n = { x: -dir.y, y: dir.x };
+  const h = p.thickness / 2;
+  return [n, scale(n, -1)].map((inward) => {
+    const off = scale(inward, h);
+    return { a: add(p.a, off), b: add(p.b, off), dir, inward, length, wall: null, partition: p.id };
+  });
+}
+
+/** The outline of a partition: its four corners around the centre line. */
+export function partitionOutline(p: Partition): Vec2[] {
+  const dir = norm(sub(p.b, p.a));
+  const off = scale({ x: -dir.y, y: dir.x }, p.thickness / 2);
+  return [add(p.a, off), add(p.b, off), sub(p.b, off), sub(p.a, off)];
+}
+
+/** Every face an item can stand against: the outer walls and both faces of every partition. */
+export function roomFaces(room: Pick<Room, "points"> & { partitions?: readonly Partition[] }): Face[] {
+  const faces: Face[] = walls(room).map((w) => ({ a: w.a, b: w.b, dir: w.dir, inward: w.inward, length: w.length, wall: w.index }));
+  for (const p of room.partitions ?? []) faces.push(...partitionFaces(p));
+  return faces;
+}
+
+/** The rotation that turns an item's back against a face (front along `inward`). */
+export function rotationFacing(face: Pick<Face, "inward">): number {
+  return normalizeAngle((Math.atan2(-face.inward.x, face.inward.y) * 180) / Math.PI);
+}
+
+/**
+ * The face nearest to an item's back within `WALL_SNAP_DISTANCE`, with the rotation the item
+ * gets against it; with `autoRotate` off only faces it already faces count.
+ */
+export function nearestFace(
+  item: Pick<Item, "x" | "y" | "rotation" | "width" | "depth">,
+  faces: readonly Face[],
+  autoRotate: boolean,
+): { face: Face; rotation: number } | null {
+  let best: { face: Face; gap: number; rotation: number } | null = null;
+  for (const face of faces) {
+    // A zero-length wall (two corners on the same spot) has no direction and no inward normal:
+    // its gap would be 0 wherever the item is, so it would always win and pull the item onto
+    // that corner.
+    if (face.length < EPS) continue;
+    const rot = rotationFacing(face);
+    if (!autoRotate && angleDiff(rot, item.rotation) > 1) continue;
+    const back = sub({ x: item.x, y: item.y }, scale(face.inward, item.depth / 2));
+    const gap = dot(sub(back, face.a), face.inward);
+    const along = dot(sub({ x: item.x, y: item.y }, face.a), face.dir);
+    if (along < -item.width / 2 || along > face.length + item.width / 2) continue;
+    if (Math.abs(gap) > WALL_SNAP_DISTANCE) continue;
+    if (!best || Math.abs(gap) < Math.abs(best.gap)) best = { face, gap, rotation: rot };
+  }
+  return best && { face: best.face, rotation: best.rotation };
+}
+
+/**
+ * The centre of an item standing with its back against a face: along the face on the grid,
+ * inside the face's length when the item fits.
+ */
+export function placeAgainst(item: Pick<Item, "x" | "y" | "width" | "depth">, face: Face, grid: number): Vec2 {
+  let along = snapValue(dot(sub({ x: item.x, y: item.y }, face.a), face.dir), grid);
+  if (item.width <= face.length) along = Math.min(Math.max(along, item.width / 2), face.length - item.width / 2);
+  return add(add(face.a, scale(face.dir, along)), scale(face.inward, item.depth / 2));
+}
+
+/**
+ * Where a dragged item lands: its back against the nearest wall or partition face when it comes
+ * close (turned to face away from it), its sides flush with neighbouring items, otherwise on the grid.
  *
- * `autoRotate` turns the item towards the room when it is pulled against a wall; it is off for
+ * `autoRotate` turns the item away from the wall when it is pulled against one; it is off for
  * a plain move of an item that already stands somewhere, so its rotation is kept unless the
  * wall it is pulled to faces the same way anyway.
  */
 export function snapItem(
   item: Pick<Item, "x" | "y" | "rotation" | "width" | "depth">,
-  room: Pick<Room, "points">,
+  room: Pick<Room, "points"> & { partitions?: readonly Partition[] },
   others: readonly Pick<Item, "x" | "y" | "rotation" | "width" | "depth">[],
   grid: number,
   autoRotate: boolean,
@@ -227,31 +324,11 @@ export function snapItem(
   let rotation = item.rotation;
   let wallIndex: number | null = null;
 
-  // The wall nearest to the item's back (or to its centre when it may turn).
-  let best: { wall: Wall; gap: number; rotation: number } | null = null;
-  for (const wall of walls(room)) {
-    // A zero-length wall (two corners on the same spot) has no direction and no inward normal:
-    // its gap would be 0 wherever the item is, so it would always win and pull the item onto
-    // that corner.
-    if (wall.length < EPS) continue;
-    const rot = normalizeAngle((Math.atan2(-wall.inward.x, wall.inward.y) * 180) / Math.PI);
-    if (!autoRotate && angleDiff(rot, item.rotation) > 1) continue;
-    const back = sub({ x: item.x, y: item.y }, scale(wall.inward, item.depth / 2));
-    const gap = dot(sub(back, wall.a), wall.inward);
-    const along = dot(sub({ x: item.x, y: item.y }, wall.a), wall.dir);
-    if (along < -item.width / 2 || along > wall.length + item.width / 2) continue;
-    if (Math.abs(gap) > WALL_SNAP_DISTANCE) continue;
-    if (!best || Math.abs(gap) < Math.abs(best.gap)) best = { wall, gap, rotation: rot };
-  }
-
+  const best = nearestFace(item, roomFaces(room), autoRotate);
   if (best) {
-    const { wall } = best;
     rotation = best.rotation;
-    wallIndex = wall.index;
-    // Along the wall: on the grid, and inside the wall's length when the item fits.
-    let along = snapValue(dot(sub({ x: item.x, y: item.y }, wall.a), wall.dir), grid);
-    if (item.width <= wall.length) along = Math.min(Math.max(along, item.width / 2), wall.length - item.width / 2);
-    const centre = add(add(wall.a, scale(wall.dir, along)), scale(wall.inward, item.depth / 2));
+    wallIndex = best.face.wall;
+    const centre = placeAgainst(item, best.face, grid);
     x = centre.x;
     y = centre.y;
   }
@@ -282,6 +359,28 @@ export function snapItem(
   }
 
   return { x: round(x), y: round(y), rotation: normalizeAngle(rotation), wall: wallIndex };
+}
+
+/**
+ * The items a selection frame from `from` to `to` picks, as in Blender and CAD: dragged left to
+ * right only items fully inside the frame (window), right to left every item it touches (crossing).
+ */
+export function itemsInFrame(items: readonly Item[], from: Vec2, to: Vec2): string[] {
+  const box = bounds([from, to]);
+  const crossing = to.x < from.x;
+  const rect = [
+    { x: box.minX, y: box.minY },
+    { x: box.maxX, y: box.minY },
+    { x: box.maxX, y: box.maxY },
+    { x: box.minX, y: box.maxY },
+  ];
+  return items
+    .filter((it) => {
+      const fp = footprint(it);
+      if (!crossing) return fp.every((p) => p.x >= box.minX - EPS && p.x <= box.maxX + EPS && p.y >= box.minY - EPS && p.y <= box.maxY + EPS);
+      return convexOverlap(fp, rect, 0) || fp.some((p) => pointInPolygon(p, rect));
+    })
+    .map((it) => it.id);
 }
 
 /** Rounds to a tenth of a millimetre: keeps files and dimensions free of float noise. */

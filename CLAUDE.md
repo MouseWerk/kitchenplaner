@@ -19,6 +19,15 @@ CLAUDE.md first); this file wins where it is more specific.
   unsigned. No updater, tray, store build or keyring.
 - UI language German with "du" (default) and English; „Computer“, not „Rechner“; ellipsis directly
   after the word („Speichern…“). Glossary: `docs/i18n.md`.
+- Editing works in modes like Blender (2026-10-12): Tab switches „Einrichten“ (arrange equipment,
+  object mode) and „Raum“ (edit corners, walls, partitions, openings; edit mode). Modal operators:
+  G move, R rotate, X/Y lock an axis, typed numbers give exact values, Enter or click confirms,
+  Escape or right click cancels; Shift+D duplicates, A selects all, frame selection by dragging
+  (left to right: fully inside, right to left: touching).
+- Room drawing: a CAD-like wall tool (click wall by wall, type lengths, 90°/45° snapping, snap to
+  corners, closing on the start point), partitions inside the room, and pass-through hatches
+  (Durchreiche) as their own opening kind. Snapping shows guide lines.
+- The catalog shows a 3D preview of every entry. End-to-end tests drive the real app.
 - All lengths in the model and the files are millimetres (integers where possible); the UI formats
   them for display.
 - The project file is `.kplan`: UTF-8 JSON with `"format": "kitchenplaner"` and a numeric
@@ -53,6 +62,10 @@ npm --prefix ui run typecheck
 npm --prefix ui test
 npm --prefix ui run build
 npm run build            # installers in target/release/bundle
+e2e/run.sh               # end-to-end tests, Linux (builds UI + debug app, Xvfb, tauri-driver)
+e2e/run.sh tests/05-files.test.js   # one file while working
+e2e\run.ps1              # Windows (needs msedgedriver matching WebView2, see e2e/README.md)
+e2e/docker/run.sh        # the Linux suite in Docker (macOS, or Windows without msedgedriver)
 ```
 
 `tauri::generate_context!` needs `ui/dist` to exist: build the UI first (or create a placeholder

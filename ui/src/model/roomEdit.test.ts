@@ -1,8 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { walls } from "./geometry";
-import { insertCorner, isUsableOutline, moveCorner, removeCoincidentCorners } from "./roomEdit";
+import {
+  clampToHost,
+  combine,
+  frameSelect,
+  hitRoom,
+  insertCorner,
+  isUsableOutline,
+  lineAngle,
+  moveCorner,
+  moveCorners,
+  movePartitions,
+  removeCoincidentCorners,
+  removeCorners,
+  selectedWall,
+  setPartitionLength,
+  setWallLength,
+  slideOpening,
+} from "./roomEdit";
 import { testProject } from "./testProject";
-import type { Opening, Room } from "./types";
+import type { Opening, Partition, Room } from "./types";
 
 const opening = (id: string, wall: number, offset: number, width = 1000): Opening => ({ id, kind: "window", wall, offset, width, height: 1200, sill: 900 });
 
@@ -103,5 +120,146 @@ describe("isUsableOutline", () => {
     expect(isUsableOutline([{ x: 0, y: 0 }, { x: 1000, y: 0 }])).toBe(false);
     expect(isUsableOutline([{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 2000, y: 0 }])).toBe(false);
     expect(isUsableOutline([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }])).toBe(true);
+  });
+});
+
+const partition = (id: string, a: [number, number], b: [number, number]): Partition => ({ id, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 100, height: 3000 });
+const hatch = (id: string, part: string, offset: number): Opening => ({ id, kind: "hatch", wall: 0, partition: part, offset, width: 1200, height: 800, sill: 900 });
+
+describe("partition openings", () => {
+  it("are left alone by the outer wall edits", () => {
+    const r = { ...room([hatch("h", "p", 2500)]), partitions: [partition("p", [4000, 0], [4000, 3000])] };
+    expect(moveCorner(r, 1, { x: 5000, y: 0 }).openings[0]).toEqual(r.openings[0]);
+    expect(insertCorner(r, 0, { x: 2000, y: 0 }, 50)!.openings[0]).toEqual(r.openings[0]);
+  });
+});
+
+describe("moveCorners", () => {
+  it("moves a whole wall and keeps its openings", () => {
+    const r = moveCorners(room([opening("n", 0, 4000)]), [0, 1], { x: 0, y: 500 });
+    expect(r.points.slice(0, 2)).toEqual([{ x: 0, y: 500 }, { x: 8000, y: 500 }]);
+    expect(r.openings[0].offset).toBe(4000);
+  });
+
+  it("refuses a move that puts a corner on its neighbour", () => {
+    const r = room([]);
+    expect(moveCorners(r, [1], { x: -8000, y: 0 })).toBe(r);
+  });
+});
+
+describe("removeCorners", () => {
+  it("merges the walls at a removed corner and keeps openings where they are on the plan", () => {
+    // An L-ish room: remove the extra corner on the south wall again.
+    const split = insertCorner(room([opening("s", 2, 1000), opening("w", 3, 3000)]), 2, { x: 4000, y: 6000 }, 50)!;
+    expect(split.openings.map((o) => [o.id, o.wall, o.offset])).toEqual([
+      ["s", 2, 1000],
+      ["w", 4, 3000],
+    ]);
+    const back = removeCorners(split, [3])!;
+    expect(back.points).toEqual(testProject().room.points);
+    expect(back.openings.map((o) => [o.id, o.wall, o.offset])).toEqual([
+      ["s", 2, 1000],
+      ["w", 3, 3000],
+    ]);
+  });
+
+  it("projects an opening of a vanished wall onto the merged wall", () => {
+    // Removing the south-east corner: the east wall's window lands on the diagonal from NE to SW.
+    const r = removeCorners(room([opening("e", 1, 3000, 1000)]), [2])!;
+    expect(r.points).toHaveLength(3);
+    expect(r.openings).toHaveLength(1);
+    expect(r.openings[0].wall).toBe(1);
+    expect(onTheirWalls(r)).toBe(true);
+  });
+
+  it("keeps at least three corners and a valid outline", () => {
+    expect(removeCorners(room([]), [0, 1])).toBeNull();
+    expect(removeCorners(room([]), [])).toEqual(room([]));
+  });
+});
+
+describe("setWallLength", () => {
+  it("moves the end corner along the wall", () => {
+    const r = setWallLength(room([]), 1, 4500);
+    expect(r.points[2]).toEqual({ x: 8000, y: 4500 });
+    expect(r.points[3]).toEqual({ x: 0, y: 6000 });
+  });
+
+  it("refuses lengths that break the outline", () => {
+    const r = room([]);
+    expect(setWallLength(r, 0, 0)).toBe(r);
+  });
+});
+
+describe("lineAngle", () => {
+  it("measures clockwise from east", () => {
+    expect(lineAngle({ x: 0, y: 0 }, { x: 1, y: 0 })).toBe(0);
+    expect(lineAngle({ x: 0, y: 0 }, { x: 0, y: 1 })).toBe(90);
+    expect(lineAngle({ x: 0, y: 0 }, { x: -1, y: 0 })).toBe(180);
+    expect(lineAngle({ x: 0, y: 0 }, { x: 0, y: -1 })).toBe(270);
+  });
+});
+
+describe("partitions", () => {
+  it("move whole, change length from end a and keep their openings inside", () => {
+    const r = { ...room([hatch("h", "p", 2500)]), partitions: [partition("p", [4000, 0], [4000, 3000])] };
+    const moved = movePartitions(r, ["p"], { x: 100, y: 0 });
+    expect(moved.partitions[0].a).toEqual({ x: 4100, y: 0 });
+    const shorter = setPartitionLength(r, "p", 2000);
+    expect(shorter.partitions[0].b).toEqual({ x: 4000, y: 2000 });
+    expect(shorter.openings[0].offset).toBe(1400);
+  });
+
+  it("slide openings along their host only", () => {
+    const r = { ...room([hatch("h", "p", 1500)]), partitions: [partition("p", [4000, 0], [4000, 3000])] };
+    expect(slideOpening(r, r.openings[0], { x: 900, y: 500 }).offset).toBe(2000);
+    expect(slideOpening(r, r.openings[0], { x: 0, y: 5000 }).offset).toBe(2400);
+    expect(clampToHost(r, { ...r.openings[0], offset: -10 }).offset).toBe(600);
+    // The door on the south wall (running west) moves east by moving against the wall direction.
+    const door = testProject().room.openings[0];
+    expect(slideOpening(testProject().room, door, { x: 200, y: 0 }).offset).toBe(6600);
+  });
+});
+
+describe("hitRoom", () => {
+  const r = { ...room([opening("n", 0, 4000), hatch("h", "p", 1500)]), partitions: [partition("p", [4000, 3000], [4000, 6000])] };
+  it("picks corners and partition ends first, then openings, partitions and walls", () => {
+    expect(hitRoom(r, { x: 10, y: -10 }, 50)).toEqual({ kind: "corner", index: 0 });
+    expect(hitRoom(r, { x: 4010, y: 3020 }, 50)).toEqual({ kind: "end", id: "p", end: "a" });
+    expect(hitRoom(r, { x: 4000, y: -100 }, 20)).toEqual({ kind: "opening", id: "n" });
+    expect(hitRoom(r, { x: 4030, y: 4500 }, 20)).toEqual({ kind: "opening", id: "h" });
+    expect(hitRoom(r, { x: 4030, y: 5500 }, 20)).toEqual({ kind: "partition", id: "p" });
+    expect(hitRoom(r, { x: 2000, y: -100 }, 20)).toEqual({ kind: "wall", index: 0 });
+    expect(hitRoom(r, { x: 2000, y: 2000 }, 20)).toBeNull();
+    // Outside the wall thickness nothing is hit.
+    expect(hitRoom(r, { x: 2000, y: -400 }, 20)).toBeNull();
+  });
+});
+
+describe("frameSelect", () => {
+  const r = { ...room([]), partitions: [partition("p", [4000, 3000], [4000, 6000])] };
+  it("takes what lies fully inside a window", () => {
+    expect(frameSelect(r, { minX: -100, minY: -100, maxX: 8100, maxY: 100 }, false)).toEqual({ corners: [0, 1], partitions: [] });
+    expect(frameSelect(r, { minX: 3000, minY: 2000, maxX: 5000, maxY: 6100 }, false)).toEqual({ corners: [], partitions: ["p"] });
+  });
+
+  it("takes walls and partitions a crossing frame touches", () => {
+    expect(frameSelect(r, { minX: 3000, minY: 5000, maxX: 5000, maxY: 6100 }, true)).toEqual({ corners: [2, 3], partitions: ["p"] });
+  });
+});
+
+describe("combine and selectedWall", () => {
+  it("replaces, adds and toggles", () => {
+    expect(combine([1, 2], [2, 3], "replace")).toEqual([2, 3]);
+    expect(combine([1, 2], [2, 3], "add")).toEqual([1, 2, 3]);
+    expect(combine([1, 2], [2, 3], "toggle")).toEqual([1, 3]);
+  });
+
+  it("finds the wall of two neighbouring corners, also the closing wall", () => {
+    const r = room([]);
+    expect(selectedWall(r, [2, 1])).toBe(1);
+    expect(selectedWall(r, [0, 3])).toBe(3);
+    expect(selectedWall(r, [0, 2])).toBeNull();
+    expect(selectedWall(r, [0])).toBeNull();
   });
 });

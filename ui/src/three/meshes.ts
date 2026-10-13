@@ -4,8 +4,10 @@
 // (south, down on screen) becomes +z. Every model is first built in its own frame, x along the
 // width, z towards the front and y up from the floor, then placed and turned.
 //
-// All meshes reuse one unit box and one unit cylinder, scaled per part, and a fixed set of
-// materials, so a kitchen with a hundred items creates no new GPU buffers when it changes.
+// All meshes reuse one unit box and one unit cylinder, scaled (and for round bars and knobs
+// turned) per part, and a fixed set of materials, so a kitchen with a hundred items creates no
+// new GPU buffers when it changes. Brushed steel gets a procedural roughness map
+// (`textures.ts`); the 3D view merges each model per material to keep the draw calls low.
 // Callers that own a renderer hold the cache with `retainShared()` and give it back with
 // `releaseShared()`; the last release disposes it. The code needs no WebGL context.
 
@@ -13,6 +15,7 @@ import * as THREE from "three";
 import type { Item } from "../model/types";
 import { kindOf, sinkBowlCount, type ItemKind } from "../model/catalog";
 import { rad } from "../model/geometry";
+import { brushedSteelPixels, toTexture } from "./textures";
 
 /** Millimetres per three.js unit (metre). */
 export const MM_PER_UNIT = 1000;
@@ -27,6 +30,7 @@ interface Shared {
   box: THREE.BoxGeometry;
   cylinder: THREE.CylinderGeometry;
   mat: Record<MaterialId, THREE.Material>;
+  textures: THREE.Texture[];
   /** Selected look of each material, made on first use. */
   highlighted: Map<THREE.Material, THREE.Material>;
 }
@@ -50,7 +54,10 @@ type MaterialId =
   | "panelDark"
   | "oil"
   | "basket"
-  | "concrete";
+  | "concrete"
+  | "knob"
+  | "glassDark"
+  | "rubber";
 
 let shared: Shared | null = null;
 let holders = 0;
@@ -59,29 +66,42 @@ function std(color: number, metalness: number, roughness: number, extra: THREE.M
   return new THREE.MeshStandardMaterial({ color, metalness, roughness, ...extra });
 }
 
+/** Brushed grain repeats: finer across the stroke so a tall door shows hairlines, not bands. */
+const BRUSH_REPEAT = { u: 1, v: 4 };
+
 function getShared(): Shared {
   if (shared) return shared;
   const box = new THREE.BoxGeometry(1, 1, 1);
   const cylinder = new THREE.CylinderGeometry(0.5, 0.5, 1, CYLINDER_SEGMENTS);
+  // The roughness map scales the material roughness: its mean is about 0.5, so the base values
+  // below are about twice the effective roughness.
+  const brushed = toTexture(brushedSteelPixels(), false);
+  brushed.repeat.set(BRUSH_REPEAT.u, BRUSH_REPEAT.v);
   const mat: Record<MaterialId, THREE.Material> = {
-    // Brushed stainless steel: light gray, half metallic so it reads in a dim scene too.
-    steel: std(0xc8ccd0, 0.6, 0.35),
-    steelDark: std(0x8c9196, 0.6, 0.4),
-    handle: std(0xe2e5e8, 0.8, 0.25),
+    // Brushed stainless steel: a metal that takes its look from what it reflects, with a fine
+    // grain that smears the reflections along the stroke.
+    steel: std(0xc9cdd1, 0.9, 0.7, { roughnessMap: brushed }),
+    steelDark: std(0x9a9fa5, 0.85, 0.85, { roughnessMap: brushed }),
+    handle: std(0xe4e7ea, 1, 0.22),
     top: std(0x2c2e31, 0.35, 0.5),
-    ceramic: std(0x121315, 0.1, 0.15),
-    zone: std(0x45484d, 0.1, 0.3),
-    plate: std(0x1d1e20, 0.5, 0.45),
-    glass: std(0x9fb2bd, 0.1, 0.05, { transparent: true, opacity: 0.35, depthWrite: false }),
-    panel: std(0xeceeef, 0, 0.6),
-    panelDark: std(0x3b3e42, 0.2, 0.6),
+    // Black glass ceramic: almost no diffuse light, a sharp reflection on top.
+    ceramic: std(0x0b0c0e, 0, 0.06),
+    zone: std(0x3a3d42, 0, 0.25),
+    plate: std(0x1d1e20, 0.6, 0.5),
+    glass: std(0x9fb2bd, 0.1, 0.05, { transparent: true, opacity: 0.3, depthWrite: false }),
+    // Tinted oven and display glass: dark, glossy, opaque enough to hide the inside.
+    glassDark: std(0x14171a, 0, 0.05),
+    panel: std(0xeceeef, 0, 0.55),
+    panelDark: std(0x34373b, 0.2, 0.55),
     oil: std(0x7a5a22, 0.1, 0.2),
     basket: std(0x9ea3a8, 0.7, 0.4, { wireframe: true }),
     concrete: std(0xbab7b1, 0, 0.9),
+    knob: std(0x1b1c1e, 0, 0.45),
+    rubber: std(0x222325, 0, 0.9),
   };
   // Named after their id so tests and debugging can tell the parts apart.
   for (const [id, m] of Object.entries(mat)) m.name = id;
-  shared = { box, cylinder, mat, highlighted: new Map() };
+  shared = { box, cylinder, mat, textures: [brushed], highlighted: new Map() };
   return shared;
 }
 
@@ -103,6 +123,7 @@ export function disposeShared(): void {
   shared.cylinder.dispose();
   for (const m of Object.values(shared.mat)) m.dispose();
   for (const m of shared.highlighted.values()) m.dispose();
+  for (const t of shared.textures) t.dispose();
   shared = null;
 }
 
@@ -129,6 +150,43 @@ class Parts {
     m.position.set(cx, (y0 + y1) / 2, cz);
     this.g.add(m);
     return m;
+  }
+
+  /** A round bar along an axis, centred at (cx, cy, cz). Used for handles, rails and spouts. */
+  rod(mat: MaterialId, axis: "x" | "y" | "z", cx: number, cy: number, cz: number, length: number, r: number): THREE.Mesh {
+    const m = new THREE.Mesh(this.s.cylinder, this.s.mat[mat]);
+    m.scale.set(2 * r, Math.max(length, MIN_PART), 2 * r);
+    if (axis === "x") m.rotation.z = Math.PI / 2;
+    if (axis === "z") m.rotation.x = Math.PI / 2;
+    m.position.set(cx, cy, cz);
+    this.g.add(m);
+    return m;
+  }
+
+  /** A control knob standing out of a panel whose face is at `zFace`, ending at `zFront`. */
+  knob(cx: number, cy: number, zFace: number, zFront: number, r = KNOB_RADIUS): void {
+    const depth = zFront - zFace;
+    this.rod("knob", "z", cx, cy, zFace + depth * 0.35, depth * 0.7, r);
+    // A bright index mark on the knob's face shows its setting.
+    this.box("handle", cx - r * 0.12, cx + r * 0.12, cy + r * 0.2, cy + r * 0.85, zFront - depth * 0.3, zFront);
+  }
+
+  /**
+   * A bar handle on stand-offs in front of a door face at `zFace`, ending flush with `zFront`:
+   * horizontal (along x) or vertical (along y), from `a` to `b` on that axis, at `at` on the
+   * other one.
+   */
+  barHandle(axis: "x" | "y", a: number, b: number, at: number, zFace: number, zFront: number): void {
+    const r = Math.min(HANDLE_BAR, (zFront - zFace) / 3);
+    const zc = zFront - r;
+    const len = b - a;
+    const inset = Math.min(0.03, len * 0.15);
+    for (const s of [a + inset, b - inset]) {
+      if (axis === "x") this.box("handle", s - r * 0.8, s + r * 0.8, at - r * 0.8, at + r * 0.8, zFace, zc);
+      else this.box("handle", at - r * 0.8, at + r * 0.8, s - r * 0.8, s + r * 0.8, zFace, zc);
+    }
+    if (axis === "x") this.rod("handle", "x", (a + b) / 2, at, zc, len, r);
+    else this.rod("handle", "y", at, (a + b) / 2, zc, len, r);
   }
 
   /**
@@ -194,6 +252,14 @@ const CONTROLS = 0.12;
 const COOKTOP = 0.05;
 /** Height a tap rises above a sink's worktop. */
 export const TAP_RISE = 0.3;
+/** Radius of a round handle bar. */
+const HANDLE_BAR = 0.008;
+/** Radius of a control knob. */
+const KNOB_RADIUS = 0.022;
+/** Set-back of the kick plate under a body from its front (toe space). */
+const KICK_SETBACK = 0.05;
+/** Radius of an adjustable foot. */
+const FOOT = 0.022;
 
 // ---------------------------------------------------------------------------------------------
 // Builders per kind. Each gets the size in metres and fills the group; the body always spans
@@ -209,11 +275,29 @@ type Builder = (p: Parts, s: Size, item: Item) => void;
 
 /** A stainless body with a worktop: the base of most counters. */
 function body(p: Parts, { w, d, h }: Size, topMat: MaterialId = "steel", topThickness = TOP, holes: readonly Hole[] = []): void {
-  p.box("steelDark", -w / 2 + LEG, w / 2 - LEG, 0, PLINTH, -d / 2 + LEG, d / 2 - LEG);
+  plinth(p, w, d);
   p.box("steel", -w / 2, w / 2, PLINTH, h - topThickness, -d / 2, d / 2 - DOOR);
   if (holes.length > 0) p.topWithHoles(topMat, w, d, h - topThickness, h, holes);
   else p.box(topMat, -w / 2, w / 2, h - topThickness, h, -d / 2, d / 2);
 }
+
+/**
+ * The base under a body: a kick plate set back from the front and adjustable feet at the
+ * corners, as on stainless counters (all within the footprint).
+ */
+function plinth(p: Parts, w: number, d: number): void {
+  p.box("steelDark", -w / 2 + LEG, w / 2 - LEG, FOOT_PAD, PLINTH, -d / 2 + LEG, d / 2 - DOOR - KICK_SETBACK);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const x = sx * (w / 2 - FOOT * 1.5);
+      const z = sz * (d / 2 - DOOR - FOOT * 1.5);
+      p.cyl("steelDark", x, z, FOOT_PAD, PLINTH, FOOT * 0.6);
+      p.cyl("rubber", x, z, 0, FOOT_PAD, FOOT);
+    }
+  }
+}
+/** Height of the round pad at the bottom of a foot. */
+const FOOT_PAD = 0.012;
 
 /** Door panels side by side over a width range, each with a vertical or horizontal handle. */
 function doors(p: Parts, x0: number, x1: number, y0: number, y1: number, d: number, count: number, handle: "vertical" | "top"): void {
@@ -226,14 +310,14 @@ function doors(p: Parts, x0: number, x1: number, y0: number, y1: number, d: numb
     if (handle === "vertical") {
       // Handles sit at the meeting edges of a pair of doors; a single door has it on the right.
       const atLeft = count > 1 && i % 2 === 1;
-      const hx = atLeft ? a + HANDLE : b - HANDLE * 2;
+      const hx = atLeft ? a + HANDLE * 1.5 : b - HANDLE * 1.5;
       const len = Math.min(0.4, (y1 - y0) * 0.5);
       const mid = (y0 + y1) / 2;
-      p.box("handle", hx, hx + HANDLE, mid - len / 2, mid + len / 2, zf - HANDLE, zf);
+      p.barHandle("y", mid - len / 2, mid + len / 2, hx, zf - DOOR / 2, zf);
     } else {
       const len = Math.min(0.3, (b - a) * 0.6);
       const cx = (a + b) / 2;
-      p.box("handle", cx - len / 2, cx + len / 2, y1 - 0.06, y1 - 0.06 + HANDLE, zf - HANDLE, zf);
+      p.barHandle("x", cx - len / 2, cx + len / 2, y1 - 0.05, zf - DOOR / 2, zf);
     }
   }
 }
@@ -272,7 +356,7 @@ const drawers: Builder = (p, s) => {
     const y = PLINTH + i * bh;
     p.box("steelDark", -s.w / 2 + GAP, s.w / 2 - GAP, y - GAP / 2, y + GAP / 2, s.d / 2 - DOOR, s.d / 2 - HANDLE);
     const len = Math.min(0.3, s.w * 0.5);
-    p.box("handle", -len / 2, len / 2, y - 0.06, y - 0.06 + HANDLE, s.d / 2 - HANDLE, s.d / 2);
+    p.barHandle("x", -len / 2, len / 2, y - 0.05, s.d / 2 - DOOR / 2, s.d / 2);
   }
 };
 const DRAWER_COUNT = 4;
@@ -280,12 +364,23 @@ const DRAWER_COUNT = 4;
 /** Bowl size of a sink (m), shrunk to fit small tables. */
 const BOWL = { w: 0.5, d: 0.4, depth: 0.25, margin: 0.06 };
 
+/**
+ * A mixer tap: a base, a column, a spout reaching forward and bending down over the bowl, and a
+ * lever on the column. The column is named "tap" (one per tap).
+ */
 function tap(p: Parts, x: number, zBack: number, y0: number, rise: number): void {
-  const r = 0.015;
+  const r = 0.012;
   const z = zBack + 0.05;
-  p.cyl("handle", x, z, y0, y0 + rise, r);
-  // The spout reaches forward from the top of the column.
-  p.box("handle", x - r, x + r, y0 + rise - 2 * r, y0 + rise, z, z + Math.min(0.2, rise * 0.7));
+  p.cyl("handle", x, z, y0, y0 + 0.02, r * 2);
+  p.cyl("handle", x, z, y0, y0 + rise - r, r).name = "tap";
+  const reach = Math.min(0.2, rise * 0.7);
+  // The spout bar reaches forward from the column's top; its round section tops out at the rise.
+  p.rod("handle", "z", x, y0 + rise - r, z + reach / 2, reach, r);
+  // The outlet points down at the end of the spout.
+  const drop = Math.min(0.06, rise * 0.25);
+  p.cyl("handle", x, z + reach - r * 0.8, y0 + rise - r - drop, y0 + rise - r, r * 0.8);
+  // Single lever on the side of the column.
+  p.box("handle", x + r, x + r + 0.07, y0 + rise * 0.55, y0 + rise * 0.55 + 0.012, z - 0.006, z + 0.006);
 }
 
 const sink: Builder = (p, s, item) => {
@@ -301,11 +396,27 @@ const sink: Builder = (p, s, item) => {
   }
   openFrame(p, s, s.h - TOP - BOWL.depth);
   p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, holes);
-  for (const h of holes) p.tub("steel", h.x0, h.x1, s.h - BOWL.depth, s.h, h.z0, h.z1);
+  for (const h of holes) {
+    p.tub("steel", h.x0, h.x1, s.h - BOWL.depth, s.h, h.z0, h.z1);
+    // Waste outlet in the floor of the bowl.
+    p.cyl("steelDark", (h.x0 + h.x1) / 2, (h.z0 + h.z1) / 2, s.h - BOWL.depth + SHEET, s.h - BOWL.depth + SHEET + 0.003, 0.035);
+  }
+  // Pressed grooves in the drainer beside the bowls lead the water towards them.
+  const drainerX0 = -s.w / 2 + BOWL.margin;
+  const drainerX1 = Math.min(...holes.map((h) => h.x0)) - BOWL.margin;
+  if (drainerX1 - drainerX0 > DRAINER_MIN) {
+    for (let i = 1; i <= DRAINER_GROOVES; i++) {
+      const z = zc - bd / 2 + (bd * i) / (DRAINER_GROOVES + 1);
+      p.box("steelDark", drainerX0, drainerX1, s.h - 0.003, s.h - 0.001, z - 0.004, z + 0.004);
+    }
+  }
   // Upstand along the back wall.
   p.box("steel", -s.w / 2, s.w / 2, s.h, s.h + UPSTAND_HEIGHT, -s.d / 2, -s.d / 2 + SHEET * 2);
   for (const h of holes) tap(p, (h.x0 + h.x1) / 2, -s.d / 2, s.h, TAP_RISE);
 };
+/** Grooves pressed into a sink's drainer, and the shortest drainer that gets them (m). */
+const DRAINER_GROOVES = 5;
+const DRAINER_MIN = 0.15;
 /** Rear upstand of a sink table: depth taken from the top and height above it. */
 const UPSTAND = 0.05;
 const UPSTAND_HEIGHT = 0.04;
@@ -321,11 +432,33 @@ const handwash: Builder = (p, s) => {
 };
 
 /** Cooking body: steel cabinet with a control strip on top of the front and a dark top. */
-function cookingBody(p: Parts, s: Size, topMat: MaterialId, ovenDoor: boolean, holes: readonly Hole[] = []): void {
+function cookingBody(p: Parts, s: Size, topMat: MaterialId, ovenDoor: boolean, holes: readonly Hole[] = [], knobs = 0): void {
   body(p, s, topMat, COOKTOP, holes);
   const yc = s.h - COOKTOP - CONTROLS;
   p.box("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, yc, s.h - COOKTOP - GAP, s.d / 2 - DOOR, s.d / 2 - HANDLE);
-  if (ovenDoor) doors(p, -s.w / 2, s.w / 2, PLINTH, yc, s.d, 1, "top");
+  controlKnobs(p, s.w, (yc + s.h - COOKTOP) / 2, s.d / 2 - HANDLE, s.d / 2, knobs);
+  if (ovenDoor) {
+    doors(p, -s.w / 2, s.w / 2, PLINTH, yc, s.d, 1, "top");
+    ovenWindow(p, -s.w / 2, s.w / 2, PLINTH, yc - 0.08, s.d / 2 - DOOR / 2);
+  }
+}
+
+/** A row of knobs spread over a control strip of width `w`, centred on x = 0. */
+function controlKnobs(p: Parts, w: number, y: number, zFace: number, zFront: number, count: number): void {
+  if (count <= 0) return;
+  const step = Math.min(w / count, KNOB_PITCH);
+  const x0 = -((count - 1) * step) / 2;
+  for (let i = 0; i < count; i++) p.knob(x0 + i * step, y, zFace, zFront);
+}
+/** Largest distance between two knobs on a control strip (m). */
+const KNOB_PITCH = 0.15;
+
+/** A dark glass window in an oven door whose face is at `zFace`, inside the door's frame. */
+function ovenWindow(p: Parts, x0: number, x1: number, y0: number, y1: number, zFace: number): void {
+  const mx = Math.min(0.1, (x1 - x0) * 0.15);
+  const my = 0.1;
+  if (x1 - x0 < 2 * mx + 0.1 || y1 - y0 < 2 * my + 0.1) return;
+  p.box("glassDark", x0 + mx, x1 - mx, y0 + my, y1 - my, zFace, zFace + 0.002);
 }
 
 /** Positions of cooking zones in a grid of rows and columns over the top (centres, radius). */
@@ -345,18 +478,24 @@ const ZONE_FILL = 0.32;
 const ZONE_COLUMN_WIDTH = 0.4;
 
 const range: Builder = (p, s) => {
-  cookingBody(p, s, "top", true);
   const cols = Math.max(1, Math.round(s.w / ZONE_COLUMN_WIDTH));
-  // Hotplates are recessed into the top so the model stays within the item height.
+  // One knob per hotplate and one for the oven. The top sits a little lower than the item
+  // height, so the hotplates stand proud of it (no two faces in one plane, which would flicker).
+  cookingBody(p, { ...s, h: s.h - PROUD }, "top", true, [], cols * 2 + 1);
   for (const z of zones(s, cols, 2)) p.cyl("plate", z.x, z.z, s.h - COOKTOP, s.h, z.r);
 };
 
 const induction: Builder = (p, s) => {
-  cookingBody(p, s, "ceramic", true);
   const cols = Math.max(1, Math.round(s.w / ZONE_COLUMN_WIDTH));
-  const mark = 0.002;
-  for (const z of zones(s, cols, 2)) p.cyl("zone", z.x, z.z, s.h - mark, s.h, z.r);
+  cookingBody(p, { ...s, h: s.h - PROUD }, "ceramic", true, [], cols * 2);
+  // Printed zone rings: a light disc with the black glass again inside it, each a step higher.
+  for (const z of zones(s, cols, 2)) {
+    p.cyl("zone", z.x, z.z, s.h - COOKTOP / 2, s.h - PROUD / 2, z.r);
+    p.cyl("ceramic", z.x, z.z, s.h - COOKTOP / 2, s.h, z.r * 0.9);
+  }
 };
+/** How far hotplates and zone marks stand over the cooking top (m). */
+const PROUD = 0.003;
 
 const fryer: Builder = (p, s) => {
   // Two oil basins with a basket each, side by side, open in the top.
@@ -370,7 +509,7 @@ const fryer: Builder = (p, s) => {
     const x0 = -s.w / 2 + m + i * (bw + m);
     return { x0, x1: x0 + bw, z0, z1 };
   });
-  cookingBody(p, s, "steel", true, holes);
+  cookingBody(p, s, "steel", true, holes, count);
   for (const { x0 } of holes) {
     p.box("oil", x0, x0 + bw, s.h - depth, s.h - 0.08, z0, z1);
     p.tub("steelDark", x0, x0 + bw, s.h - depth, s.h, z0, z1, SHEET / 2);
@@ -389,6 +528,8 @@ const griddle: Builder = (p, s) => {
   body(p, { ...s, h: plateTop }, "plate", 0.03);
   const yc = plateTop - 0.03 - CONTROLS;
   p.box("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, yc, plateTop - 0.03 - GAP, s.d / 2 - DOOR, s.d / 2 - HANDLE);
+  // One heating zone (and knob) per 400 mm of plate.
+  controlKnobs(p, s.w, (yc + plateTop - 0.03) / 2, s.d / 2 - HANDLE, s.d / 2, Math.max(1, Math.round(s.w / ZONE_COLUMN_WIDTH)));
   doors(p, -s.w / 2, s.w / 2, PLINTH, yc, s.d, Math.max(1, Math.round(s.w / DOOR_WIDTH)), "vertical");
   // Splash guard at the back and sides.
   p.box("steel", -s.w / 2, s.w / 2, plateTop, s.h, -s.d / 2, -s.d / 2 + SHEET);
@@ -404,6 +545,7 @@ const kettle: Builder = (p, s) => {
   p.box("steelDark", -s.w / 2, s.w / 2, 0, PLINTH, -s.d / 2, s.d / 2);
   p.box("steel", -s.w / 2, s.w / 2, PLINTH, s.h, -s.d / 2, -s.d / 2 + column);
   p.box("panelDark", -s.w / 3, s.w / 3, s.h - CONTROLS, s.h - GAP, -s.d / 2 + column, -s.d / 2 + column + GAP);
+  for (const kx of [-s.w / 6, s.w / 6]) p.knob(kx, s.h - CONTROLS / 2, -s.d / 2 + column + GAP, -s.d / 2 + column + GAP + 0.03);
   const r = Math.min(s.w, s.d - column) / 2 - 0.02;
   const cz = -s.d / 2 + column + (s.d - column) / 2;
   p.cyl("steel", 0, cz, PLINTH, s.h - 0.03, r);
@@ -449,10 +591,18 @@ const combiOven: Builder = (p, s, item) => {
   const m = 0.03;
   p.box("panelDark", doorX1 + GAP, s.w / 2 - GAP, m, s.h - m, s.d / 2 - DOOR, s.d / 2 - HANDLE);
   p.box("steel", -s.w / 2 + GAP, doorX1 - GAP, m, s.h - m, s.d / 2 - DOOR, s.d / 2 - DOOR / 2);
-  p.box("ceramic", -s.w / 2 + m * 2, doorX1 - m * 2, m * 3, s.h - m * 3, s.d / 2 - DOOR / 2, s.d / 2 - DOOR / 2 + GAP);
+  p.box("glassDark", -s.w / 2 + m * 2, doorX1 - m * 2, m * 3, s.h - m * 3, s.d / 2 - DOOR / 2, s.d / 2 - DOOR / 2 + GAP);
   p.box("glass", -s.w / 2 + m * 2, doorX1 - m * 2, m * 3, s.h - m * 3, s.d / 2 - DOOR / 2 + GAP, s.d / 2 - HANDLE);
   const len = Math.min(0.5, s.h * 0.4);
   p.box("handle", doorX1 - m * 1.5, doorX1 - m * 1.5 + HANDLE, s.h / 2 - len / 2, s.h / 2 + len / 2, s.d / 2 - HANDLE, s.d / 2);
+  // Touch display and the central dial on the control panel.
+  const px = (doorX1 + s.w / 2) / 2;
+  const pw = panelW - 0.05;
+  const top = Math.min(s.h - m - 0.03, 1);
+  if (pw > 0.05 && top - 0.3 > m) {
+    p.box("glassDark", px - pw / 2, px + pw / 2, top - Math.min(0.2, s.h * 0.25), top, s.d / 2 - HANDLE, s.d / 2 - HANDLE + 0.003);
+    p.knob(px, top - Math.min(0.2, s.h * 0.25) - 0.08, s.d / 2 - HANDLE, s.d / 2, Math.min(0.035, pw / 2));
+  }
 };
 
 const fridge: Builder = (p, s) => {
@@ -460,6 +610,8 @@ const fridge: Builder = (p, s) => {
   p.box("steel", -s.w / 2, s.w / 2, PLINTH, s.h, -s.d / 2, s.d / 2 - DOOR);
   doors(p, -s.w / 2, s.w / 2, PLINTH, s.h - CONTROLS, s.d, 1, "vertical");
   p.box("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, s.h - CONTROLS + GAP, s.h - GAP, s.d / 2 - DOOR, s.d / 2 - HANDLE);
+  // Temperature display in the control panel.
+  p.box("glassDark", -0.06, 0.06, s.h - CONTROLS / 2 - 0.02, s.h - CONTROLS / 2 + 0.02, s.d / 2 - HANDLE, s.d / 2 - HANDLE + 0.003);
 };
 
 const counterFridge: Builder = (p, s) => {

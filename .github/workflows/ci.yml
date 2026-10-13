@@ -56,9 +56,41 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  e2e:
+    name: End-to-end tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            e2e/package-lock.json
+      - name: System packages (WebKitGTK, WebDriver, Xvfb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev webkit2gtk-driver xvfb x11-utils
+      - run: cargo install tauri-driver --locked
+      - run: npm ci --prefix ui
+      - run: npm ci --prefix e2e
+      # Builds the UI and the debug app with the UI embedded (the test hooks exist only in debug
+      # builds), then runs every test file against it on a private Xvfb display.
+      - name: End-to-end tests against the desktop app
+        run: bash e2e/run.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-screenshots
+          path: e2e/screenshots
+          if-no-files-found: ignore
+
   bundle:
     name: Bundle (${{ matrix.name }})
-    needs: [ui, core]
+    needs: [ui, core, e2e]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

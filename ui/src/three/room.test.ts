@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { lRoom, rectRoom } from "../model/geometry";
-import type { Opening, Room } from "../model/types";
+import type { Opening, Partition, Room } from "../model/types";
 import { applyCutaway, buildRoomObject, disposeRoomObject, insideRuns, wallPieces } from "./room";
 
 const door: Opening = { id: "d", kind: "door", wall: 2, offset: 6800, width: 1010, height: 2135, sill: 0 };
 const windowN: Opening = { id: "w", kind: "window", wall: 0, offset: 4000, width: 1500, height: 1200, sill: 1000 };
 
 function room(openings: Opening[] = [door, windowN], points = rectRoom(8000, 6000)): Room {
-  return { points, height: 3000, wallThickness: 240, openings };
+  return { points, height: 3000, wallThickness: 240, openings, partitions: [] };
 }
 
 function wallMeshes(g: THREE.Object3D): THREE.Mesh[] {
@@ -130,5 +130,108 @@ describe("insideRuns", () => {
     const pts = lRoom(8000, 6000, 3000, 2000);
     expect(insideRuns(pts, 6000, "x")).toEqual([[0, 4000]]);
     expect(insideRuns(pts, 5000, "y")).toEqual([[0, 5000]]);
+  });
+});
+
+describe("buildRoomObject partitions", () => {
+  /** North-south at x 3000 from the north wall's face, 100 mm thick, 2.4 m high. */
+  const N: Partition = { id: "n", a: { x: 3000, y: 0 }, b: { x: 3000, y: 4000 }, thickness: 100, height: 2400 };
+
+  function withPartition(openings: Opening[] = []): Room {
+    return { ...room([door]), partitions: [N], openings: [door, ...openings] };
+  }
+  const partitionGroup = (g: THREE.Object3D) => g.children.find((c) => c.userData.partition === "n")!;
+  const meshesOf = (g: THREE.Object3D, name?: string) => {
+    const out: THREE.Mesh[] = [];
+    g.traverse((o) => {
+      if (o instanceof THREE.Mesh && (name === undefined ? o.name === "" : o.name === name)) out.push(o);
+    });
+    return out;
+  };
+
+  it("builds a partition as a wall box to its height, flush with the wall it starts at, marked with its id", () => {
+    const g = buildRoomObject(withPartition());
+    const group = partitionGroup(g);
+    expect(group.name).toBe("partition-n");
+    const b = boxOf(group);
+    expect(b.min.x).toBeCloseTo(2.95, 4);
+    expect(b.max.x).toBeCloseTo(3.05, 4);
+    expect(b.min.z).toBeCloseTo(0, 4);
+    expect(b.max.z).toBeCloseTo(4, 4);
+    expect(b.max.y).toBeCloseTo(2.4, 4);
+    group.traverse((o) => expect(o.userData.partition).toBe("n"));
+    // Not an outer wall: the cutaway leaves it alone.
+    expect(group.userData.wall).toBeUndefined();
+  });
+
+  it("cuts a door out of a partition and keeps the wall above it", () => {
+    const g = buildRoomObject(withPartition([{ id: "pd", kind: "door", wall: 0, partition: "n", offset: 2000, width: 900, height: 2100, sill: 0 }]));
+    const meshes = meshesOf(partitionGroup(g));
+    const hole = new THREE.Box3(new THREE.Vector3(2.96, 0.01, 1.56), new THREE.Vector3(3.04, 2.09, 2.44));
+    const above = new THREE.Box3(new THREE.Vector3(2.96, 2.15, 1.56), new THREE.Vector3(3.04, 2.35, 2.44));
+    expect(meshes.some((m) => boxOf(m).intersectsBox(hole))).toBe(false);
+    expect(meshes.some((m) => boxOf(m).intersectsBox(above))).toBe(true);
+    // The outer walls are not cut by an opening that only names wall 0.
+    const north = g.children.find((c) => c.userData.wall === 0)!;
+    expect(meshesOf(north)).toHaveLength(1);
+  });
+
+  it("gives a window in a partition a pane and a hatch a stainless shelf on both sides", () => {
+    const g = buildRoomObject(
+      withPartition([
+        { id: "pw", kind: "window", wall: 0, partition: "n", offset: 1000, width: 1000, height: 1000, sill: 1000 },
+        { id: "ph", kind: "hatch", wall: 0, partition: "n", offset: 3000, width: 1200, height: 800, sill: 900 },
+      ]),
+    );
+    const group = partitionGroup(g);
+    const panes = meshesOf(group, "pane");
+    expect(panes).toHaveLength(1);
+    expect(boxOf(panes[0]).getCenter(new THREE.Vector3()).x).toBeCloseTo(3, 4);
+    const shelves = meshesOf(group, "shelf");
+    expect(shelves).toHaveLength(1);
+    const sb = boxOf(shelves[0]);
+    // 100 mm wall plus 250 mm on each side; top at the sill, 30 mm thick, 1200 mm wide.
+    expect(sb.min.x).toBeCloseTo(2.7, 4);
+    expect(sb.max.x).toBeCloseTo(3.3, 4);
+    expect(sb.max.y).toBeCloseTo(0.9, 4);
+    expect(sb.min.y).toBeCloseTo(0.87, 4);
+    expect(sb.max.z - sb.min.z).toBeCloseTo(1.2, 4);
+    const steel = shelves[0].material as THREE.MeshStandardMaterial;
+    expect(steel.metalness).toBeGreaterThan(0.5);
+    // The hatch is cut out above its sill.
+    const hole = new THREE.Box3(new THREE.Vector3(2.96, 0.91, 2.41), new THREE.Vector3(3.04, 1.69, 3.59));
+    expect(meshesOf(group).some((m) => boxOf(m).intersectsBox(hole))).toBe(false);
+  });
+
+  it("puts a hatch shelf through an outer wall too, reaching outside", () => {
+    const g = buildRoomObject(room([{ id: "h", kind: "hatch", wall: 1, offset: 3000, width: 1200, height: 800, sill: 900 }]));
+    const east = g.children.find((c) => c.userData.wall === 1)!;
+    const shelves = meshesOf(east, "shelf");
+    expect(shelves).toHaveLength(1);
+    const sb = boxOf(shelves[0]);
+    expect(sb.min.x).toBeCloseTo(7.75, 4);
+    expect(sb.max.x).toBeCloseTo(8.49, 4);
+  });
+
+  it("keeps partitions visible in cutaway and disposes their geometry and materials", () => {
+    const g = buildRoomObject(withPartition([{ id: "ph", kind: "hatch", wall: 0, partition: "n", offset: 3000, width: 1200, height: 800, sill: 900 }]));
+    applyCutaway(g, new THREE.Vector3(12, 5, 12), true);
+    expect(partitionGroup(g).visible).toBe(true);
+    let geos = 0;
+    let mats = 0;
+    const counted = new Set<THREE.Material>();
+    partitionGroup(g).traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      o.geometry.addEventListener("dispose", () => geos++);
+      const m = o.material as THREE.Material;
+      if (!counted.has(m)) {
+        counted.add(m);
+        m.addEventListener("dispose", () => mats++);
+      }
+    });
+    disposeRoomObject(g);
+    expect(geos).toBe(meshesOf(partitionGroup(g)).length + 1);
+    // Wall and steel material.
+    expect(mats).toBe(2);
   });
 });

@@ -3,12 +3,15 @@
 //
 // Each wall is one group with `userData.wall` (its index) and `userData.inward` (unit normal
 // into the room, three coordinates), so a view can hide the walls between the camera and the
-// room (`applyCutaway`). Unlike the item models, the room owns its geometry and materials:
-// dispose a replaced room with `disposeRoomObject`.
+// room (`applyCutaway`). Partitions are groups with `userData.partition` (their id, also on
+// every mesh in them, for picking); they stand inside the room and always stay visible. Unlike
+// the item models, the room owns its geometry and materials: dispose a replaced room with
+// `disposeRoomObject`.
 
 import * as THREE from "three";
-import type { Opening, Room, Vec2 } from "../model/types";
+import type { Opening, Partition, Room, Vec2 } from "../model/types";
 import { add, bounds, cross, EPS, scale, sub, walls, type Wall } from "../model/geometry";
+import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, HATCH_SHELF_THICKNESS, partitionBand, partitionLength } from "../model/partitions";
 import { MM_PER_UNIT } from "./meshes";
 
 /** Spacing of the floor grid lines (mm): one metre, the usual tile module for orientation. */
@@ -23,6 +26,8 @@ const COLORS = {
   grid: 0xb3afa8,
   wall: 0xf2f0ec,
   glass: 0xa9c0cc,
+  /** Brushed stainless steel of hatch shelves. */
+  steel: 0xc4c8cc,
 };
 
 const m = (mm: number) => mm / MM_PER_UNIT;
@@ -47,13 +52,20 @@ export function buildRoomObject(room: Room): THREE.Group {
     opacity: 0.3,
     depthWrite: false,
   });
+  const steelMat = new THREE.MeshStandardMaterial({ color: COLORS.steel, roughness: 0.35, metalness: 0.6 });
+  const mats: Materials = { wall: wallMat, glass: glassMat, steel: steelMat };
   const ws = walls(room);
   const outer = outerCorners(ws, room.wallThickness);
   for (const w of ws) {
     // A repeated corner (an old or hand-edited file) has no wall to build; its corner stays in `outer`.
     if (w.length < EPS) continue;
-    const openings = room.openings.filter((o) => o.wall === w.index);
-    g.add(buildWall(w, outer[w.index], outer[(w.index + 1) % ws.length], room, openings, wallMat, glassMat));
+    const openings = room.openings.filter((o) => o.partition === undefined && o.wall === w.index);
+    g.add(buildWall(w, outer[w.index], outer[(w.index + 1) % ws.length], room, openings, mats));
+  }
+  for (const p of room.partitions) {
+    if (partitionLength(p) < EPS) continue;
+    const openings = room.openings.filter((o) => o.partition === p.id).map((o) => clampPartitionOpening(p, o));
+    g.add(buildPartition(room, p, openings, mats));
   }
   return g;
 }
@@ -169,15 +181,13 @@ interface Piece {
   y1: number;
 }
 
-function buildWall(
-  w: Wall,
-  outerStart: Vec2,
-  outerEnd: Vec2,
-  room: Room,
-  openings: readonly Opening[],
-  wallMat: THREE.Material,
-  glassMat: THREE.Material,
-): THREE.Group {
+interface Materials {
+  wall: THREE.Material;
+  glass: THREE.Material;
+  steel: THREE.Material;
+}
+
+function buildWall(w: Wall, outerStart: Vec2, outerEnd: Vec2, room: Room, openings: readonly Opening[], mats: Materials): THREE.Group {
   const g = new THREE.Group();
   g.name = `wall-${w.index}`;
   g.userData.wall = w.index;
@@ -192,26 +202,77 @@ function buildWall(
 
   for (const p of wallPieces(w.length, room.height, openings)) {
     const geo = extrudeOutline([inner(p.s0), inner(p.s1), outer(p.s1), outer(p.s0)], p.y0, p.y1);
-    const mesh = new THREE.Mesh(geo, wallMat);
+    const mesh = new THREE.Mesh(geo, mats.wall);
     mesh.receiveShadow = true;
     mesh.userData.wall = w.index;
     g.add(mesh);
   }
 
-  for (const o of openings) {
-    if (o.kind !== "window") continue;
-    const [s0, s1] = span(o, w.length);
-    const off = (d: number) => (s: number) => sub(inner(s), scale(w.inward, d));
-    const a = off(t / 2 - (PANE * MM_PER_UNIT) / 2);
-    const b = off(t / 2 + (PANE * MM_PER_UNIT) / 2);
-    const top = Math.min(o.sill + o.height, room.height);
-    const geo = extrudeOutline([a(s0), a(s1), b(s1), b(s0)], o.sill, top);
-    const pane = new THREE.Mesh(geo, glassMat);
-    pane.name = "pane";
-    pane.userData.wall = w.index;
-    g.add(pane);
+  // Across the band: 0 at the inner face, -t at the outer face (along the inward normal).
+  const across = (s: number, k: number) => add(inner(s), scale(w.inward, k));
+  for (const mesh of openingFittings(openings, w.length, room.height, across, 0, -t, mats)) {
+    mesh.userData.wall = w.index;
+    g.add(mesh);
   }
   return g;
+}
+
+/** A partition: its band (joined at walls and partitions) to its height, with the openings cut out. */
+function buildPartition(room: Room, p: Partition, openings: readonly Opening[], mats: Materials): THREE.Group {
+  const g = new THREE.Group();
+  g.name = `partition-${p.id}`;
+  g.userData.partition = p.id;
+  const band = partitionBand(room, p);
+  for (const piece of wallPieces(band.length, p.height, openings)) {
+    const mesh = new THREE.Mesh(extrudeOutline(bandPiece(band, piece.s0, piece.s1), piece.y0, piece.y1), mats.wall);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    g.add(mesh);
+  }
+  const across = (s: number, k: number) => add(add(p.a, scale(band.dir, s)), scale(band.left, k));
+  for (const mesh of openingFittings(openings, band.length, p.height, across, p.thickness / 2, -p.thickness / 2, mats)) g.add(mesh);
+  g.traverse((o) => (o.userData.partition = p.id));
+  return g;
+}
+
+/**
+ * Panes in windows and the shelves of hatches. `across(s, k)` is the plan point `s` along the
+ * wall and `k` across it; the band reaches from `near` to `far` across.
+ */
+function openingFittings(
+  openings: readonly Opening[],
+  length: number,
+  height: number,
+  across: (s: number, k: number) => Vec2,
+  near: number,
+  far: number,
+  mats: Materials,
+): THREE.Mesh[] {
+  const out: THREE.Mesh[] = [];
+  const mid = (near + far) / 2;
+  const half = (PANE * MM_PER_UNIT) / 2;
+  for (const o of openings) {
+    const [s0, s1] = span(o, length);
+    if (o.kind === "window") {
+      const top = Math.min(o.sill + o.height, height);
+      if (top <= o.sill) continue;
+      const geo = extrudeOutline([across(s0, mid + half), across(s1, mid + half), across(s1, mid - half), across(s0, mid - half)], o.sill, top);
+      const pane = new THREE.Mesh(geo, mats.glass);
+      pane.name = "pane";
+      out.push(pane);
+    } else if (o.kind === "hatch" && o.sill < height) {
+      // The stainless counter through the opening, reaching out on both sides.
+      const k0 = near + Math.sign(near - far) * HATCH_SHELF_DEPTH;
+      const k1 = far + Math.sign(far - near) * HATCH_SHELF_DEPTH;
+      const geo = extrudeOutline([across(s0, k0), across(s1, k0), across(s1, k1), across(s0, k1)], o.sill - HATCH_SHELF_THICKNESS, o.sill);
+      const shelf = new THREE.Mesh(geo, mats.steel);
+      shelf.name = "shelf";
+      shelf.castShadow = true;
+      shelf.receiveShadow = true;
+      out.push(shelf);
+    }
+  }
+  return out;
 }
 
 /** An opening's extent along its wall, clamped to the wall (mm). */

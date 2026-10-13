@@ -1,0 +1,120 @@
+/* The room mode of the floor plan (views/RoomEditLayer.tsx): handles, tints of the hovered and
+   selected walls, partitions and openings, wall lengths, snap guides, the selection frame and the
+   walls being drawn. Selection is a neutral tint and a filled handle, never a colored frame. */
+
+.room-layer {
+  position: absolute;
+  inset: 0;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.room-layer.is-over-handle {
+  cursor: move;
+}
+
+.room-layer.is-over-part {
+  cursor: pointer;
+}
+
+.room-layer.is-drawing {
+  cursor: crosshair;
+}
+
+/* Equipment steps back while the room is edited. */
+.view2d.is-room-mode [data-item] {
+  opacity: 0.35;
+}
+
+.room-tint {
+  stroke: none;
+  pointer-events: none;
+}
+
+.room-tint.is-hover {
+  fill: var(--draw-hover-fill);
+}
+
+.room-tint.is-selected {
+  fill: var(--draw-selected-fill);
+}
+
+.room-handle {
+  fill: var(--draw-handle-fill);
+  stroke: var(--draw-handle);
+  stroke-width: 1.5px;
+  pointer-events: none;
+}
+
+.room-handle.is-hover {
+  fill: var(--draw-hover-fill);
+  stroke-width: 2px;
+}
+
+.room-handle.is-selected {
+  fill: var(--draw-handle);
+}
+
+.room-label {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  fill: var(--draw-dim);
+  /* A halo in the paper color keeps the numbers readable over lines. */
+  stroke: var(--draw-paper);
+  stroke-width: 3px;
+  paint-order: stroke;
+  pointer-events: none;
+}
+
+.room-label.is-live {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  fill: var(--draw-line);
+}
+
+.room-guide {
+  stroke: var(--draw-detail);
+  stroke-width: 1px;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.room-snap {
+  fill: none;
+  stroke: var(--draw-line);
+  stroke-width: 1.5px;
+  pointer-events: none;
+}
+
+.room-cursor {
+  fill: var(--draw-line);
+  pointer-events: none;
+}
+
+.room-frame {
+  fill: var(--draw-hover-fill);
+  stroke: var(--draw-detail);
+  stroke-width: 1px;
+  pointer-events: none;
+}
+
+.room-frame.is-crossing {
+  stroke-dasharray: 5 4;
+}
+
+.room-draft {
+  fill: none;
+  stroke: var(--draw-line);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.room-draft-band {
+  fill: var(--draw-hover-fill);
+  stroke: var(--draw-detail);
+  stroke-width: 1px;
+  pointer-events: none;
+}

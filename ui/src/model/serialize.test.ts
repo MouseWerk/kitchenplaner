@@ -29,7 +29,7 @@ describe("serializeProject", () => {
   it("writes pretty JSON with a trailing newline in a fixed key order", () => {
     const text = serializeProject(sample());
     expect(text.endsWith("}\n")).toBe(true);
-    expect(text.startsWith('{\n  "format": "kitchenplaner",\n  "version": 1,\n  "info": {')).toBe(true);
+    expect(text.startsWith('{\n  "format": "kitchenplaner",\n  "version": 2,\n  "info": {')).toBe(true);
     // Shuffled keys in memory give the same file.
     const p = sample();
     const shuffled = { ...p, items: p.items.map((it) => Object.fromEntries(Object.entries(it).reverse()) as typeof it) };
@@ -95,7 +95,7 @@ describe("parseProject", () => {
     });
     const p = parseProject("﻿" + text);
     expect(p).not.toHaveProperty("extra");
-    expect(p.room).toEqual({ points: [{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 3000 }], height: 3000, wallThickness: 240, openings: [] });
+    expect(p.room).toEqual({ points: [{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 3000 }], height: 3000, wallThickness: 240, openings: [], partitions: [] });
     expect(p.items[0]).toEqual({ id: "f", catalogId: "future-robot", name: "future-robot", x: 100, y: 200, rotation: 0, width: 500, depth: 400, height: 900, elevation: 0, connections: {} });
     // Sizes missing in the file come from the catalog.
     expect(p.items[1]).toMatchObject({ catalogId: "table", width: 1200, depth: 700, height: 900 });
@@ -180,5 +180,143 @@ describe("parseProject", () => {
       delete r.items[0].width;
     });
     expect(errorOf(text).key).toBe("error.invalid");
+  });
+});
+
+/** The sample with a store behind a partition: a door and a hatch in it, a hatch in the east wall. */
+function withPartitions() {
+  const p = sample();
+  p.room.partitions = [
+    { id: "p1", a: { x: 5000, y: 0 }, b: { x: 5000, y: 6000 }, thickness: 100, height: 3000 },
+    { id: "p2", a: { x: 5000, y: 3000 }, b: { x: 8000, y: 3000 }, thickness: 100, height: 1200 },
+  ];
+  p.room.openings = [
+    { id: "d2", kind: "door", wall: 0, partition: "p1", offset: 1000, width: 900, height: 2100, sill: 0 },
+    p.room.openings[0],
+    { id: "h1", kind: "hatch", wall: 0, partition: "p1", offset: 4500, width: 1200, height: 800, sill: 900 },
+    { id: "h2", kind: "hatch", wall: 1, offset: 1500, width: 1200, height: 800, sill: 900 },
+  ];
+  return p;
+}
+
+function v1(edit: (raw: any) => void = () => {}): string {
+  const raw = JSON.parse(serializeProject(sample()));
+  raw.version = 1;
+  delete raw.room.partitions;
+  edit(raw);
+  return JSON.stringify(raw);
+}
+
+describe("format version 2", () => {
+  it("writes version 2 with the partitions and the openings' partition after the wall", () => {
+    const text = serializeProject(withPartitions());
+    const raw = JSON.parse(text);
+    expect(raw.version).toBe(2);
+    expect(raw.room.partitions[0]).toEqual({ id: "p1", a: { x: 5000, y: 0 }, b: { x: 5000, y: 6000 }, thickness: 100, height: 3000 });
+    expect(Object.keys(raw.room.openings[0])).toEqual(["id", "kind", "wall", "partition", "offset", "width", "height", "sill"]);
+    // Openings in outer walls carry no partition key at all.
+    expect(Object.keys(raw.room.openings[1])).not.toContain("partition");
+    expect(Object.keys(raw.room)).toEqual(["points", "height", "wallThickness", "openings", "partitions"]);
+  });
+
+  it("round-trips partitions, their openings and hatches unchanged, in their order", () => {
+    const p = withPartitions();
+    const back = parseProject(serializeProject(p));
+    expect(back).toEqual(p);
+    expect(serializeProject(back)).toBe(serializeProject(p));
+  });
+
+  it("reads a version 1 file as a room without partitions and writes it back as version 2", () => {
+    const p = parseProject(v1());
+    expect(p.version).toBe(2);
+    expect(p.room.partitions).toEqual([]);
+    expect(p.room.openings).toEqual(sample().room.openings);
+    expect(p.items).toEqual(sample().items);
+    expect(JSON.parse(serializeProject(p)).version).toBe(2);
+    // Old, new, old shape again: the content survives the migration.
+    expect(parseProject(serializeProject(p))).toEqual(p);
+  });
+
+  it("rejects a version 3 file as too new", () => {
+    expect(errorOf(withRaw((r) => (r.version = 3))).key).toBe("error.tooNew");
+  });
+
+  it("rejects damaged partitions", () => {
+    const withP = (edit: (q: any) => void) => {
+      const raw = JSON.parse(serializeProject(withPartitions()));
+      edit(raw.room.partitions[0]);
+      return JSON.stringify(raw);
+    };
+    const cases: ((q: any) => void)[] = [
+      (q) => (q.thickness = 19),
+      (q) => (q.thickness = 1001),
+      (q) => (q.thickness = "100"),
+      (q) => delete q.thickness,
+      (q) => (q.height = 0),
+      (q) => (q.height = 1e6),
+      (q) => delete q.height,
+      (q) => (q.b = { ...q.a }),
+      (q) => (q.b = { x: q.a.x + 0.5, y: q.a.y }),
+      (q) => (q.b = { x: q.a.x + 100_001, y: q.a.y }),
+      (q) => (q.a = { x: "1", y: 0 }),
+      (q) => (q.a = null),
+      (q) => delete q.b,
+    ];
+    for (const edit of cases) expect(errorOf(withP(edit)).key).toBe("error.invalid");
+    expect(errorOf(withRaw((r) => (r.room.partitions = {}))).key).toBe("error.invalid");
+    expect(errorOf(withRaw((r) => (r.room.partitions = [5]))).key).toBe("error.invalid");
+    // The limits themselves are fine.
+    expect(parseProject(withP((q) => (q.thickness = 20))).room.partitions[0].thickness).toBe(20);
+    expect(parseProject(withP((q) => (q.thickness = 1000))).room.partitions[0].thickness).toBe(1000);
+  });
+
+  it("accepts hatches and rejects a partition reference that is not a string", () => {
+    expect(parseProject(withRaw((r) => (r.room.openings[0].kind = "hatch"))).room.openings[0].kind).toBe("hatch");
+    expect(errorOf(serializeProject(withPartitions()).replace('"partition": "p1"', '"partition": 1')).key).toBe("error.invalid");
+  });
+
+  it("drops openings in a partition that does not exist and keeps the others", () => {
+    const raw = JSON.parse(serializeProject(withPartitions()));
+    raw.room.openings[0].partition = "gone";
+    const p = parseProject(JSON.stringify(raw));
+    expect(p.room.openings.map((o) => o.id)).toEqual(["door1", "h1", "h2"]);
+  });
+
+  it("clamps openings into their partition, whatever their wall index says", () => {
+    const raw = JSON.parse(serializeProject(withPartitions()));
+    // p2 is 3000 long; wall 7 does not exist but is not used for an opening in a partition.
+    raw.room.openings = [
+      { id: "x", kind: "window", wall: 7, partition: "p2", offset: 9000, width: 1000, height: 1000, sill: 900 },
+      { id: "y", kind: "passage", partition: "p2", offset: 100, width: 5000, height: 2000, sill: 0 },
+    ];
+    const p = parseProject(JSON.stringify(raw));
+    expect(p.room.openings.map((o) => [o.offset, o.width])).toEqual([
+      [2500, 1000],
+      [1500, 3000],
+    ]);
+    expect(p.room.openings[1].wall).toBe(0);
+  });
+
+  it("gives duplicate partition ids new ones and keeps the openings in the first", () => {
+    const raw = JSON.parse(serializeProject(withPartitions()));
+    raw.room.partitions[1].id = "p1";
+    raw.items[0].id = "p1";
+    const p = parseProject(JSON.stringify(raw));
+    const ids = [...p.room.partitions.map((q) => q.id), ...p.room.openings.map((o) => o.id), ...p.items.map((i) => i.id)];
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(p.room.partitions[0].id).toBe("p1");
+    expect(p.room.partitions[1].id).not.toBe("p1");
+    // The door at offset 1000 still sits in the 6 m partition p1, not clamped into the 3 m one.
+    expect(p.room.openings.find((o) => o.id === "h1")).toMatchObject({ partition: "p1", offset: 4500 });
+  });
+
+  it("keeps openings in partitions when a repeated corner is removed", () => {
+    const raw = JSON.parse(serializeProject(withPartitions()));
+    raw.room.points = [{ x: 0, y: 0 }, { x: 8000, y: 0 }, { x: 8000, y: 0 }, { x: 8000, y: 6000 }, { x: 0, y: 6000 }];
+    // The door in the south wall is wall 3 in that outline, the hatch in the east wall wall 2.
+    raw.room.openings[1].wall = 3;
+    raw.room.openings[3].wall = 2;
+    const p = parseProject(JSON.stringify(raw));
+    expect(p.room.openings).toEqual(withPartitions().room.openings);
   });
 });

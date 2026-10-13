@@ -128,7 +128,7 @@ describe("sink bowls", () => {
     const taps = (catalogId: string, width: number) => {
       let n = 0;
       buildItemObject(item(catalogId, { width })).traverse((o) => {
-        if (o instanceof THREE.Mesh && o.geometry instanceof THREE.CylinderGeometry) n++;
+        if (o instanceof THREE.Mesh && o.name === "tap") n++;
       });
       return n;
     };

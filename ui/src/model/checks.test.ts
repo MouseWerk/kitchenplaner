@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { checkProject } from "./checks";
 import { testItem, testProject } from "./testProject";
+import { lRoom } from "./geometry";
+import type { Opening, Partition } from "./types";
 
 describe("checkProject", () => {
   it("finds nothing in a clean plan", () => {
@@ -49,5 +51,57 @@ describe("checkProject", () => {
     ]);
     expect(checkProject(p).map((i) => i.key)).toEqual(["check.overlap", "check.outside", "check.doorBlocked", "check.tooHigh"]);
     expect(checkProject(p)).toEqual(checkProject(structuredClone(p)));
+  });
+});
+
+describe("checkProject partitions", () => {
+  /** From the north wall's face 3 m south at x 3000, 100 mm thick, full height. */
+  const N: Partition = { id: "n", a: { x: 3000, y: 0 }, b: { x: 3000, y: 3000 }, thickness: 100, height: 3000 };
+
+  function withPartitions(items: ReturnType<typeof testItem>[], partitions: Partition[], openings: Opening[] = []) {
+    const p = testProject(items);
+    p.room.partitions = partitions;
+    p.room.openings.push(...openings);
+    return p;
+  }
+
+  it("accepts a partition joined to the walls and items standing against it", () => {
+    // A table with its side against the partition's east face (x 3050 to 4250).
+    expect(checkProject(withPartitions([testItem("t", "table", 3650, 1000)], [N]))).toEqual([]);
+    // From wall face to wall face across the room, and into the wall's middle.
+    const across: Partition = { id: "x", a: { x: -120, y: 4000 }, b: { x: 8000, y: 4000 }, thickness: 100, height: 3000 };
+    expect(checkProject(withPartitions([], [across]))).toEqual([]);
+  });
+
+  it("reports floor items standing in a partition", () => {
+    const p = withPartitions([testItem("t", "table", 3400, 1000), testItem("ok", "table", 5000, 1000)], [N]);
+    expect(checkProject(p)).toEqual([{ key: "check.partitionOverlap", vars: { pos: 1 }, itemIds: ["t"], partitionIds: ["n"] }]);
+  });
+
+  it("lets overhead items hang above a half-height partition, but not cross a full one", () => {
+    const shelf = testItem("s", "wall-shelf", 3000, 1500, 90);
+    expect(checkProject(withPartitions([shelf], [{ ...N, height: 1200 }]))).toEqual([]);
+    expect(checkProject(withPartitions([shelf], [N])).map((i) => i.key)).toEqual(["check.partitionOverlap"]);
+  });
+
+  it("reports partitions reaching outside the room", () => {
+    const out: Partition = { id: "o", a: { x: 4000, y: 3000 }, b: { x: 9000, y: 3000 }, thickness: 100, height: 3000 };
+    expect(checkProject(withPartitions([], [N, out]))).toEqual([{ key: "check.partitionOutside", vars: {}, itemIds: [], partitionIds: ["o"] }]);
+  });
+
+  it("reports a partition across the notch of an L-shaped room, though both ends are inside", () => {
+    const p = withPartitions([], [{ id: "d", a: { x: 4000, y: 5000 }, b: { x: 7000, y: 3000 }, thickness: 100, height: 3000 }]);
+    p.room.points = lRoom(8000, 6000, 3000, 2000);
+    p.room.openings = [];
+    expect(checkProject(p).map((i) => i.key)).toEqual(["check.partitionOutside"]);
+  });
+
+  it("reports floor items in front of a door in a partition, on the side it opens to", () => {
+    // N runs south: its door opens to the left, east. The door spans y 1000 to 1900.
+    const door: Opening = { id: "d", kind: "door", wall: 0, partition: "n", offset: 1450, width: 900, height: 2100, sill: 0 };
+    const east = testItem("e", "table", 3650, 1450, 90);
+    const west = testItem("w", "table", 2600, 1450, 90);
+    const p = withPartitions([east, west], [N], [door]);
+    expect(checkProject(p)).toEqual([{ key: "check.doorBlocked", vars: { pos: 1 }, itemIds: ["e"] }]);
   });
 });

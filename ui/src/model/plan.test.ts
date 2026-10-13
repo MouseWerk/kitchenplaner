@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { planDrawing } from "./plan";
 import { area, bounds, pointInPolygon } from "./geometry";
 import { testItem, testProject } from "./testProject";
+import type { Opening, Partition } from "./types";
 import { expandDim, type ArcShape, type DimShape, type PolyShape, type Shape, type TextShape } from "../render/drawing";
 
 const ALL = { showNames: true, showDims: true };
@@ -149,5 +150,76 @@ describe("planDrawing items", () => {
     const p = testProject([{ ...testItem("u", "table", 1000, 350), catalogId: "future-thing" }]);
     const shapes = ofItem(planDrawing(p, NONE).shapes, "u");
     expect(polys(shapes).some((s) => s.fill === "item")).toBe(true);
+  });
+});
+
+describe("planDrawing partitions", () => {
+  /** A full-height partition from the north wall's face 2 m into the room, 100 mm thick. */
+  const N: Partition = { id: "n", a: { x: 3000, y: 0 }, b: { x: 3000, y: 2000 }, thickness: 100, height: 3000 };
+
+  function withPartitions(partitions: Partition[], openings: Opening[] = []) {
+    const p = testProject();
+    p.room.partitions = partitions;
+    p.room.openings = [...p.room.openings, ...openings];
+    return p;
+  }
+  const bands = (s: Shape[]) => polys(s).filter((x) => x.closed && x.pen === "wall" && x.fill !== "wall");
+  const partitionPieces = (p: ReturnType<typeof withPartitions>) => polys(planDrawing(p, NONE).shapes).filter((s) => s.closed && s.pen === "wall").slice(1);
+
+  it("draws a full-height partition as a wall band flush with the wall face it starts at", () => {
+    const pieces = partitionPieces(withPartitions([N]));
+    expect(pieces).toHaveLength(1);
+    expect(pieces[0].fill).toBe("wall");
+    expect(bounds(pieces[0].pts)).toEqual({ minX: 2950, minY: 0, maxX: 3050, maxY: 2000 });
+    expect(area(pieces[0].pts)).toBeCloseTo(2000 * 100, 3);
+    // The outer wall ring is unchanged.
+    const ring = polys(planDrawing(withPartitions([N]), NONE).shapes)[0];
+    expect(area(ring.pts)).toBeCloseTo(8480 * 6480 - 8000 * 6000 - 1010 * 240, 3);
+  });
+
+  it("draws a partition lower than the room lighter, on the same pen", () => {
+    const shapes = planDrawing(withPartitions([{ ...N, height: 1100 }]), NONE).shapes;
+    expect(bands(shapes)).toHaveLength(1);
+    expect(bands(shapes)[0].fill).toBe("item-dark");
+  });
+
+  it("joins a T without overlap: the branch stops at the face of the partition it meets", () => {
+    const E: Partition = { id: "e", a: { x: 3000, y: 1000 }, b: { x: 6000, y: 1000 }, thickness: 100, height: 3000 };
+    const pieces = partitionPieces(withPartitions([N, E]));
+    expect(pieces).toHaveLength(2);
+    expect(bounds(pieces[1].pts).minX).toBeCloseTo(3050);
+    expect(pieces.reduce((s, q) => s + area(q.pts), 0)).toBeCloseTo(2000 * 100 + 2950 * 100, 3);
+  });
+
+  it("splits the band at its openings and draws a door swinging to the left of a→b, hinged at the start", () => {
+    // N runs south; left of south is east. The door spans y 500 to 1400.
+    const door: Opening = { id: "d", kind: "door", wall: 0, partition: "n", offset: 950, width: 900, height: 2100, sill: 0 };
+    const shapes = planDrawing(withPartitions([N], [door]), NONE).shapes;
+    const pieces = polys(shapes).filter((s) => s.closed && s.pen === "wall").slice(1);
+    expect(pieces.map((q) => [bounds(q.pts).minY, bounds(q.pts).maxY])).toEqual([
+      [0, 500],
+      [1400, 2000],
+    ]);
+    const arc = shapes.filter((s): s is ArcShape => s.t === "arc" && s.pen === "swing").find((a) => a.c.x > 2000)!;
+    expect(arc.c.x).toBeCloseTo(3050);
+    expect(arc.c.y).toBeCloseTo(500);
+    const mid = ((arc.a0 + arc.a1) / 2) * (Math.PI / 180);
+    expect(arc.c.x + arc.r * Math.cos(mid)).toBeGreaterThan(3050);
+    // The north wall keeps its full band: the opening's wall index 0 does not cut it.
+    expect(polys(shapes).filter((s) => s.fill === "wall" && bounds(s.pts).minY < 0)).toHaveLength(1);
+  });
+
+  it("draws a hatch as a sill double line with a shelf on both sides, in a partition and in an outer wall", () => {
+    const inPartition: Opening = { id: "h", kind: "hatch", wall: 0, partition: "n", offset: 1000, width: 1200, height: 800, sill: 900 };
+    const inWall: Opening = { id: "h2", kind: "hatch", wall: 1, offset: 3000, width: 1200, height: 800, sill: 900 };
+    const shapes = planDrawing(withPartitions([N], [inPartition, inWall]), NONE).shapes;
+    const shelves = polys(shapes).filter((s) => s.pen === "detail" && !s.itemId);
+    expect(shelves).toHaveLength(4);
+    // In the partition: the shelves reach 250 mm past each face, x 3300 and 2700.
+    const xs = shelves.map((s) => Math.round(s.pts[1].x)).sort((a, b) => a - b);
+    expect(xs).toEqual([2700, 3300, 7750, 8490]);
+    // The sill edges on both faces of the partition.
+    const sills = polys(shapes).filter((s) => s.pen === "opening" && s.pts.length === 2 && Math.abs(s.pts[0].x - s.pts[1].x) < 1e-6 && s.pts[0].x > 2000 && s.pts[0].x < 4000);
+    expect(sills.map((s) => Math.round(s.pts[0].x)).sort()).toEqual([2950, 3050]);
   });
 });
