@@ -3,7 +3,7 @@
 
 import { bounds, footprint, normalizeAngle, rad, round } from "../model/geometry";
 import { newId } from "../model/project";
-import type { Item, Vec2 } from "../model/types";
+import type { Item, Project, Vec2 } from "../model/types";
 import { selectedItems, useStore, type AppState } from "../store/store";
 
 /** Offset of a duplicate from its original (mm), so both stay visible. */
@@ -68,19 +68,71 @@ export function rotateItemAround(it: Item, pivot: Vec2, deg: number): Pick<Item,
 }
 
 /**
+ * The state before an operator (a G or R operator, a mouse drag in the plan, the room mode or the
+ * 3D view): what a cancel puts back. A cancel restores it only while the store still holds the
+ * operator's own last result: an open, a new project or an edit from the inspector in between
+ * stays, and a save in between leaves the project marked as changed when what is shown is no
+ * longer what was written.
+ */
+export interface OperatorSnapshot {
+  before: Pick<AppState, "project" | "past" | "future" | "dirty" | "selection" | "mode" | "loadCount" | "saveCount">;
+  /** The project as the operator last left it. */
+  last: Project;
+}
+
+export function takeSnapshot(): OperatorSnapshot {
+  const { project, past, future, dirty, selection, mode, loadCount, saveCount } = useStore.getState();
+  return { before: { project, past, future, dirty, selection, mode, loadCount, saveCount }, last: project };
+}
+
+/** Notes the store's project as the operator's own result (after each of its changes). */
+export function noteOperatorChange(s: OperatorSnapshot) {
+  s.last = useStore.getState().project;
+}
+
+/** Puts back the state before the operator, as far as it is still the operator's to put back. */
+export function restoreSnapshot(s: OperatorSnapshot) {
+  const st = useStore.getState();
+  const b = s.before;
+  if (st.loadCount !== b.loadCount || st.project !== s.last) return;
+  const saved = st.saveCount !== b.saveCount;
+  useStore.setState({
+    project: b.project,
+    past: b.past,
+    future: b.future,
+    // After a save the file holds the operator's result: shown is the state before it.
+    dirty: saved ? b.project !== st.project : b.dirty,
+    // The selection belongs to its mode; a switch in between already set the new mode's one.
+    ...(st.mode === b.mode ? { selection: b.selection } : {}),
+  });
+}
+
+/** The cancel of the running operator, so the file commands can end it before they act. */
+let activeCancel: (() => void) | null = null;
+
+/** Registers the cancel of an operator that just started; returns its unregister for the end. */
+export function registerOperator(cancel: () => void): () => void {
+  activeCancel = cancel;
+  return () => {
+    if (activeCancel === cancel) activeCancel = null;
+  };
+}
+
+/** Cancels the running operator as Escape would; nothing when none runs. */
+export function cancelActiveOperator() {
+  const cancel = activeCancel;
+  activeCancel = null;
+  cancel?.();
+}
+
+/**
  * A running transform of items (a G or R operator, a mouse drag): one undo step however often
  * it changes the items, and a cancel brings back exactly the state before it, without an undo
  * step. Every update is computed from the items as they were at the start.
  */
-export interface TransformSession {
-  before: Pick<AppState, "project" | "past" | "future" | "dirty" | "selection">;
+export interface TransformSession extends OperatorSnapshot {
   /** The transformed items as they were at the start, by id. */
   origin: Map<string, Item>;
-}
-
-function snapshot(): TransformSession["before"] {
-  const { project, past, future, dirty, selection } = useStore.getState();
-  return { project, past, future, dirty, selection };
 }
 
 /** Starts transforming the selected items; null when nothing is selected. */
@@ -88,9 +140,9 @@ export function beginTransform(): TransformSession | null {
   const st = useStore.getState();
   const items = selectedItems(st);
   if (items.length === 0) return null;
-  const before = snapshot();
+  const snap = takeSnapshot();
   st.beginGesture();
-  return { before, origin: new Map(items.map((i) => [i.id, i])) };
+  return { ...snap, origin: new Map(items.map((i) => [i.id, i])) };
 }
 
 /**
@@ -101,11 +153,13 @@ export function beginDuplicate(): TransformSession | null {
   const st = useStore.getState();
   const copies = copiesOf(selectedItems(st), 0);
   if (copies.length === 0) return null;
-  const before = snapshot();
+  const snap = takeSnapshot();
   st.beginGesture();
   st.change((p) => ({ ...p, items: [...p.items, ...copies] }), { gesture: true });
   st.select({ items: copies.map((c) => c.id) });
-  return { before, origin: new Map(copies.map((i) => [i.id, i])) };
+  const s = { ...snap, origin: new Map(copies.map((i) => [i.id, i])) };
+  noteOperatorChange(s);
+  return s;
 }
 
 /** Sets the transformed items from their start state. */
@@ -114,6 +168,7 @@ export function applyTransform(s: TransformSession, fn: (orig: Item) => Partial<
     const orig = s.origin.get(it.id);
     return orig ? fn(orig) : {};
   }, { gesture: true });
+  noteOperatorChange(s);
 }
 
 /** Ends the transform and keeps the result; a transform that changed nothing leaves no undo step. */
@@ -126,15 +181,11 @@ export function confirmTransform(s: TransformSession) {
   });
   // A duplicate that did not move still counts: it added items.
   const added = st.project.items.length !== s.before.project.items.length;
-  if (unchanged && !added) restore(s);
+  if (unchanged && !added) restoreSnapshot(s);
 }
 
 /** Ends the transform and restores everything as it was before it (no undo step). */
 export function cancelTransform(s: TransformSession) {
   useStore.getState().endGesture();
-  restore(s);
-}
-
-function restore(s: TransformSession) {
-  useStore.setState({ ...s.before });
+  restoreSnapshot(s);
 }

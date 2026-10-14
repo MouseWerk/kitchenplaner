@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { CATALOG } from "../model/catalog";
+import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
 import { testItem, testProject } from "../model/testProject";
 import { buildItemObject, itemIdOf } from "./meshes";
@@ -49,6 +49,9 @@ describe("contact shadows", () => {
     const xs = o.outer.map((p) => p.x);
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(table.width + 2 * CONTACT_FEATHER * 1000, 6);
     expect(contactOutline(testItem("h", "hood-wall", 4000, 3000))).toBeNull();
+    // Only units standing on the floor cast one: not a slicer on a table, not a drain in the floor.
+    expect(contactOutline(testItem("s", "prep-slicer", 4000, 3000))).toBeNull();
+    expect(contactOutline(testItem("d", "floor-drain", 4000, 3000))).toBeNull();
   });
 
   it("are one mesh for the whole kitchen, fading to nothing at the outer edge", () => {

@@ -4,6 +4,7 @@
 // the plan (views/RoomEditLayer.tsx) feeds them the cursor and draws what they return.
 
 import { add, cross, dist, distToSegment, dot, len, norm, scale, snapValue, sub } from "./geometry";
+import { COINCIDENT_DISTANCE } from "./roomEdit";
 export { isValidOutline, selfIntersects } from "./roomEdit";
 import type { Opening, Room, Vec2 } from "./types";
 
@@ -182,6 +183,17 @@ function rayHit(from: Vec2, dir: Vec2, segments: readonly Segment[], near: Vec2,
     }
   }
   return best;
+}
+
+/**
+ * What placing point `p` does to the outline drawn so far: "close" it when it lies on the first
+ * point (within COINCIDENT_DISTANCE) and three points are there, "reject" it on any other point
+ * of the drawing (a wall without length), else "add" it. A typed last wall ends exactly on the
+ * start, so this decides by the point, not by how close the cursor is.
+ */
+export function outlinePointAction(points: readonly Vec2[], p: Vec2): "close" | "add" | "reject" {
+  if (points.length >= 3 && dist(points[0], p) < COINCIDENT_DISTANCE) return "close";
+  return points.some((q) => dist(q, p) < COINCIDENT_DISTANCE) ? "reject" : "add";
 }
 
 /** Does the cursor close the outline: at least three points and within `radius` of the first? */

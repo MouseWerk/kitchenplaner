@@ -96,6 +96,11 @@
   outline-offset: 1px;
 }
 
+/* The menu of the compact toolbar (small panes) sits in the toolbar's row. */
+.v3d-toolbar .tb-btn {
+  padding: 0 var(--sp-1);
+}
+
 .v3d-sep {
   width: 1px;
   height: calc(var(--ctl-sm) - var(--sp-2));
@@ -148,6 +153,17 @@
   width: var(--cube);
   height: var(--cube);
   perspective: none;
+}
+
+/* A small pane gets a smaller cube closer to the corner; the smallest none (View3D.tsx). */
+.v3d.is-compact .v3d-cube-wrap {
+  --cube: var(--ctl-lg);
+  right: var(--sp-3);
+  bottom: var(--sp-3);
+}
+
+.v3d-cube-wrap[hidden] {
+  display: none;
 }
 
 .v3d-cube {

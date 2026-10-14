@@ -21,7 +21,7 @@ files. Every layer depends only on the layers above it in this list.
    - PNG export: the SVG rendered into a canvas.
    Because plan, elevations and every export share the primitives, what you see is what you get.
 4. **3D** (`ui/src/three/`): three.js meshes built from the model (not from the 2D primitives),
-   rebuilt when the model changes.
+   rebuilt when the model changes (see "3D view" below).
 5. **Store** (`ui/src/store/`): one zustand store holds the project, the selection and the view
    state. Every edit is a command on the project; the store keeps the undo and redo history of
    project states, so undo restores exactly what was there. View state (zoom, open panel) is not
@@ -29,6 +29,54 @@ files. Every layer depends only on the layers above it in this list.
 6. **Platform bridge** (`ui/src/lib/platform.ts`): the only place that talks to Tauri (commands,
    dialogs, window title). In a plain browser (Vite without Tauri) it falls back to browser APIs
    so the UI can be developed and tested without the shell.
+
+## Units of the catalog (`ui/src/kinds/`)
+
+Each unit of the catalog is described in one place instead of a switch per view. An area
+(`kinds/cooking`, `cooling`, `washing`, `prep`, `serving`, `storage`, `ventilation`, `building`)
+brings its catalog entries (`entries.ts`) and one `KindDef` per kind of unit (`<kind>.ts`): the
+plan symbol, the elevation front and the 3D model, drawn in the item's own frame with the shared
+building blocks in `kinds/parts/` (plan, elevation, mesh, entry helpers; whatever two areas
+share lives there, the rest in the area's `common.ts`). `kinds/registry.ts` collects the areas
+into `CATALOG`, `CATEGORIES` and the lookups `catalogEntry`, `kindOf`, `kindDef` and
+`placementOf`; unknown catalog ids (a newer file) draw as a plain table.
+
+Each kind has a placement: `floor` (the default), `tableTop` (stands on a table: slicers, table
+mixers), `overhead` (hangs: hoods, wall shelves) or `flat` (in the floor: drains, channels,
+platforms). The plan draws them in layers (floor, flat unfilled, table-top, overhead
+dashed); in the plan check (`model/checks.ts`) only units of the same placement
+collide (`collides`; flat ones never), and only floor units block a door; snapping pulls
+a table-top unit's back to a wall only when it touches it (`wallSnapReach`); walking in 3D and
+the contact shadows treat only floor units as standing on the floor. A kind may give its own
+plan outline (`planOutline`, the round column); the check keeps the footprint rectangle.
+
+`planDrawing`, `elevationDrawing` and `buildItemObject` keep the parts every unit shares (the
+footprint outline, the body box, placing and turning the model) and call the unit's kind for the
+rest. Catalog entries may offer width steps and energy variants (electric, gas) with connection
+values per variant; an item stores its energy. `kinds/contract.test.ts` checks every entry and
+variant against the same rules (texts, sizes in every view, rotation, shared materials, file
+round trip, thumbnail framing), so a new unit needs no tests of its own. How to add a unit:
+`ui/src/kinds/README.md`.
+
+The kinds sit between the model and the outputs: they use the model's geometry and the shared 3D
+materials (`three/shared.ts`); the model's plan, elevations and plan check use the registry.
+
+## 3D view (`ui/src/three/`)
+
+- `engine.ts`: renderer, scene, cameras and input of the 3D view. Renders on demand (no loop),
+  rebuilds only the items whose object changed, navigation like Blender, editing and walking.
+- `meshes.ts`: places and turns the item models (`buildItemObject`), selection highlight and
+  picking (`itemIdOf`). `shared.ts`: the unit box and cylinder and the fixed materials every
+  model shares, held by each renderer (`retainShared` / `releaseShared`).
+- `merge.ts`: merges a model into one mesh per material to keep the draw calls low.
+- `look.ts`: room textures (tiled floor, painted walls) and soft contact shadows under the items;
+  `textures.ts` generates the procedural textures (brushed steel, tiles, paint) as pixel data.
+- `room.ts`: floor, walls with their openings and the partitions as 3D objects; walls between
+  camera and room are hidden (cutaway).
+- `navigation.ts`: camera math and the key mapping (numpad views, framing), free of the DOM.
+- `walk.ts`: walk mode, a person at eye height moving through the kitchen.
+- `drag.ts`: moving items by dragging in 3D with the plan's snapping.
+- `thumbnails.ts`: the catalog previews, rendered from the same models in idle slices.
 
 ## Rust side
 

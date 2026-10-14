@@ -1,6 +1,6 @@
 // Creating projects and items.
 
-import { catalogEntry, type CatalogEntry } from "./catalog";
+import { catalogEntry, defaultVariant, variantConnections, type CatalogEntry, type Variant } from "../kinds/registry";
 import { rectRoom } from "./geometry";
 import type { Item, Project } from "./types";
 import { t } from "../lib/i18n";
@@ -38,8 +38,9 @@ export function newId(): string {
   return `${Date.now().toString(36)}${counter.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-/** A new item from a catalog entry, centred at (x, y). */
+/** A new item from a catalog entry, centred at (x, y): its default variant. */
 export function itemFromCatalog(entry: CatalogEntry, x: number, y: number, rotation = 0): Item {
+  const v = defaultVariant(entry);
   return {
     id: newId(),
     catalogId: entry.id,
@@ -51,8 +52,23 @@ export function itemFromCatalog(entry: CatalogEntry, x: number, y: number, rotat
     depth: entry.depth,
     height: entry.height,
     elevation: entry.elevation,
-    connections: { ...entry.connections },
+    connections: variantConnections(entry, v),
+    ...(v.energy !== undefined ? { energy: v.energy } : {}),
   };
+}
+
+/**
+ * The change of an item switched to another variant of its entry (a width step or an energy).
+ * The connection values follow the variant when the entry gives them per variant, or when the
+ * energy changes; otherwise the item keeps its own (possibly edited) values.
+ */
+export function variantPatch(item: Item, entry: CatalogEntry, change: Partial<Variant>): Partial<Item> {
+  const current = item.energy ?? entry.energy?.[0];
+  const v: Variant = { width: change.width ?? item.width, energy: change.energy ?? current };
+  const patch: Partial<Item> = { width: v.width };
+  if (v.energy !== undefined) patch.energy = v.energy;
+  if (entry.variantConnections || v.energy !== current) patch.connections = variantConnections(entry, v);
+  return patch;
 }
 
 /** The position number of every item (1-based, in list order): the "Pos." of plan and list. */

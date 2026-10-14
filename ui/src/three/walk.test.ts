@@ -46,6 +46,10 @@ describe("walk mode", () => {
     expect(isFree({ x: 4000, y: 2000 }, space)).toBe(false);
     // The hood hangs overhead: no obstacle.
     expect(isFree({ x: 4000, y: 3000 }, space)).toBe(true);
+    // A floor drain is walked over; a slicer on its own (on a table elsewhere) is not in the way.
+    const flat = walkSpace(room, [testItem("d", "floor-drain", 2000, 3000), testItem("s", "prep-slicer", 3000, 3000)]);
+    expect(isFree({ x: 2000, y: 3000 }, flat)).toBe(true);
+    expect(isFree({ x: 3000, y: 3000 }, flat)).toBe(true);
     let s = { x: 4000, y: 3500, yaw: 0, pitch: 0 };
     for (let i = 0; i < 40; i++) s = stepWalk(s, intentOf(new Set(["KeyW"]), false), 0.05, space);
     expect(s.y).toBeGreaterThan(2000 + 350);

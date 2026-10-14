@@ -200,6 +200,16 @@ describe("themes", () => {
   it("dark and light define the same tokens", () => {
     expect([...lightSystem.keys()].sort()).toEqual([...dark.keys()].sort());
   });
+
+  // The 3D outline lies on light steel and walls in both themes; a light theme color would vanish.
+  it("the 3D outline is dark in every theme", () => {
+    for (const theme of [dark, lightSystem]) {
+      const hex = theme.get("--draw-outline-3d") ?? "";
+      expect(hex).toMatch(/^#[0-9a-f]{6}$/i);
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      expect(0.2126 * r + 0.7152 * g + 0.0722 * b).toBeLessThan(0.25);
+    }
+  });
 });
 
 // Motion: an endless animation repaints every frame; only opacity and transform may loop, and

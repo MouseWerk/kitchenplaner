@@ -1,6 +1,6 @@
 // Fixed test fixtures for the model and render tests: no random ids, no clock.
 
-import { catalogEntry } from "./catalog";
+import { catalogEntry } from "../kinds/registry";
 import { rectRoom } from "./geometry";
 import { FORMAT_VERSION } from "./project";
 import type { Item, Project } from "./types";

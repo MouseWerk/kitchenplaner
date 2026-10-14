@@ -1,0 +1,1248 @@
+{
+  "format": "kitchenplaner",
+  "version": 2,
+  "info": {
+    "name": "Example kitchen Restaurant Lindenhof",
+    "client": "Restaurant Lindenhof (example)",
+    "author": "Kitchenplaner",
+    "date": "2026-10-13"
+  },
+  "room": {
+    "points": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 13200,
+        "y": 0
+      },
+      {
+        "x": 13200,
+        "y": 6400
+      },
+      {
+        "x": 6300,
+        "y": 6400
+      },
+      {
+        "x": 6300,
+        "y": 9600
+      },
+      {
+        "x": 0,
+        "y": 9600
+      }
+    ],
+    "height": 3200,
+    "wallThickness": 300,
+    "openings": [
+      {
+        "id": "ex-o1",
+        "kind": "door",
+        "wall": 0,
+        "offset": 3300,
+        "width": 1200,
+        "height": 2200,
+        "sill": 0
+      },
+      {
+        "id": "ex-o2",
+        "kind": "door",
+        "wall": 0,
+        "partition": "ex-p1",
+        "offset": 925,
+        "width": 900,
+        "height": 2135,
+        "sill": 0
+      },
+      {
+        "id": "ex-o3",
+        "kind": "door",
+        "wall": 1,
+        "offset": 2255,
+        "width": 1010,
+        "height": 2135,
+        "sill": 0
+      },
+      {
+        "id": "ex-o4",
+        "kind": "window",
+        "wall": 1,
+        "offset": 4050,
+        "width": 1500,
+        "height": 1300,
+        "sill": 1100
+      },
+      {
+        "id": "ex-o5",
+        "kind": "door",
+        "wall": 2,
+        "offset": 6295,
+        "width": 1010,
+        "height": 2135,
+        "sill": 0
+      },
+      {
+        "id": "ex-o6",
+        "kind": "hatch",
+        "wall": 2,
+        "offset": 3635,
+        "width": 1800,
+        "height": 1050,
+        "sill": 950
+      },
+      {
+        "id": "ex-o7",
+        "kind": "door",
+        "wall": 0,
+        "partition": "ex-p3",
+        "offset": 550,
+        "width": 900,
+        "height": 2135,
+        "sill": 0
+      },
+      {
+        "id": "ex-o8",
+        "kind": "door",
+        "wall": 3,
+        "offset": 1800,
+        "width": 1000,
+        "height": 2135,
+        "sill": 0
+      }
+    ],
+    "partitions": [
+      {
+        "id": "ex-p1",
+        "a": {
+          "x": 2475,
+          "y": 2475
+        },
+        "b": {
+          "x": 2475,
+          "y": 0
+        },
+        "thickness": 150,
+        "height": 3200
+      },
+      {
+        "id": "ex-p2",
+        "a": {
+          "x": 0,
+          "y": 2475
+        },
+        "b": {
+          "x": 2475,
+          "y": 2475
+        },
+        "thickness": 150,
+        "height": 3200
+      },
+      {
+        "id": "ex-p3",
+        "a": {
+          "x": 6300,
+          "y": 6475
+        },
+        "b": {
+          "x": 0,
+          "y": 6475
+        },
+        "thickness": 150,
+        "height": 3200
+      }
+    ]
+  },
+  "items": [
+    {
+      "id": "ex-01",
+      "catalogId": "shelving-5",
+      "name": "Shelving, 5 levels",
+      "x": 600,
+      "y": 250,
+      "rotation": 0,
+      "width": 1200,
+      "depth": 500,
+      "height": 2000,
+      "elevation": 0,
+      "connections": {},
+      "note": "Storage"
+    },
+    {
+      "id": "ex-02",
+      "catalogId": "shelving-5",
+      "name": "Shelving, 5 levels",
+      "x": 1800,
+      "y": 250,
+      "rotation": 0,
+      "width": 1200,
+      "depth": 500,
+      "height": 2000,
+      "elevation": 0,
+      "connections": {},
+      "note": "Storage"
+    },
+    {
+      "id": "ex-03",
+      "catalogId": "shelving-5",
+      "name": "Shelving, 5 levels",
+      "x": 250,
+      "y": 1400,
+      "rotation": 270,
+      "width": 1600,
+      "depth": 500,
+      "height": 2000,
+      "elevation": 0,
+      "connections": {},
+      "note": "Storage"
+    },
+    {
+      "id": "ex-04",
+      "catalogId": "dunnage-rack",
+      "name": "Dunnage rack",
+      "x": 1000,
+      "y": 2150,
+      "rotation": 180,
+      "width": 800,
+      "depth": 500,
+      "height": 300,
+      "elevation": 0,
+      "connections": {},
+      "note": "Storage"
+    },
+    {
+      "id": "ex-05",
+      "catalogId": "cold-room",
+      "name": "Cold room",
+      "x": 1050,
+      "y": 3750,
+      "rotation": 270,
+      "width": 2400,
+      "depth": 2100,
+      "height": 2200,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 1.5,
+        "voltage": 400
+      },
+      "note": "Storage"
+    },
+    {
+      "id": "ex-06",
+      "catalogId": "freezer-room",
+      "name": "Freezer room",
+      "x": 5200,
+      "y": 1050,
+      "rotation": 0,
+      "width": 2400,
+      "depth": 2100,
+      "height": 2200,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 3,
+        "voltage": 400
+      },
+      "note": "Storage"
+    },
+    {
+      "id": "ex-07",
+      "catalogId": "table-sink",
+      "name": "Work table with sink bowl",
+      "x": 600,
+      "y": 6050,
+      "rotation": 180,
+      "width": 1200,
+      "depth": 700,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-08",
+      "catalogId": "wall-shelf",
+      "name": "Wall shelf",
+      "x": 600,
+      "y": 6225,
+      "rotation": 180,
+      "width": 1200,
+      "depth": 350,
+      "height": 300,
+      "elevation": 1500,
+      "connections": {},
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-09",
+      "catalogId": "table",
+      "name": "Wall work table",
+      "x": 1900,
+      "y": 6050,
+      "rotation": 180,
+      "width": 1400,
+      "depth": 700,
+      "height": 900,
+      "elevation": 0,
+      "connections": {},
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-10",
+      "catalogId": "prep-veg-cutter",
+      "name": "Vegetable preparation machine",
+      "x": 1600,
+      "y": 6050,
+      "rotation": 180,
+      "width": 400,
+      "depth": 600,
+      "height": 650,
+      "elevation": 900,
+      "connections": {
+        "electricKw": 0.75,
+        "voltage": 230
+      },
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-11",
+      "catalogId": "socket-panel",
+      "name": "Socket panel",
+      "x": 2350,
+      "y": 6355,
+      "rotation": 180,
+      "width": 300,
+      "depth": 90,
+      "height": 200,
+      "elevation": 1150,
+      "connections": {},
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-12",
+      "catalogId": "handwash",
+      "name": "Hand wash basin",
+      "x": 2850,
+      "y": 6225,
+      "rotation": 180,
+      "width": 400,
+      "depth": 350,
+      "height": 300,
+      "elevation": 600,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-13",
+      "catalogId": "table-sink",
+      "name": "Work table with sink bowl",
+      "x": 3600,
+      "y": 6050,
+      "rotation": 180,
+      "width": 1000,
+      "depth": 700,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-14",
+      "catalogId": "wall-shelf",
+      "name": "Wall shelf",
+      "x": 3600,
+      "y": 6225,
+      "rotation": 180,
+      "width": 1000,
+      "depth": 350,
+      "height": 300,
+      "elevation": 1500,
+      "connections": {},
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-15",
+      "catalogId": "table",
+      "name": "Wall work table",
+      "x": 4700,
+      "y": 6050,
+      "rotation": 180,
+      "width": 1200,
+      "depth": 700,
+      "height": 900,
+      "elevation": 0,
+      "connections": {},
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-16",
+      "catalogId": "prep-slicer",
+      "name": "Slicer",
+      "x": 4425,
+      "y": 6050,
+      "rotation": 180,
+      "width": 550,
+      "depth": 600,
+      "height": 450,
+      "elevation": 900,
+      "connections": {
+        "electricKw": 0.25,
+        "voltage": 230
+      },
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-17",
+      "catalogId": "prep-vacuum-table",
+      "name": "Vacuum packer, table-top",
+      "x": 5000,
+      "y": 6050,
+      "rotation": 180,
+      "width": 500,
+      "depth": 600,
+      "height": 450,
+      "elevation": 900,
+      "connections": {
+        "electricKw": 0.75,
+        "voltage": 230
+      },
+      "note": "Preparation of vegetables, meat and fish"
+    },
+    {
+      "id": "ex-18",
+      "catalogId": "table-island",
+      "name": "Island work table",
+      "x": 4200,
+      "y": 3750,
+      "rotation": 0,
+      "width": 1800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {},
+      "note": "Pastry"
+    },
+    {
+      "id": "ex-19",
+      "catalogId": "prep-mixer-10",
+      "name": "Planetary mixer 10 l, table-top",
+      "x": 3610,
+      "y": 3750,
+      "rotation": 0,
+      "width": 420,
+      "depth": 500,
+      "height": 700,
+      "elevation": 900,
+      "connections": {
+        "electricKw": 0.5,
+        "voltage": 230
+      },
+      "note": "Pastry"
+    },
+    {
+      "id": "ex-20",
+      "catalogId": "prep-scale",
+      "name": "Bench scale",
+      "x": 4175,
+      "y": 3750,
+      "rotation": 0,
+      "width": 350,
+      "depth": 400,
+      "height": 130,
+      "elevation": 900,
+      "connections": {
+        "electricKw": 0.01,
+        "voltage": 230
+      },
+      "note": "Pastry"
+    },
+    {
+      "id": "ex-21",
+      "catalogId": "blast-chiller-10",
+      "name": "Blast chiller 10 × GN 1/1",
+      "x": 5600,
+      "y": 3800,
+      "rotation": 0,
+      "width": 800,
+      "depth": 800,
+      "height": 1750,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 2.6,
+        "voltage": 400,
+        "drain": true
+      },
+      "note": "Pastry"
+    },
+    {
+      "id": "ex-22",
+      "catalogId": "handwash-sensor",
+      "name": "Hand wash station with sensor tap",
+      "x": 7150,
+      "y": 200,
+      "rotation": 0,
+      "width": 500,
+      "depth": 400,
+      "height": 900,
+      "elevation": 640,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-23",
+      "catalogId": "tilting-pan",
+      "name": "Tilting pan",
+      "x": 8200,
+      "y": 450,
+      "rotation": 0,
+      "width": 1200,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 15,
+        "voltage": 400,
+        "coldWater": true,
+        "floorDrain": true
+      },
+      "energy": "electric",
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-24",
+      "catalogId": "kettle-100",
+      "name": "Boiling kettle 100 l",
+      "x": 9200,
+      "y": 450,
+      "rotation": 0,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 15,
+        "voltage": 400,
+        "coldWater": true,
+        "hotWater": true,
+        "floorDrain": true
+      },
+      "energy": "electric",
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-25",
+      "catalogId": "drain-channel-300",
+      "name": "Drainage channel, 300 mm wide",
+      "x": 8600,
+      "y": 1050,
+      "rotation": 0,
+      "width": 2000,
+      "depth": 300,
+      "height": 30,
+      "elevation": 0,
+      "connections": {
+        "drain": true
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-26",
+      "catalogId": "hood-wall",
+      "name": "Wall canopy hood",
+      "x": 8600,
+      "y": 550,
+      "rotation": 0,
+      "width": 2400,
+      "depth": 1100,
+      "height": 450,
+      "elevation": 2000,
+      "connections": {
+        "electricKw": 0.1,
+        "voltage": 230,
+        "exhaustM3h": 2600
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-27",
+      "catalogId": "chef-base",
+      "name": "Refrigerated chef base with drawers",
+      "x": 10500,
+      "y": 400,
+      "rotation": 0,
+      "width": 1600,
+      "depth": 800,
+      "height": 650,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 0.45,
+        "voltage": 230
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-28",
+      "catalogId": "salamander",
+      "name": "Salamander",
+      "x": 10500,
+      "y": 250,
+      "rotation": 0,
+      "width": 800,
+      "depth": 500,
+      "height": 500,
+      "elevation": 1400,
+      "connections": {
+        "electricKw": 5.3,
+        "voltage": 400
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-29",
+      "catalogId": "combi-10",
+      "name": "Combi oven 10 × GN 1/1 on stand",
+      "x": 11825,
+      "y": 425,
+      "rotation": 0,
+      "width": 850,
+      "depth": 850,
+      "height": 1050,
+      "elevation": 700,
+      "connections": {
+        "electricKw": 18.9,
+        "voltage": 400,
+        "coldWater": true,
+        "drain": true
+      },
+      "energy": "electric",
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-30",
+      "catalogId": "condensing-hood",
+      "name": "Condensing hood for combi ovens",
+      "x": 11825,
+      "y": 550,
+      "rotation": 0,
+      "width": 900,
+      "depth": 1100,
+      "height": 300,
+      "elevation": 1800,
+      "connections": {
+        "electricKw": 0.4,
+        "voltage": 230,
+        "drain": true
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-31",
+      "catalogId": "combi-20",
+      "name": "Combi oven 20 × GN 1/1",
+      "x": 12750,
+      "y": 450,
+      "rotation": 0,
+      "width": 900,
+      "depth": 900,
+      "height": 1800,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 37,
+        "voltage": 400,
+        "coldWater": true,
+        "drain": true
+      },
+      "energy": "electric",
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-32",
+      "catalogId": "condensing-hood",
+      "name": "Condensing hood for combi ovens",
+      "x": 12750,
+      "y": 550,
+      "rotation": 0,
+      "width": 900,
+      "depth": 1100,
+      "height": 300,
+      "elevation": 1800,
+      "connections": {
+        "electricKw": 0.4,
+        "voltage": 230,
+        "drain": true
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-33",
+      "catalogId": "handwash-sensor",
+      "name": "Hand wash station with sensor tap",
+      "x": 13000,
+      "y": 1400,
+      "rotation": 90,
+      "width": 500,
+      "depth": 400,
+      "height": 900,
+      "elevation": 640,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Cooking wall"
+    },
+    {
+      "id": "ex-34",
+      "catalogId": "pasta-cooker",
+      "name": "Pasta cooker",
+      "x": 7800,
+      "y": 2850,
+      "rotation": 180,
+      "width": 400,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 9,
+        "voltage": 400,
+        "coldWater": true,
+        "drain": true
+      },
+      "energy": "electric",
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-35",
+      "catalogId": "bain-marie",
+      "name": "Bain-marie GN 1/1",
+      "x": 8200,
+      "y": 2850,
+      "rotation": 180,
+      "width": 400,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 1.5,
+        "voltage": 230,
+        "coldWater": true,
+        "drain": true
+      },
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-36",
+      "catalogId": "solid-top",
+      "name": "Solid top, oven",
+      "x": 8800,
+      "y": 2850,
+      "rotation": 180,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 15,
+        "voltage": 400
+      },
+      "energy": "electric",
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-37",
+      "catalogId": "range-6",
+      "name": "Range, 6 cooking zones, oven",
+      "x": 9800,
+      "y": 2850,
+      "rotation": 180,
+      "width": 1200,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 22.4,
+        "voltage": 400
+      },
+      "energy": "electric",
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-38",
+      "catalogId": "line-heated-cabinet-900",
+      "name": "Heated base cabinet, 900 line",
+      "x": 10800,
+      "y": 2850,
+      "rotation": 180,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 1.5,
+        "voltage": 230
+      },
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-39",
+      "catalogId": "neutral-900",
+      "name": "Neutral element 900 line",
+      "x": 11600,
+      "y": 2850,
+      "rotation": 180,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {},
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-40",
+      "catalogId": "fryer-2",
+      "name": "Fryer, 2 tanks",
+      "x": 8000,
+      "y": 3750,
+      "rotation": 0,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 30,
+        "voltage": 400
+      },
+      "energy": "electric",
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-41",
+      "catalogId": "neutral-900",
+      "name": "Neutral element 900 line",
+      "x": 8600,
+      "y": 3750,
+      "rotation": 0,
+      "width": 400,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {},
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-42",
+      "catalogId": "chargrill",
+      "name": "Lava stone chargrill",
+      "x": 9200,
+      "y": 3750,
+      "rotation": 0,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 13,
+        "voltage": 400
+      },
+      "energy": "electric",
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-43",
+      "catalogId": "griddle",
+      "name": "Griddle",
+      "x": 10000,
+      "y": 3750,
+      "rotation": 0,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 10.8,
+        "voltage": 400
+      },
+      "energy": "electric",
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-44",
+      "catalogId": "induction-4",
+      "name": "Induction range, 4 zones",
+      "x": 10800,
+      "y": 3750,
+      "rotation": 0,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 20,
+        "voltage": 400
+      },
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-45",
+      "catalogId": "induction-4",
+      "name": "Induction range, 4 zones",
+      "x": 11600,
+      "y": 3750,
+      "rotation": 0,
+      "width": 800,
+      "depth": 900,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 20,
+        "voltage": 400
+      },
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-46",
+      "catalogId": "hood-island",
+      "name": "Island canopy hood",
+      "x": 8600,
+      "y": 3300,
+      "rotation": 0,
+      "width": 2400,
+      "depth": 2400,
+      "height": 450,
+      "elevation": 2000,
+      "connections": {
+        "electricKw": 0.2,
+        "voltage": 230,
+        "exhaustM3h": 4200
+      },
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-47",
+      "catalogId": "hood-island",
+      "name": "Island canopy hood",
+      "x": 11000,
+      "y": 3300,
+      "rotation": 0,
+      "width": 2400,
+      "depth": 2400,
+      "height": 450,
+      "elevation": 2000,
+      "connections": {
+        "electricKw": 0.2,
+        "voltage": 230,
+        "exhaustM3h": 4200
+      },
+      "note": "Cooking island"
+    },
+    {
+      "id": "ex-48",
+      "catalogId": "plate-dispenser-heated",
+      "name": "Plate dispenser, mobile, heated",
+      "x": 8145,
+      "y": 6165,
+      "rotation": 180,
+      "width": 840,
+      "depth": 470,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 1.8,
+        "voltage": 230
+      },
+      "note": "Pass"
+    },
+    {
+      "id": "ex-49",
+      "catalogId": "pass-counter",
+      "name": "Heated pass",
+      "x": 9565,
+      "y": 6050,
+      "rotation": 180,
+      "width": 2000,
+      "depth": 700,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 2.5,
+        "voltage": 230
+      },
+      "note": "Pass"
+    },
+    {
+      "id": "ex-50",
+      "catalogId": "heat-lamp-bridge",
+      "name": "Heat lamp bridge",
+      "x": 9565,
+      "y": 6050,
+      "rotation": 180,
+      "width": 1800,
+      "depth": 300,
+      "height": 400,
+      "elevation": 1450,
+      "connections": {
+        "electricKw": 1.44,
+        "voltage": 230
+      },
+      "note": "Pass"
+    },
+    {
+      "id": "ex-51",
+      "catalogId": "plate-dispenser-heated",
+      "name": "Plate dispenser, mobile, heated",
+      "x": 10985,
+      "y": 6165,
+      "rotation": 180,
+      "width": 840,
+      "depth": 470,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 1.8,
+        "voltage": 230
+      },
+      "note": "Pass"
+    },
+    {
+      "id": "ex-52",
+      "catalogId": "saladette",
+      "name": "Saladette",
+      "x": 12302.5,
+      "y": 6050,
+      "rotation": 180,
+      "width": 1795,
+      "depth": 700,
+      "height": 1100,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 0.4,
+        "voltage": 230
+      },
+      "note": "Pass"
+    },
+    {
+      "id": "ex-53",
+      "catalogId": "mop-sink",
+      "name": "Cleaning sink",
+      "x": 250,
+      "y": 6800,
+      "rotation": 270,
+      "width": 500,
+      "depth": 500,
+      "height": 1000,
+      "elevation": 0,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-54",
+      "catalogId": "shelving",
+      "name": "Shelving, 4 levels",
+      "x": 1200,
+      "y": 6800,
+      "rotation": 0,
+      "width": 1200,
+      "depth": 500,
+      "height": 1800,
+      "elevation": 0,
+      "connections": {},
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-55",
+      "catalogId": "pot-sink",
+      "name": "Pot sink with deep bowl",
+      "x": 2600,
+      "y": 6950,
+      "rotation": 0,
+      "width": 1400,
+      "depth": 800,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-56",
+      "catalogId": "wall-shelf",
+      "name": "Wall shelf",
+      "x": 2600,
+      "y": 6725,
+      "rotation": 0,
+      "width": 1400,
+      "depth": 350,
+      "height": 300,
+      "elevation": 1500,
+      "connections": {},
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-57",
+      "catalogId": "handwash",
+      "name": "Hand wash basin",
+      "x": 3600,
+      "y": 6725,
+      "rotation": 0,
+      "width": 400,
+      "depth": 350,
+      "height": 300,
+      "elevation": 600,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-58",
+      "catalogId": "table",
+      "name": "Wall work table",
+      "x": 4500,
+      "y": 6900,
+      "rotation": 0,
+      "width": 1200,
+      "depth": 700,
+      "height": 900,
+      "elevation": 0,
+      "connections": {},
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-59",
+      "catalogId": "sorting-table",
+      "name": "Pre-rinse and sorting table",
+      "x": 5400,
+      "y": 9225,
+      "rotation": 180,
+      "width": 1800,
+      "depth": 750,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "coldWater": true,
+        "hotWater": true,
+        "drain": true
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-60",
+      "catalogId": "rack-conveyor",
+      "name": "Rack conveyor dishwasher",
+      "x": 3600,
+      "y": 9200,
+      "rotation": 180,
+      "width": 1800,
+      "depth": 800,
+      "height": 1950,
+      "elevation": 0,
+      "connections": {
+        "electricKw": 30,
+        "voltage": 400,
+        "hotWater": true,
+        "drain": true,
+        "exhaustM3h": 600
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-61",
+      "catalogId": "dish-outlet-table",
+      "name": "Outlet table",
+      "x": 2100,
+      "y": 9225,
+      "rotation": 180,
+      "width": 1200,
+      "depth": 750,
+      "height": 900,
+      "elevation": 0,
+      "connections": {
+        "drain": true
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-62",
+      "catalogId": "shelving",
+      "name": "Shelving, 4 levels",
+      "x": 700,
+      "y": 9350,
+      "rotation": 180,
+      "width": 1400,
+      "depth": 500,
+      "height": 1800,
+      "elevation": 0,
+      "connections": {},
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-63",
+      "catalogId": "shelving",
+      "name": "Shelving, 4 levels",
+      "x": 250,
+      "y": 7900,
+      "rotation": 270,
+      "width": 1400,
+      "depth": 500,
+      "height": 1800,
+      "elevation": 0,
+      "connections": {},
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-64",
+      "catalogId": "floor-drain",
+      "name": "Floor drain",
+      "x": 3600,
+      "y": 8450,
+      "rotation": 0,
+      "width": 300,
+      "depth": 300,
+      "height": 20,
+      "elevation": 0,
+      "connections": {
+        "drain": true
+      },
+      "note": "Dish wash"
+    },
+    {
+      "id": "ex-65",
+      "catalogId": "column",
+      "name": "Column",
+      "x": 6650,
+      "y": 200,
+      "rotation": 0,
+      "width": 400,
+      "depth": 400,
+      "height": 3000,
+      "elevation": 0,
+      "connections": {},
+      "note": "Building"
+    }
+  ]
+}

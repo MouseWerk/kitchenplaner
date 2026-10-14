@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
-import { CATALOG } from "../model/catalog";
+import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
 import { buildItemObject } from "./meshes";
 import { fitOrthoCamera, PRIORITY, ThumbnailQueue, viewDirection, type RendererFactory } from "./thumbnails";
@@ -148,6 +148,56 @@ describe("queue", () => {
     expect(disposed).toHaveBeenCalledTimes(1);
     expect(q.hasRenderer).toBe(false);
     q.reset();
+  });
+
+  // A lost context used to leave every later thumbnail of the session on the fallback.
+  it("starts a new renderer after a failed render and tries that entry once more", () => {
+    const drawn: string[] = [];
+    const disposed = vi.fn();
+    let renderers = 0;
+    const failing = new Map([["table", 1], ["sink-1", 5]]);
+    const q = new ThumbnailQueue(() => {
+      renderers++;
+      return {
+        render: (e) => {
+          const left = failing.get(e.id) ?? 0;
+          if (left > 0) {
+            failing.set(e.id, left - 1);
+            throw new Error("context lost");
+          }
+          drawn.push(e.id);
+          return `data:${e.id}`;
+        },
+        dispose: disposed,
+      };
+    });
+    const table = q.request(entry("table"), 56, 44, 1, PRIORITY.visible);
+    const sink = q.request(entry("sink-1"), 56, 44, 1, PRIORITY.visible);
+    const fryer = q.request(entry("fryer-2"), 56, 44, 1, PRIORITY.visible);
+    drain(q);
+    // The table failed once and drew on the retry; the sink failed twice and keeps the fallback.
+    expect(q.get(table)).toEqual({ status: "ready", url: "data:table" });
+    expect(q.get(sink).status).toBe("unavailable");
+    expect(q.get(fryer)).toEqual({ status: "ready", url: "data:fryer-2" });
+    // Each of the three failures dropped its renderer; the next job started a fresh one.
+    expect(disposed).toHaveBeenCalledTimes(3);
+    expect(renderers).toBe(4);
+    // Other entries still render after that.
+    const range = q.request(entry("range-6"), 56, 44, 1, PRIORITY.visible);
+    drain(q);
+    expect(q.get(range).status).toBe("ready");
+    q.reset();
+  });
+
+  // The previews show the units as the 3D view does: one look, defined in look.ts.
+  it("render with the look of the 3D view", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(resolve(__dirname, "thumbnails.ts"), "utf8");
+    expect(src).toMatch(/LOOK\.toneMapping/);
+    expect(src).toMatch(/LOOK\.exposure/);
+    expect(src).toMatch(/LOOK\.environmentIntensity/);
+    expect(src).not.toMatch(/THREE\.\w+ToneMapping/);
   });
 
   it("the real WebGL factory fails cleanly without WebGL (happy-dom)", async () => {

@@ -6,20 +6,24 @@
 // scrolling finds them ready. Every slice renders a single image (a few milliseconds), so typing
 // in the search field never waits for a batch.
 //
-// The look does not depend on the theme: the background is transparent and the materials are the
-// fixed ones of the 3D view, so one image serves the light and the dark sidebar and a theme
-// switch costs nothing.
+// The look does not depend on the theme: the background is transparent, and the materials, the
+// tone mapping and the lights are those of the 3D view (`LOOK` in look.ts), so a thumbnail looks
+// like the unit in the room, one image serves the light and the dark sidebar and a theme switch
+// costs nothing.
 //
 // The renderer holds a WebGL context (browsers allow only a handful per page, the 3D view needs
 // one too). Thumbnails are cached, so the renderer is only needed while work is queued: it is
 // disposed a few seconds after the queue runs dry and created again for the next request.
-// Without WebGL every request ends as `unavailable` and the caller draws its own fallback.
+// Without WebGL every request ends as `unavailable` and the caller draws its own fallback. A
+// render that throws (a lost context) costs the renderer, not the session: the next job starts
+// a fresh one, and the entry is tried once more before it keeps the fallback.
 
 import { useEffect, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import type { CatalogEntry } from "../model/catalog";
+import type { CatalogEntry } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
+import { LOOK } from "./look";
 import { buildItemObject, releaseShared, retainShared } from "./meshes";
 
 /** Direction from the model towards the camera: front right, above (a 3/4 isometric-ish view). */
@@ -27,15 +31,14 @@ const VIEW_AZIMUTH = THREE.MathUtils.degToRad(35);
 const VIEW_ELEVATION = THREE.MathUtils.degToRad(26);
 /** Empty border around the model, as a share of the image. */
 const FIT_MARGIN = 0.08;
-/** Same values as the 3D view, so a thumbnail looks like the unit in the room. */
-const ENVIRONMENT_BLUR = 0.04;
-const ENVIRONMENT_INTENSITY = 0.6;
-/** Key light relative to the model centre (metres): front left and high, so tops read light. */
+/** Key light (the 3D view's sun) relative to the model centre (metres): front left and high, so tops read light. */
 const KEY_LIGHT_OFFSET = new THREE.Vector3(-1.2, 2.5, 1.8);
 /** Disposes the renderer this long after the last job. */
 const DISPOSE_AFTER_MS = 5000;
 /** Idle callbacks wait at most this long, so a busy main thread still gets thumbnails. */
 const IDLE_TIMEOUT_MS = 60;
+/** Renders of one thumbnail before it keeps the fallback. */
+const MAX_ATTEMPTS = 2;
 
 export type ThumbStatus = "loading" | "ready" | "unavailable";
 export interface ThumbState {
@@ -108,28 +111,27 @@ export function fitOrthoCamera(camera: THREE.OrthographicCamera, box: THREE.Box3
 // ---------------------------------------------------------------------------------------------
 // The WebGL renderer
 
-/** The real renderer: one canvas, a studio environment and two soft lights. */
+/** The real renderer: one canvas with the studio environment and the lights of the 3D view. */
 export const webglFactory: RendererFactory = () => {
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   retainShared();
   r.setPixelRatio(1);
   r.setClearAlpha(0);
   r.outputColorSpace = THREE.SRGBColorSpace;
-  r.toneMapping = THREE.NeutralToneMapping;
+  r.toneMapping = LOOK.toneMapping;
+  r.toneMappingExposure = LOOK.exposure;
 
   const scene = new THREE.Scene();
   // Steel needs something to reflect, as in the 3D view; prefiltered once per renderer.
   const pmrem = new THREE.PMREMGenerator(r);
   const studio = new RoomEnvironment();
-  const environment = pmrem.fromScene(studio, ENVIRONMENT_BLUR).texture;
+  const environment = pmrem.fromScene(studio, LOOK.environmentBlur).texture;
   studio.dispose();
   pmrem.dispose();
   scene.environment = environment;
-  scene.environmentIntensity = ENVIRONMENT_INTENSITY;
-  // Neutral white light from above and a half-strength gray from below: soft, no colour cast.
-  const hemi = new THREE.HemisphereLight(undefined, undefined, 0.9);
-  hemi.groundColor.setScalar(0.45);
-  const key = new THREE.DirectionalLight(undefined, 1.5);
+  scene.environmentIntensity = LOOK.environmentIntensity;
+  const hemi = new THREE.HemisphereLight(LOOK.hemiSky, LOOK.hemiGround, LOOK.hemiIntensity);
+  const key = new THREE.DirectionalLight(0xffffff, LOOK.sunIntensity);
   scene.add(hemi, key);
   const camera = new THREE.OrthographicCamera();
 
@@ -174,6 +176,8 @@ interface Job {
   priority: Priority;
   /** Request order, so equal priorities run first come first served. */
   seq: number;
+  /** Renders that threw so far. */
+  failures: number;
 }
 
 type IdleHandle = { cancel: () => void };
@@ -243,7 +247,7 @@ export class ThumbnailQueue {
         job.seq = this.seq++;
       }
     } else {
-      this.jobs.set(key, { key, entry, w: Math.round(w * dpr), h: Math.round(h * dpr), priority, seq: this.seq++ });
+      this.jobs.set(key, { key, entry, w: Math.round(w * dpr), h: Math.round(h * dpr), priority, seq: this.seq++, failures: 0 });
       if (this.log && !this.stats) this.stats = { start: performance.now(), first: null, count: 0, max: 0, setup: 0 };
     }
     this.schedule();
@@ -286,7 +290,20 @@ export class ThumbnailQueue {
     try {
       state = { status: "ready", url: this.renderer.render(job.entry, job.w, job.h) };
     } catch {
-      // A model that fails to draw (lost context) gets the fallback; the others may still work.
+      // Most likely the context is gone: the renderer goes with it, the next job starts a fresh
+      // one. The entry gets one more try; a model that fails again keeps the fallback.
+      const broken = this.renderer;
+      this.renderer = null;
+      try {
+        broken.dispose();
+      } catch {
+        // A lost context may fail to dispose; it is dropped either way.
+      }
+      job.failures++;
+      if (job.failures < MAX_ATTEMPTS) {
+        this.jobs.set(job.key, job);
+        return true;
+      }
       state = UNAVAILABLE;
     }
     this.cache.set(job.key, state);

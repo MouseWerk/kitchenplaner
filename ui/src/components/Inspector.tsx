@@ -4,7 +4,7 @@
 
 import { useMemo } from "react";
 import { AlertTriangle, CheckCircle2, Copy, DoorOpen, RotateCcw, RotateCw, Trash2 } from "lucide-react";
-import { catalogEntry, isOverhead, kindOf } from "../model/catalog";
+import { catalogEntry, kindOf, placementOf, type Placement } from "../kinds/registry";
 import { checkProject } from "../model/checks";
 import { bounds, MAX_LENGTH, lRoom, normalizeAngle, rectRoom, walls } from "../model/geometry";
 import {
@@ -24,7 +24,7 @@ import {
   type OpeningHostRef,
 } from "../model/roomEdit";
 import { removeRoomSelection } from "../views/RoomEditLayer";
-import { newId, positions } from "../model/project";
+import { newId, positions, variantPatch } from "../model/project";
 import type { Connections, Item, Opening, OpeningKind, Partition, Project, Vec2 } from "../model/types";
 import { selectedItems, useStore } from "../store/store";
 import { num, useT, type TKey } from "../lib/i18n";
@@ -82,6 +82,14 @@ function Section(props: { title: string; children: React.ReactNode; actions?: Re
   );
 }
 
+/** What the lower edge above the floor is called, by where the unit stands. */
+const ELEVATION_LABEL: Record<Placement, TKey> = {
+  floor: "inspector.elevation",
+  flat: "inspector.elevation",
+  tableTop: "inspector.standingHeight",
+  overhead: "inspector.mountHeight",
+};
+
 function ItemPanel({ item, project }: { item: Item; project: Project }) {
   const t = useT();
   const st = useStore.getState();
@@ -90,7 +98,7 @@ function ItemPanel({ item, project }: { item: Item; project: Project }) {
   const set = (patch: Partial<Item>) => st.updateItems([item.id], () => patch);
   const setConn = (patch: Partial<Connections>) => st.updateItems([item.id], (it) => ({ connections: { ...it.connections, ...patch } }));
   const c = item.connections;
-  const overhead = isOverhead(kindOf(item.catalogId));
+  const placement = placementOf(kindOf(item.catalogId));
 
   return (
     <>
@@ -107,15 +115,27 @@ function ItemPanel({ item, project }: { item: Item; project: Project }) {
           <NumberField label={t("inspector.width")} unit="mm" value={item.width} min={MIN_SIZE} max={MAX_LENGTH} step={10} onChange={(v) => set({ width: v })} />
           <NumberField label={t("inspector.depth")} unit="mm" value={item.depth} min={MIN_SIZE} max={MAX_LENGTH} step={10} onChange={(v) => set({ depth: v })} />
           <NumberField label={t("inspector.height")} unit="mm" value={item.height} min={MIN_SIZE} max={MAX_LENGTH} step={10} onChange={(v) => set({ height: v })} />
-          <NumberField label={overhead ? t("inspector.mountHeight") : t("inspector.elevation")} unit="mm" value={item.elevation} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ elevation: v })} />
+          <NumberField label={t(ELEVATION_LABEL[placement])} unit="mm" value={item.elevation} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ elevation: v })} />
         </div>
         {entry?.widths && (
           <div className="chips" role="group" aria-label={t("inspector.widths")}>
             {entry.widths.map((w) => (
-              <button key={w} type="button" className={w === item.width ? "chip is-current" : "chip"} aria-pressed={w === item.width} onClick={() => set({ width: w })}>
+              <button key={w} type="button" className={w === item.width ? "chip is-current" : "chip"} aria-pressed={w === item.width} onClick={() => set(variantPatch(item, entry, { width: w }))}>
                 {w}
               </button>
             ))}
+          </div>
+        )}
+        {entry?.energy && entry.energy.length > 1 && (
+          <div className="chips" role="group" aria-label={t("inspector.energy")}>
+            {entry.energy.map((e) => {
+              const current = e === (item.energy ?? entry.energy?.[0]);
+              return (
+                <button key={e} type="button" className={current ? "chip is-current" : "chip"} aria-pressed={current} onClick={() => set(variantPatch(item, entry, { energy: e }))}>
+                  {t(`energy.${e}`)}
+                </button>
+              );
+            })}
           </div>
         )}
       </Section>

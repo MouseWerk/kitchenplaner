@@ -82,6 +82,13 @@
   overflow-wrap: anywhere;
 }
 
+.cat-preview-description {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .cat-preview-facts {
   display: grid;
   grid-template-columns: auto 1fr;

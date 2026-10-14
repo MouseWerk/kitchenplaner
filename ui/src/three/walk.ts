@@ -2,7 +2,7 @@
 // Pure state and steps, no renderer: the view turns the state into its camera.
 
 import type { Item, Vec2 } from "../model/types";
-import { isOverhead, kindOf } from "../model/catalog";
+import { kindOf, placementOf } from "../kinds/registry";
 import { distToSegment, footprint, pointInPolygon } from "../model/geometry";
 
 /** Eye height above the floor (m). */
@@ -65,7 +65,8 @@ export interface WalkSpace {
 
 export function walkSpace(outline: readonly Vec2[], items: readonly Item[]): WalkSpace {
   const obstacles = items
-    .filter((it) => !isOverhead(kindOf(it.catalogId)))
+    // Only floor units block the way; table-top units stand on one, flat ones can be walked on.
+    .filter((it) => placementOf(kindOf(it.catalogId)) === "floor")
     .map((it) => footprint({ ...it, width: it.width + 2 * ITEM_CLEARANCE, depth: it.depth + 2 * ITEM_CLEARANCE }));
   return { outline, obstacles };
 }

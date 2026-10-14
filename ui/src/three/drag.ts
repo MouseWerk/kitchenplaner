@@ -3,7 +3,7 @@
 // steps. Pure: the view turns the result into a store change.
 
 import type { Item, Project, Vec2 } from "../model/types";
-import { isOverhead, kindOf } from "../model/catalog";
+import { kindOf, placementOf, wallSnapReach } from "../kinds/registry";
 import { round, snapItem, snapValue } from "../model/geometry";
 
 export type ItemMove = Pick<Item, "x" | "y" | "rotation">;
@@ -21,10 +21,12 @@ export function dragItems(project: Project, origin: ReadonlyMap<string, Vec2>, d
     const o = origin.get(ids[0])!;
     if (!it) return out;
     const moving = { ...it, x: o.x + delta.x, y: o.y + delta.y };
-    // Overhead items (hoods, shelves) snap among themselves, floor items among the floor items.
-    const overhead = isOverhead(kindOf(it.catalogId));
-    const others = project.items.filter((i) => i.id !== it.id && isOverhead(kindOf(i.catalogId)) === overhead);
-    const s = free ? { x: round(moving.x), y: round(moving.y), rotation: it.rotation } : snapItem(moving, project.room, others, step, false);
+    // Items snap among items of the same placement: hoods among the overhead items, a slicer
+    // among the table-top units, floor units among the floor units.
+    const kind = kindOf(it.catalogId);
+    const placement = placementOf(kind);
+    const others = project.items.filter((i) => i.id !== it.id && placementOf(kindOf(i.catalogId)) === placement);
+    const s = free ? { x: round(moving.x), y: round(moving.y), rotation: it.rotation } : snapItem(moving, project.room, others, step, false, wallSnapReach(kind));
     out.set(it.id, { x: s.x, y: s.y, rotation: s.rotation });
     return out;
   }

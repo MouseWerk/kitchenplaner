@@ -21,7 +21,7 @@ for (const width of [1000, 1440, 1920]) {
     await app.browser.setWindowSize(width, 900);
     await app.waitUntil(async () => Math.abs((await app.exec(() => window.innerWidth)) - width) <= 40, `the window did not take the width ${width}`);
     // With an item selected (the inspector at its fullest) and in every layout.
-    await place(app, "Elektroherd, 6 Platten, Backofen");
+    await place(app, "Herd, 6 Kochstellen, Backofen");
     for (const layout of ["Grundriss", "Ansichten", "3D", "Alle Ansichten"]) {
       await app.click(layout, "header [role=group][aria-label='Ansicht wählen']");
       const o = await overflow(app);

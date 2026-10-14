@@ -7,6 +7,9 @@ und in 3D. Alles läuft lokal auf deinem Computer; ein Projekt ist eine einzelne
 ## Funktionen
 
 - **Grundriss**: Raum und Geräte maßstäblich in Millimetern planen.
+- **Katalog mit 165 Geräten** in acht Bereichen: Kochen, Kühlen, Spülen, Tische und Vorbereitung,
+  Ausgabe, Lagern, Lüftung und Bauteile (Stützen, Schächte, Bodenabläufe, Rinnen, Podeste), viele
+  in mehreren Breiten und als Elektro- oder Gasgerät, jedes mit 3D-Vorschau.
 - **4 Ansichten**: die Wände des Raums als Ansichten, aus dem Grundriss abgeleitet.
 - **3D**: die Küche räumlich ansehen.
 - **Geräteliste mit Anschlusswerten**: alle Positionen mit ihren Maßen und Anschlusswerten.
@@ -71,13 +74,16 @@ Im Modus „Einrichten“ (Geräte anordnen, wie Blenders Objektmodus):
 | Alt beim Ziehen oder Verschieben | Ohne Raster und Einrasten |
 
 Beim Ziehen und Verschieben rastet ein Gerät mit der Rückseite an Wänden und Trennwänden ein und
-richtet Kanten und Mitten an anderen Geräten aus; Hilfslinien zeigen, woran.
+richtet Kanten und Mitten an anderen Geräten aus; Hilfslinien zeigen, woran. Tischgeräte
+(Aufschnittmaschine, Waage) stehen auf einem Tisch und rasten nur an einer Wand ein, die sie
+berühren; Bodenabläufe und Rinnen liegen im Boden und dürfen unter Geräten liegen.
 
 ## English
 
 Kitchenplaner is a desktop app for planning commercial kitchens: floor plan, four elevations and a
-3D view, an equipment list with connection values, a plan check, and exports as SVG, DXF, PNG and
-CSV. Projects are single `.kplan` files (JSON) on your computer. Build it with `npm install`,
+3D view, a catalog of 165 units in eight areas (cooking, cooling, washing, tables and preparation,
+serving, storage, ventilation, building elements), an equipment list with connection values, a
+plan check, and exports as SVG, DXF, PNG and CSV. Projects are single `.kplan` files (JSON) on your computer. Build it with `npm install`,
 `npm --prefix ui install` and `npm run dev` (development) or `npm run build` (installers). The UI is
 available in German and English.
 

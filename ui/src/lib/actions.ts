@@ -12,6 +12,7 @@ import { svgToPng } from "../render/png";
 import { drawingToSvg, sheetDrawing } from "../render/svg";
 import { capture3dPng } from "../three/capture";
 import { useStore } from "../store/store";
+import { cancelActiveOperator } from "./commands";
 import { errorText } from "./errors";
 import { currentLang, t } from "./i18n";
 import { addRecentFile, baseName, confirmDialog, openProjectFile, PROJECT_FILTER, readProjectPath, safeFileName, saveBinary, saveText, type FileFilter } from "./platform";
@@ -34,11 +35,13 @@ export async function confirmDiscard(): Promise<boolean> {
 }
 
 export async function newFile() {
+  cancelActiveOperator();
   if (!(await confirmDiscard())) return;
   useStore.getState().load(newProject(), null);
 }
 
 export async function openFile() {
+  cancelActiveOperator();
   if (!(await confirmDiscard())) return;
   try {
     const f = await openProjectFile();
@@ -50,6 +53,7 @@ export async function openFile() {
 }
 
 export async function openPath(path: string) {
+  cancelActiveOperator();
   if (!(await confirmDiscard())) return;
   try {
     const f = await readProjectPath(path);
@@ -68,6 +72,9 @@ function loadText(text: string, path: string | null) {
 
 /** Saves to the known path, or asks for one; returns whether it was saved. */
 export async function saveFile(as = false): Promise<boolean> {
+  // The toolbar works with the mouse while a G runs from the keyboard: what is saved, opened or
+  // dropped is the project without the operator's half-done move, as after Escape.
+  cancelActiveOperator();
   const { project, path } = useStore.getState();
   try {
     const written = await saveText(as ? null : path, `${safeFileName(project.info.name)}.kplan`, PROJECT_FILTER, serializeProject(project));

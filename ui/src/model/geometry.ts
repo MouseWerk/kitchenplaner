@@ -208,6 +208,11 @@ export function snapValue(v: number, step: number): number {
 
 /** How close (mm) an item's back has to come to a wall to be pulled against it. */
 export const WALL_SNAP_DISTANCE = 150;
+/**
+ * The pull of a unit standing on a table (mm): only when its back already touches the wall, so
+ * a slicer at the front of a table is not dragged to the wall behind the table.
+ */
+export const WALL_TOUCH_DISTANCE = 1;
 /** How close (mm) two parallel item edges have to come to be aligned. */
 export const EDGE_SNAP_DISTANCE = 60;
 
@@ -268,13 +273,14 @@ export function rotationFacing(face: Pick<Face, "inward">): number {
 }
 
 /**
- * The face nearest to an item's back within `WALL_SNAP_DISTANCE`, with the rotation the item
- * gets against it; with `autoRotate` off only faces it already faces count.
+ * The face nearest to an item's back within `reach` (mm), with the rotation the item gets
+ * against it; with `autoRotate` off only faces it already faces count.
  */
 export function nearestFace(
   item: Pick<Item, "x" | "y" | "rotation" | "width" | "depth">,
   faces: readonly Face[],
   autoRotate: boolean,
+  reach = WALL_SNAP_DISTANCE,
 ): { face: Face; rotation: number } | null {
   let best: { face: Face; gap: number; rotation: number } | null = null;
   for (const face of faces) {
@@ -288,7 +294,7 @@ export function nearestFace(
     const gap = dot(sub(back, face.a), face.inward);
     const along = dot(sub({ x: item.x, y: item.y }, face.a), face.dir);
     if (along < -item.width / 2 || along > face.length + item.width / 2) continue;
-    if (Math.abs(gap) > WALL_SNAP_DISTANCE) continue;
+    if (Math.abs(gap) > reach) continue;
     if (!best || Math.abs(gap) < Math.abs(best.gap)) best = { face, gap, rotation: rot };
   }
   return best && { face: best.face, rotation: best.rotation };
@@ -310,7 +316,7 @@ export function placeAgainst(item: Pick<Item, "x" | "y" | "width" | "depth">, fa
  *
  * `autoRotate` turns the item away from the wall when it is pulled against one; it is off for
  * a plain move of an item that already stands somewhere, so its rotation is kept unless the
- * wall it is pulled to faces the same way anyway.
+ * wall it is pulled to faces the same way anyway. `wallReach` is how close the back has to come.
  */
 export function snapItem(
   item: Pick<Item, "x" | "y" | "rotation" | "width" | "depth">,
@@ -318,13 +324,14 @@ export function snapItem(
   others: readonly Pick<Item, "x" | "y" | "rotation" | "width" | "depth">[],
   grid: number,
   autoRotate: boolean,
+  wallReach = WALL_SNAP_DISTANCE,
 ): SnapResult {
   let x = snapValue(item.x, grid);
   let y = snapValue(item.y, grid);
   let rotation = item.rotation;
   let wallIndex: number | null = null;
 
-  const best = nearestFace(item, roomFaces(room), autoRotate);
+  const best = nearestFace(item, roomFaces(room), autoRotate, wallReach);
   if (best) {
     rotation = best.rotation;
     wallIndex = best.face.wall;

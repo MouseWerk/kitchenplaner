@@ -111,6 +111,9 @@
   --draw-guide: #b4b7bf;
   --draw-frame-fill: rgb(255 255 255 / 0.05);
   --draw-frame-line: rgb(255 255 255 / 0.55);
+  /* Outline of selected and hovered items in the 3D view: dark in both themes, since it lies on
+     light steel and light walls there, never on the theme's background. */
+  --draw-outline-3d: #2a2c30;
 
   --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
   --scrim: rgb(0 0 0 / 0.45);
@@ -167,6 +170,7 @@
     --draw-guide: #6d7078;
     --draw-frame-fill: rgb(0 0 0 / 0.04);
     --draw-frame-line: rgb(0 0 0 / 0.5);
+    --draw-outline-3d: #2a2c30;
 
     --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
     --scrim: rgb(0 0 0 / 0.3);
@@ -223,6 +227,7 @@
   --draw-guide: #6d7078;
   --draw-frame-fill: rgb(0 0 0 / 0.04);
   --draw-frame-line: rgb(0 0 0 / 0.5);
+  --draw-outline-3d: #2a2c30;
 
   --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
   --scrim: rgb(0 0 0 / 0.3);

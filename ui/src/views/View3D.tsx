@@ -4,7 +4,8 @@
 // store's state to the engine.
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, Box, Eye, Footprints, Layers, Maximize, Scissors, Sparkles, Square } from "lucide-react";
+import { ArrowDownToLine, Box, Ellipsis, Eye, Footprints, Layers, Maximize, Scissors, Sparkles, Square } from "lucide-react";
+import { Menu } from "../components/Menu";
 import { useStore } from "../store/store";
 import { num, useT, type TKey } from "../lib/i18n";
 import { Engine, type Quality, type Status } from "../three/engine";
@@ -19,6 +20,16 @@ const SECTION_MIN = 300;
 /** Cut height when the cut is switched on (mm): above the equipment, below hoods and ceiling. */
 const SECTION_DEFAULT = 2200;
 const SECTION_STEP = 50;
+/** Below this pane width (px) the toolbar keeps the main views and puts the rest into a menu. */
+const COMPACT_WIDTH = 520;
+/** Below this pane width (px) the view cube is left out; the toolbar still has the views. */
+const TINY_WIDTH = 360;
+
+/** How the overlay fits a pane `width` px wide (0: not measured yet, laid out in full). */
+export function overlayLayout(width: number): { compact: boolean; cube: "full" | "small" | "none" } {
+  if (width <= 0 || width >= COMPACT_WIDTH) return { compact: false, cube: "full" };
+  return { compact: true, cube: width < TINY_WIDTH ? "none" : "small" };
+}
 
 function readQuality(): Quality {
   try {
@@ -58,6 +69,7 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
   const [walking, setWalking] = useState(false);
   const [quality, setQuality] = useState<Quality>(readQuality);
   const [section, setSection] = useState<number | null>(null);
+  const [width, setWidth] = useState(0);
   const project = useStore((s) => s.project);
   const selectedIds = useStore((s) => s.selection.items);
   const mode = useStore((s) => s.mode);
@@ -92,6 +104,16 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
       engineRef.current = null;
     };
     // The engine lives as long as the component; `t` only names the canvas once.
+  }, []);
+
+  // The split layout gives the view a small pane: the overlay shrinks with it.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const ro = new ResizeObserver(() => setWidth(root.clientWidth));
+    ro.observe(root);
+    setWidth(root.clientWidth);
+    return () => ro.disconnect();
   }, []);
 
   useEffect(() => engineRef.current?.setProject(project), [project]);
@@ -133,25 +155,43 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
     { key: "view3d.walk", icon: Footprints, on: walking, run: () => engineRef.current?.toggleWalk() },
     { key: "view3d.quality", icon: Sparkles, on: quality === "high", run: () => setQuality((q) => (q === "high" ? "standard" : "high")) },
   ];
+  const layout = overlayLayout(width);
+  // In a small pane the toolbar keeps perspective, top and fit; the rest goes into a menu.
+  const shownViews = layout.compact ? views.filter((v) => v.key !== "view3d.front") : views;
+  const menuViews = layout.compact ? views.filter((v) => v.key === "view3d.front") : [];
+  const rootClass = ["v3d", layout.compact ? "is-compact" : "", props.className ?? ""].filter(Boolean).join(" ");
 
   return (
-    <div ref={rootRef} className={`v3d ${props.className ?? ""}`} tabIndex={-1}>
+    <div ref={rootRef} className={rootClass} tabIndex={-1}>
       <div ref={hostRef} className="v3d-host" />
       {status === "ok" ? (
         <>
           <div className="v3d-bar">
             <div className="v3d-toolbar" role="toolbar" aria-label={t("view3d.toolbar")}>
-              {views.map(({ key, keys, icon: Icon, run }) => (
+              {shownViews.map(({ key, keys, icon: Icon, run }) => (
                 <button key={key} type="button" className="v3d-btn" onClick={run} title={label(key, keys)} aria-label={t(key)}>
                   <Icon size={16} aria-hidden />
                 </button>
               ))}
               <span className="v3d-sep" aria-hidden />
-              {toggles.map(({ key, keys, icon: Icon, on, run }) => (
-                <button key={key} type="button" className="v3d-btn" onClick={run} title={label(key, keys)} aria-label={t(key)} aria-pressed={on}>
-                  <Icon size={16} aria-hidden />
-                </button>
-              ))}
+              {layout.compact ? (
+                <Menu
+                  label={<Ellipsis size={16} aria-label={t("view3d.more")} />}
+                  title={t("view3d.more")}
+                  align="end"
+                  entries={[
+                    ...menuViews.map(({ key, keys, run }) => ({ label: t(key), hint: keys, onSelect: run })),
+                    "sep" as const,
+                    ...toggles.map(({ key, keys, on, run }) => ({ label: t(key), hint: keys, checked: on, onSelect: run })),
+                  ]}
+                />
+              ) : (
+                toggles.map(({ key, keys, icon: Icon, on, run }) => (
+                  <button key={key} type="button" className="v3d-btn" onClick={run} title={label(key, keys)} aria-label={t(key)} aria-pressed={on}>
+                    <Icon size={16} aria-hidden />
+                  </button>
+                ))
+              )}
             </div>
             {cut !== null && (
               <label className="v3d-section">
@@ -168,7 +208,7 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
               </label>
             )}
           </div>
-          <div className="v3d-cube-wrap" role="group" aria-label={t("view3d.cube")}>
+          <div className="v3d-cube-wrap" role="group" aria-label={t("view3d.cube")} hidden={layout.cube === "none"}>
             <div ref={cubeRef} className="v3d-cube">
               {CUBE_FACES.map(({ view, key, face }) => (
                 <button key={face} type="button" className={`v3d-face v3d-face-${face}`} onClick={() => engineRef.current?.preset(view)} title={t(key)}>

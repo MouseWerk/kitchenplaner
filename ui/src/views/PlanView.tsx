@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
-import { catalogEntry, isOverhead, kindOf } from "../model/catalog";
+import { catalogEntry, kindOf, placementOf, wallSnapReach } from "../kinds/registry";
 import { checkProject } from "../model/checks";
 import { add, area, bounds, footprint, itemsInFrame, partitionOutline, pointInPolygon, round, scale, snapItem, snapValue, sub, walls, type Box } from "../model/geometry";
 import { snapGroupGuides, snapItemGuides, type Guide } from "../model/snapGuides";
@@ -26,6 +26,7 @@ import {
   cancelTransform,
   combineSelection,
   confirmTransform,
+  registerOperator,
   rotateItemAround,
   selectionCentre,
   type SelectMode,
@@ -57,6 +58,8 @@ type Drag =
       screen: Vec2;
       /** Set when the press became a drag. */
       session: TransformSession | null;
+      /** Unregisters the drag's cancel (lib/commands.ts registerOperator). */
+      done: (() => void) | null;
       /** A Shift/Ctrl click on a selected item takes it out of the selection, unless it becomes a drag. */
       toggleOff: string | null;
     }
@@ -68,6 +71,8 @@ interface Running {
   session: TransformSession;
   /** Centre of the selection at the start: where the grab line starts. */
   anchor: Vec2;
+  /** Unregisters the operator's cancel. */
+  done: () => void;
 }
 
 /** What the plan draws over the drawing while editing (all in plan millimetres). */
@@ -115,7 +120,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     for (const it of project.items) {
       if (warned.has(it.id)) shapes.push({ t: "poly", pen: "detail", pts: footprint(it), closed: true, fill: "warning" });
     }
-    if (!roomEdit && selected.length === 1 && !isOverhead(kindOf(selected[0].catalogId))) shapes.push(...distanceDims(project, selected[0]));
+    if (!roomEdit && selected.length === 1 && placementOf(kindOf(selected[0].catalogId)) !== "overhead") shapes.push(...distanceDims(project, selected[0]));
     return { shapes };
   }, [project, selected, warned, roomEdit]);
 
@@ -138,7 +143,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     let rotation: number | null = null;
     if (!free && origin.length === 1) {
       const o = origin[0];
-      const s = snapItemGuides({ ...o, x: o.x + raw.x, y: o.y + raw.y }, st.project.room, others, grid, reach());
+      const s = snapItemGuides({ ...o, x: o.x + raw.x, y: o.y + raw.y }, st.project.room, others, grid, reach(), wallSnapReach(kindOf(o.catalogId)));
       delta = { x: s.x - o.x, y: s.y - o.y };
       rotation = s.rotation;
       guides = s.guides;
@@ -195,6 +200,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     const run = running.current;
     if (!run) return;
     running.current = null;
+    run.done();
     if (confirm) confirmTransform(run.session);
     else cancelTransform(run.session);
     setLive(IDLE);
@@ -208,7 +214,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     if (!session) return false;
     const anchor = selectionCentre([...session.origin.values()]);
     const op = kind === "rotate" ? startRotate(anchor, at) : startGrab(at);
-    running.current = { op, session, anchor };
+    running.current = { op, session, anchor, done: registerOperator(() => endOperator(false)) };
     setHover(null);
     updateOperator(running.current, at);
     return true;
@@ -219,6 +225,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     drag.current = null;
     setPanning(false);
     if (d?.kind === "items" && d.session) {
+      d.done?.();
       if (confirm) confirmTransform(d.session);
       else cancelTransform(d.session);
     }
@@ -295,12 +302,13 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     };
   }, []);
 
-  // Leaving the arrange mode (or the plan) in the middle of an operator or drag keeps its result
-  // and ends the gesture, so undo is not left blocked.
+  // Leaving the arrange mode (or the plan) in the middle of an operator or drag cancels it as
+  // Escape does, as the room mode and the 3D view do: what was half moved goes back, the gesture
+  // ends so undo is not left blocked, and the selection of the new mode stays as it is.
   const finishAll = useRef(() => {});
   finishAll.current = () => {
-    if (running.current) endOperator(true);
-    if (drag.current) endDrag(true);
+    if (running.current) endOperator(false);
+    if (drag.current) endDrag(false);
     boxPending.current = false;
     setHover(null);
   };
@@ -345,7 +353,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
         if (ids.includes(hit.id)) toggleOff = hit.id;
         else st.select({ items: [...ids, hit.id], opening: null });
       } else if (!ids.includes(hit.id)) st.select({ items: [hit.id], opening: null });
-      drag.current = { kind: "items", start: p, screen, session: null, toggleOff };
+      drag.current = { kind: "items", start: p, screen, session: null, done: null, toggleOff };
       return;
     }
     boxPending.current = false;
@@ -383,6 +391,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
           d.session = beginTransform();
           d.toggleOff = null;
           if (!d.session) return;
+          d.done = registerOperator(() => endDrag(false));
           setHover(null);
         }
         const { delta, guides, marks } = moveSession(d.session, sub(p, d.start), e.altKey, null);
@@ -432,8 +441,10 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     // Equipment belongs to the arrange mode: dropping some there switches to it.
     st.setMode("arrange");
     const draft = itemFromCatalog(entry, p.x, p.y);
-    const others = st.project.items.filter((i) => isOverhead(kindOf(i.catalogId)) === isOverhead(entry.kind));
-    const s = snapItem(draft, st.project.room, others, st.prefs.grid, true);
+    // Units snap flush to neighbours of the same placement (a slicer to other table-top units).
+    const placement = placementOf(entry.kind);
+    const others = st.project.items.filter((i) => placementOf(kindOf(i.catalogId)) === placement);
+    const s = snapItem(draft, st.project.room, others, st.prefs.grid, true, wallSnapReach(entry.kind));
     st.addItems([{ ...draft, x: s.x, y: s.y, rotation: s.rotation }]);
   };
 
@@ -578,7 +589,7 @@ export function hitItem(items: readonly Item[], p: Vec2, selected: readonly stri
 }
 
 /**
- * Dimensions from the selected item's bounding box to the nearest wall, partition or floor item
+ * Dimensions from the selected item's bounding box to the nearest wall, partition or floor unit
  * in each of the four directions: what a planner checks while placing (aisle widths, gaps).
  */
 export function distanceDims(project: Project, item: Item): Shape[] {
@@ -589,7 +600,7 @@ export function distanceDims(project: Project, item: Item): Shape[] {
   };
   for (const p of project.room.partitions ?? []) outline(partitionOutline(p));
   for (const o of project.items) {
-    if (o.id === item.id || isOverhead(kindOf(o.catalogId))) continue;
+    if (o.id === item.id || placementOf(kindOf(o.catalogId)) !== "floor") continue;
     outline(footprint(o));
   }
   const mid = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };

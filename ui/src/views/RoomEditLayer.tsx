@@ -8,7 +8,8 @@
 // - partition: draws partitions from end to end.
 //
 // Every edit is one undo step: a grab works on a snapshot of the room and is restored exactly on
-// cancel (as the item transforms in lib/commands.ts do).
+// cancel (as the item transforms in lib/commands.ts do). Leaving the mode or the plan in the
+// middle of a grab cancels it, as in the arrange mode.
 
 import { useEffect, useReducer, useRef, type PointerEvent as RPointerEvent } from "react";
 import { add, dist, dot, norm, round, scale, snapValue, sub, walls } from "../model/geometry";
@@ -29,8 +30,9 @@ import {
   type SelectMode,
 } from "../model/roomEdit";
 import type { Partition, Room, Vec2 } from "../model/types";
-import { closesOutline, isValidOutline, nextPoint, replaceOutline, snapPoint, type Guide, type Segment, type Snapped } from "../model/wallDraw";
+import { closesOutline, isValidOutline, nextPoint, outlinePointAction, replaceOutline, snapPoint, type Guide, type Segment, type Snapped } from "../model/wallDraw";
 import { parseNumber } from "../components/Fields";
+import { noteOperatorChange, registerOperator, restoreSnapshot, takeSnapshot, type OperatorSnapshot } from "../lib/commands";
 import { grabDelta, operatorKey, operatorLabel, startGrab, type GrabOp } from "../lib/modal";
 import { setModeKeyHandler } from "../lib/shortcuts";
 import { num, t, useT } from "../lib/i18n";
@@ -63,12 +65,13 @@ const LABEL_MIN_PX = 48;
 /** New partitions (mm). */
 const PARTITION_THICKNESS = 100;
 
-type Snapshot = Pick<AppState, "project" | "past" | "future" | "dirty" | "selection">;
-
 interface Grab {
   kind: "grab";
   op: GrabOp;
-  before: Snapshot;
+  /** The state before the grab: what a cancel puts back. */
+  snap: OperatorSnapshot;
+  /** Unregisters the grab's cancel (lib/commands.ts registerOperator). */
+  done: () => void;
   /** The room when the grab started; every update is computed from it. */
   origin: Room;
   corners: number[];
@@ -88,7 +91,7 @@ type Interaction =
 
 interface Editor {
   inter: Interaction | null;
-  /** Cursor in plan millimetres; null outside the plan. */
+  /** Cursor in plan millimetres; null outside the plan (kept while a grab runs). */
   cursor: Vec2 | null;
   hover: RoomHit | null;
   /** Points of the outline being drawn, or the start of the partition being drawn. */
@@ -101,11 +104,6 @@ interface Editor {
   shift: boolean;
   alt: boolean;
 }
-
-const snapshot = (): Snapshot => {
-  const { project, past, future, dirty, selection } = useStore.getState();
-  return { project, past, future, dirty, selection };
-};
 
 const EMPTY_ROOM_SELECTION = { corners: [], partitions: [], opening: null };
 
@@ -188,12 +186,13 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
     const st = useStore.getState();
     const sel = st.selection;
     if (!end && sel.corners.length === 0 && sel.partitions.length === 0 && !sel.opening) return false;
-    const before = snapshot();
+    const snap = takeSnapshot();
     st.beginGesture();
     ed.current.inter = {
       kind: "grab",
       op: startGrab(at),
-      before,
+      snap,
+      done: registerOperator(() => endGrab(false)),
       origin: st.project.room,
       corners: end || sel.opening ? [] : sel.corners,
       partitions: end || sel.opening ? [] : sel.partitions,
@@ -249,10 +248,21 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
         snap = snapPoint(add(p0, sub(cursor, g.op.start)), { grid, radius, corners: snapCorners(base).filter((c) => c !== p0) });
         delta = sub(snap.p, p0);
       }
-      room = movePartitions(moveCorners(base, g.corners, delta), g.partitions, delta);
+      const moved = moveCorners(base, g.corners, delta);
+      if (moved === base && g.corners.length > 0 && (delta.x !== 0 || delta.y !== 0)) {
+        // No room there (walls crossing, no floor): the last valid state stays, and the status says why.
+        e.snap = null;
+        st.setStatus(`${label}  ·  ${t("roomEdit.grabInvalid")}`);
+        bump();
+        return;
+      }
+      room = movePartitions(moved, g.partitions, delta);
     }
     e.snap = snap;
-    if (room !== st.project.room) st.change((p) => ({ ...p, room }), { gesture: true });
+    if (room !== st.project.room) {
+      st.change((p) => ({ ...p, room }), { gesture: true });
+      noteOperatorChange(g.snap);
+    }
     st.setStatus(label);
     bump();
   };
@@ -261,11 +271,12 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
     const g = ed.current.inter;
     if (g?.kind !== "grab") return;
     const st = useStore.getState();
+    g.done();
     st.endGesture();
     ed.current.inter = null;
     ed.current.snap = null;
     // A grab that changed nothing leaves no undo step.
-    if (!keep || JSON.stringify(st.project.room) === JSON.stringify(g.before.project.room)) useStore.setState({ ...g.before });
+    if (!keep || JSON.stringify(st.project.room) === JSON.stringify(g.snap.before.project.room)) restoreSnapshot(g.snap);
     st.setStatus(null);
     bump();
   };
@@ -296,7 +307,11 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
       else if (typed === null && closesOutline(e.draft, e.cursor, radius)) {
         e.closing = true;
         e.snap = { p: e.draft[0], target: e.draft[0], guides: [] };
-      } else e.snap = nextPoint(last, e.cursor, { grid, radius, corners, free: e.shift, typed });
+      } else {
+        e.snap = nextPoint(last, e.cursor, { grid, radius, corners, free: e.shift, typed });
+        // A typed length can end the last wall exactly on the start: that closes the room too.
+        e.closing = outlinePointAction(e.draft, e.snap.p) === "close";
+      }
     } else {
       const opts = { grid, radius, corners: snapCorners(room), segments: snapSegments(room) };
       e.snap = last ? nextPoint(last, e.cursor, { ...opts, free: e.shift, typed }) : snapPoint(e.cursor, opts);
@@ -333,9 +348,10 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
     const st = useStore.getState();
     if (!e.snap) return;
     if (st.roomTool === "outline") {
-      if (e.closing) return finishOutline();
-      const last = e.draft[e.draft.length - 1];
-      if (last && dist(last, e.snap.p) < 1) return;
+      const action = e.closing ? "close" : outlinePointAction(e.draft, e.snap.p);
+      if (action === "close") return finishOutline();
+      // On a point already drawn: a wall without length, or a loop through the drawing.
+      if (action === "reject") return;
       e.draft = [...e.draft, e.snap.p];
       e.typed = "";
       return updateDraw();
@@ -425,7 +441,8 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
       return true;
     }
     if (e.altKey) return false;
-    if (e.code === "KeyG") return beginGrab(false, s.cursor ?? { x: 0, y: 0 });
+    // G works where the cursor is: over the plan (as in the arrange mode).
+    if (e.code === "KeyG") return s.cursor ? beginGrab(false, s.cursor) : false;
     if (e.key === "Delete" || e.key === "Backspace" || e.code === "KeyX") return removeRoomSelection();
     if (e.key === "Escape") {
       const sel = st.selection;
@@ -449,8 +466,9 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
       host?.classList.remove("is-room-mode");
       const g = ed.current.inter;
       if (g?.kind === "grab") {
+        g.done();
         useStore.getState().endGesture();
-        useStore.setState({ ...g.before });
+        restoreSnapshot(g.snap);
       }
       useStore.getState().setStatus(null);
     };
@@ -578,7 +596,13 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
   };
 
   const onPointerLeave = () => {
-    ed.current.hover = null;
+    const s = ed.current;
+    s.hover = null;
+    // A running grab keeps its last cursor, so it does not jump back to where it started.
+    if (s.inter?.kind !== "grab") {
+      s.cursor = null;
+      updateDraw();
+    }
     props.onCursor?.(null);
     bump();
   };

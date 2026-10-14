@@ -123,8 +123,9 @@ export function expandDim(d: DimShape, paperScale: number): { lines: [Vec2, Vec2
     [sub(b2, tick), add(b2, tick)],
   ];
   let angle = (Math.atan2(dir.y, dir.x) * 180) / Math.PI;
-  // Text stays readable: never upside down.
-  if (angle > 90.01 || angle < -89.99) angle += 180;
+  // Text stays readable: never upside down, and vertical dimensions all read from the right
+  // (bottom to top, ISO 129), whichever way the wall runs.
+  if (angle > 89.99 || angle < -90.01) angle -= Math.sign(angle) * 180;
   const r = { x: Math.cos((angle * Math.PI) / 180), y: Math.sin((angle * Math.PI) / 180) };
   // "Up" of the text as it is read (y points down on screen).
   const up = { x: r.y, y: -r.x };

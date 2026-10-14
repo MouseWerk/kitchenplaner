@@ -1,9 +1,10 @@
 // Plausibility checks of a plan: what a planner would otherwise notice only on site.
 
-import { isOverhead, kindOf } from "./catalog";
+import { collides, kindOf, placementOf } from "../kinds/registry";
 import { add, convexOverlap, cross, EPS, footprint, openingSpan, pointInPolygon, scale, sub, walls } from "./geometry";
 import { bandPiece, clampPartitionOpening, openingSpanOnPartition, partitionAxes, partitionBand, partitionLength, partitionOutline } from "./partitions";
 import { positions } from "./project";
+import { selfIntersects } from "./roomEdit";
 import type { Project, Room, Vec2 } from "./types";
 import type { TKey } from "../lib/i18n";
 
@@ -17,25 +18,30 @@ export interface Issue {
 }
 
 /**
- * All problems of a project, in a stable order: overlaps (by position pairs), items outside the
+ * All problems of a project, in a stable order: a room outline crossing itself, overlaps (by position pairs), items outside the
  * room, items standing in a partition, partitions reaching outside the room, items blocking a
  * door (in an outer wall or a partition), items higher than the room (each by position).
  *
- * Floor items only collide with floor items and overhead items (hoods, wall shelves) only with
- * overhead items: a hood above a range is the normal case. A partition collides with every item
- * that starts below its top, so a wall shelf may hang above a half-height partition.
+ * Items only collide with items of the same placement (`collides`): a hood above a range or a
+ * slicer on a table is the normal case, and flat ones (drains, platforms) collide with nothing.
+ * The overlap uses the footprint rectangle, also of a unit drawn round. A partition collides with
+ * every item that starts below its top except flat ones, so a wall shelf may hang above a
+ * half-height partition. Only floor units block a door.
  */
 export function checkProject(project: Project): Issue[] {
   const pos = positions(project);
   const items = project.items;
   const fps = items.map((it) => footprint(it));
-  const overhead = items.map((it) => isOverhead(kindOf(it.catalogId)));
+  const placement = items.map((it) => placementOf(kindOf(it.catalogId)));
   const issues: Issue[] = [];
   const posOf = (id: string) => pos.get(id) ?? 0;
 
+  // The room mode never makes one, but a file may bring one: it opens, so it can be repaired.
+  if (selfIntersects(project.room.points)) issues.push({ key: "check.outlineInvalid", vars: {}, itemIds: [] });
+
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      if (overhead[i] !== overhead[j]) continue;
+      if (!collides(placement[i], placement[j])) continue;
       if (!convexOverlap(fps[i], fps[j])) continue;
       issues.push({ key: "check.overlap", vars: { a: posOf(items[i].id), b: posOf(items[j].id) }, itemIds: [items[i].id, items[j].id] });
     }
@@ -51,6 +57,7 @@ export function checkProject(project: Project): Issue[] {
   const parts = project.room.partitions.filter((p) => partitionLength(p) >= EPS);
   const outlines = parts.map((p) => partitionOutline(p));
   items.forEach((it, i) => {
+    if (placement[i] === "flat") return;
     const hit = parts.filter((p, k) => it.elevation < p.height && convexOverlap(fps[i], outlines[k]));
     if (hit.length > 0) issues.push({ key: "check.partitionOverlap", vars: { pos: posOf(it.id) }, itemIds: [it.id], partitionIds: hit.map((p) => p.id) });
   });
@@ -63,7 +70,7 @@ export function checkProject(project: Project): Issue[] {
 
   const doorAreas = doorClearances(project);
   items.forEach((it, i) => {
-    if (overhead[i]) return;
+    if (placement[i] !== "floor") return;
     if (doorAreas.some((area) => convexOverlap(fps[i], area))) issues.push({ key: "check.doorBlocked", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
   });
 

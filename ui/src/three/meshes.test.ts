@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { CATALOG, isOverhead, kindOf, sinkBowlCount } from "../model/catalog";
+import { CATALOG, kindDef, kindOf, placementOf } from "../kinds/registry";
+import { sinkBowlCount } from "../kinds/washing/sink";
 import { frontOf } from "../model/geometry";
 import type { Item } from "../model/types";
-import { buildItemObject, itemIdOf, TAP_RISE } from "./meshes";
+import { buildItemObject, itemIdOf } from "./meshes";
 
 /** Tolerance for sizes in metres (a tenth of a millimetre). */
 const TOL = 1e-4;
@@ -39,15 +40,16 @@ describe("buildItemObject", () => {
       expect(b.max.z).toBeCloseTo((it0.y + it0.depth / 2) / 1000, 4);
 
       const top = (it0.elevation + it0.height) / 1000;
-      if (entry.kind === "sink") {
-        // The tap rises above the worktop, the item's height.
-        expect(b.max.y).toBeGreaterThan(top);
-        expect(b.max.y).toBeLessThanOrEqual(top + TAP_RISE + TOL);
+      // Only a declared rise (a tap over a sink) may stand above the item's height.
+      const rise = kindDef(entry.kind).rise ?? 0;
+      if (rise > 0) {
+        expect(b.max.y).toBeGreaterThanOrEqual(top - TOL);
+        expect(b.max.y).toBeLessThanOrEqual(top + rise / 1000 + TOL);
       } else {
         expect(b.max.y).toBeCloseTo(top, 4);
       }
-      // Overhead items hang at their elevation; a combi oven on a stand reaches the floor.
-      const bottom = isOverhead(entry.kind) ? it0.elevation / 1000 : 0;
+      // Overhead and table-top items start at their elevation; a combi oven on a stand reaches the floor.
+      const bottom = placementOf(entry.kind) === "floor" ? 0 : it0.elevation / 1000;
       expect(b.min.y).toBeCloseTo(bottom, 4);
     });
   }

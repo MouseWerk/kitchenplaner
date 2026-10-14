@@ -1,12 +1,12 @@
 // Project files: pretty JSON with a fixed key order (readable diffs, stable files), and a strict
 // parser that turns anything read from disk into a valid Project or a ProjectError.
 
-import { catalogEntry } from "./catalog";
+import { catalogEntry } from "../kinds/registry";
 import { clampOpening, MAX_LENGTH } from "./geometry";
 import { clampPartitionOpening, MAX_PARTITION_THICKNESS, MIN_PARTITION_THICKNESS } from "./partitions";
 import { FORMAT_VERSION, newId } from "./project";
 import { COINCIDENT_DISTANCE, isUsableOutline, removeCoincidentCorners } from "./roomEdit";
-import type { Connections, Item, Opening, OpeningKind, Partition, Project, ProjectInfo, Room, Vec2 } from "./types";
+import { ENERGIES, type Connections, type Energy, type Item, type Opening, type OpeningKind, type Partition, type Project, type ProjectInfo, type Room, type Vec2 } from "./types";
 import { t, type TKey } from "../lib/i18n";
 
 const FORMAT_ID = "kitchenplaner";
@@ -74,6 +74,7 @@ export function serializeProject(p: Project): string {
         height: it.height,
         elevation: it.elevation,
         connections,
+        ...(it.energy !== undefined ? { energy: it.energy } : {}),
         ...(it.note !== undefined ? { note: it.note } : {}),
       };
     }),
@@ -88,7 +89,8 @@ export function serializeProject(p: Project): string {
  * are replaced by new ones, and unknown catalog ids are kept (they draw as a table).
  *
  * Versions: 1 has no partitions (read as none); 2 adds `room.partitions`, openings in a
- * partition (`partition`) and the opening kind "hatch".
+ * partition (`partition`) and the opening kind "hatch". An item's optional `energy` ("electric" or
+ * "gas") needs no new version: older builds drop it and draw the default variant.
  */
 export function parseProject(text: string): Project {
   let raw: unknown;
@@ -268,6 +270,10 @@ function parseItem(v: unknown, path: string): Item {
     elevation: num(v.elevation, `${path}.elevation`, "distance", entry?.elevation ?? 0),
     connections: parseConnections(v.connections, `${path}.connections`),
   };
+  if (v.energy !== undefined) {
+    if (!ENERGIES.includes(v.energy as Energy)) invalid(`${path}.energy`, v.energy);
+    item.energy = v.energy as Energy;
+  }
   if (v.note !== undefined) item.note = str(v.note, `${path}.note`);
   return item;
 }

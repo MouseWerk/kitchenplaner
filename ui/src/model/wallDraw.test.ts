@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { rectRoom } from "./geometry";
 import { testProject } from "./testProject";
-import { closesOutline, isValidOutline, nextPoint, pointAt, replaceOutline, selfIntersects, snapDirection, snapPoint } from "./wallDraw";
+import { closesOutline, isValidOutline, nextPoint, outlinePointAction, pointAt, replaceOutline, selfIntersects, snapDirection, snapPoint } from "./wallDraw";
 
 const opts = { grid: 50, radius: 100, corners: [], free: false, typed: null };
 
@@ -72,6 +72,27 @@ describe("closesOutline", () => {
     expect(closesOutline(pts, { x: 20, y: 30 }, 50)).toBe(true);
     expect(closesOutline(pts, { x: 200, y: 30 }, 50)).toBe(false);
     expect(closesOutline(pts.slice(0, 2), { x: 0, y: 0 }, 50)).toBe(false);
+  });
+});
+
+describe("outlinePointAction", () => {
+  const pts = [{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 3000 }, { x: 0, y: 3000 }];
+
+  // A typed last wall lands exactly on the start point: that closes the room.
+  it("closes on the first point from three points on, also when the point was typed", () => {
+    const p = nextPoint(pts[3], { x: 0, y: 100 }, { grid: 50, radius: 30, corners: pts, free: false, typed: 3000 }).p;
+    expect(p).toEqual({ x: 0, y: 0 });
+    expect(outlinePointAction(pts, p)).toBe("close");
+    expect(outlinePointAction(pts.slice(0, 3), { x: 0, y: 0.4 })).toBe("close");
+  });
+
+  it("adds a new point and rejects one on any earlier point", () => {
+    expect(outlinePointAction([], { x: 0, y: 0 })).toBe("add");
+    expect(outlinePointAction(pts, { x: 2000, y: 1500 })).toBe("add");
+    expect(outlinePointAction(pts, { x: 4000, y: 0 })).toBe("reject");
+    expect(outlinePointAction(pts, { x: 0, y: 3000.5 })).toBe("reject");
+    // Too few points to close: back on the start is no room yet.
+    expect(outlinePointAction(pts.slice(0, 2), { x: 0, y: 0 })).toBe("reject");
   });
 });
 

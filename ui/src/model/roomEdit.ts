@@ -70,7 +70,8 @@ export function moveCorner(room: Room, index: number, to: Vec2): Room {
 
 /**
  * The room with the corners `indices` moved by `delta` (a selection grabbed with G). Unchanged
- * when a moved corner would land on a neighbour. The openings of every wall touching a moved
+ * when the result is no room (a corner on another one, walls crossing, no floor left): such an
+ * outline would be saved but could not be opened again. The openings of every wall touching a moved
  * corner are clamped to their new lengths; a wall whose both corners move keeps its openings.
  */
 export function moveCorners(room: Room, indices: readonly number[], delta: Vec2): Room {
@@ -78,7 +79,7 @@ export function moveCorners(room: Room, indices: readonly number[], delta: Vec2)
   const moving = new Set(indices.filter((i) => i >= 0 && i < n));
   if (moving.size === 0 || (delta.x === 0 && delta.y === 0)) return room;
   const points = room.points.map((p, i) => (moving.has(i) ? roundPt(add(p, delta)) : p));
-  for (let i = 0; i < n; i++) if (dist(points[i], points[(i + 1) % n]) < COINCIDENT_DISTANCE) return room;
+  if (!isValidOutline(points)) return room;
   const next = { ...room, points };
   const touched = (w: number) => moving.has(w) || moving.has((w + 1) % n);
   return { ...next, openings: room.openings.map((o) => (inWall(o) && touched(o.wall) ? clampOpening(next, o) : o)) };

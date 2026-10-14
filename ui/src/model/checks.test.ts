@@ -5,6 +5,12 @@ import { lRoom } from "./geometry";
 import type { Opening, Partition } from "./types";
 
 describe("checkProject", () => {
+  it("reports a room outline that crosses itself (opened from a file)", () => {
+    const p = testProject();
+    p.room = { ...p.room, points: [{ x: 0, y: 0 }, { x: 8000, y: 6000 }, { x: 8000, y: 0 }, { x: 0, y: 6000 }], openings: [] };
+    expect(checkProject(p)).toEqual([{ key: "check.outlineInvalid", vars: {}, itemIds: [] }]);
+  });
+
   it("finds nothing in a clean plan", () => {
     const p = testProject([testItem("r", "range-6", 4000, 450), testItem("h", "hood-wall", 4000, 550)]);
     // The hood above the range is the normal case, not an overlap.
@@ -24,6 +30,40 @@ describe("checkProject", () => {
       { key: "check.overlap", vars: { a: 1, b: 2 }, itemIds: ["a", "b"] },
       { key: "check.overlap", vars: { a: 4, b: 5 }, itemIds: ["h1", "h2"] },
     ]);
+  });
+
+  it("lets table-top units stand on a table and collide only with each other", () => {
+    const p = testProject([
+      testItem("t", "table", 2000, 350),
+      // Slicer 1425-1975 and table mixer 1890-2310 overlap each other, both stand on the table.
+      testItem("s", "prep-slicer", 1700, 300),
+      testItem("m", "prep-mixer-10", 2100, 250),
+      // A scale at 2400-2750 next to them: free.
+      testItem("w", "prep-scale", 2575, 200),
+      testItem("h", "wall-shelf", 2000, 175),
+    ]);
+    expect(checkProject(p)).toEqual([{ key: "check.overlap", vars: { a: 2, b: 3 }, itemIds: ["s", "m"] }]);
+  });
+
+  it("lets flat units (drains, channels, platforms) lie under and across anything", () => {
+    const p = testProject([
+      testItem("sink", "sink-1", 4000, 350),
+      testItem("drain", "floor-drain", 4000, 350),
+      // A channel across the sink and the drain, a platform under a table.
+      testItem("ch", "drain-channel-200", 4000, 400),
+      testItem("pf", "platform", 2000, 400),
+      testItem("t", "table", 2000, 350),
+    ]);
+    expect(checkProject(p)).toEqual([]);
+  });
+
+  it("lets only floor units block a door, and flat units lie across a partition", () => {
+    // The door spans x 695 to 1705 in the south wall; its free square reaches up to y 4990.
+    const door = testProject([testItem("d", "floor-drain", 1200, 5300), testItem("t", "table", 1200, 5300), testItem("s", "prep-slicer", 1200, 5300)]);
+    expect(checkProject(door)).toEqual([{ key: "check.doorBlocked", vars: { pos: 2 }, itemIds: ["t"] }]);
+    const p = testProject([testItem("d", "drain-channel-200", 3000, 1500, 90)]);
+    p.room.partitions = [{ id: "n", a: { x: 3000, y: 0 }, b: { x: 3000, y: 3000 }, thickness: 100, height: 3000 }];
+    expect(checkProject(p)).toEqual([]);
   });
 
   it("reports items reaching outside the room", () => {

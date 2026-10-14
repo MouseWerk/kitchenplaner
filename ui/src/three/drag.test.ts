@@ -44,4 +44,18 @@ describe("dragging items in 3D", () => {
     const alone = snapItem(hood, p.room, [], 50, false);
     expect(moves.get("h")).toEqual({ x: alone.x, y: alone.y, rotation: alone.rotation });
   });
+
+  it("pulls a table-top unit against the wall only when it touches it", () => {
+    // A slicer (600 deep) at the front of a table against the north wall: its back 100 mm off it.
+    const table = testItem("t", "table", 4000, 350);
+    const slicer = testItem("s", "prep-slicer", 4000, 400);
+    const p = testProject([table, slicer]);
+    const drag = (y: number) => dragItems(p, new Map([["s", { x: 4000, y }]]), { x: 0, y: 0 }, 50, false).get("s");
+    expect(drag(400)).toEqual({ x: 4000, y: 400, rotation: 0 });
+    expect(drag(300)).toEqual({ x: 4000, y: 300, rotation: 0 });
+    // A floor unit with its back as far off the wall is pulled against it.
+    const cart = { ...slicer, id: "c", catalogId: "table" };
+    const q = testProject([cart]);
+    expect(dragItems(q, new Map([["c", { x: 4000, y: 400 }]]), { x: 0, y: 0 }, 50, false).get("c")).toEqual({ x: 4000, y: 300, rotation: 0 });
+  });
 });

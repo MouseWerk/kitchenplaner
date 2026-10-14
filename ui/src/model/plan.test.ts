@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { planDrawing } from "./plan";
+import { exampleKitchen } from "../examples/exampleKitchen";
+import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "../render/svg";
 import { area, bounds, pointInPolygon } from "./geometry";
 import { testItem, testProject } from "./testProject";
 import type { Opening, Partition } from "./types";
@@ -71,15 +73,36 @@ describe("planDrawing walls", () => {
 
 describe("planDrawing dimensions", () => {
   it("dimensions every wall outside the room and the overall size further out", () => {
+    // A step in the north side: no single wall runs the whole width, so the overall width is
+    // dimensioned; the west wall runs the whole depth, which its own dimension says already.
     const p = testProject();
+    p.room.points = [
+      { x: 0, y: 0 },
+      { x: 3000, y: 0 },
+      { x: 3000, y: 500 },
+      { x: 8000, y: 500 },
+      { x: 8000, y: 6000 },
+      { x: 0, y: 6000 },
+    ];
+    p.room.openings = [];
     const ds = dims(planDrawing(p, ALL).shapes);
-    expect(ds.map((d) => d.text)).toEqual(["8000", "6000", "8000", "6000", "8000", "6000"]);
-    for (const d of ds.slice(0, 4)) {
+    expect(ds.map((d) => d.text)).toEqual(["3000", "500", "5000", "5500", "8000", "6000", "8000"]);
+    for (const d of ds.slice(0, 6)) {
       const line = expandDim(d, 50).lines[2];
       const mid = { x: (line[0].x + line[1].x) / 2, y: (line[0].y + line[1].y) / 2 };
       expect(pointInPolygon(mid, p.room.points)).toBe(false);
     }
-    expect(Math.abs(ds[4].offset)).toBeGreaterThan(Math.abs(ds[0].offset));
+    expect(Math.abs(ds[6].offset)).toBeGreaterThan(Math.abs(ds[0].offset));
+    expect([ds[6].a, ds[6].b]).toEqual([
+      { x: 0, y: 0 },
+      { x: 8000, y: 0 },
+    ]);
+  });
+
+  it("leaves out an overall dimension that a wall's own dimension repeats", () => {
+    // A rectangle: each wall runs a whole side, so only the four wall dimensions remain.
+    const ds = dims(planDrawing(testProject(), ALL).shapes);
+    expect(ds.map((d) => d.text)).toEqual(["8000", "6000", "8000", "6000"]);
   });
 
   it("has no dimensions when they are off", () => {
@@ -111,6 +134,33 @@ describe("planDrawing items", () => {
     const hoodOutline = shapes[hoodIdx] as PolyShape;
     expect(hoodOutline.pen).toBe("overhead");
     expect(hoodOutline.fill).toBe("none");
+  });
+
+  it("draws by placement: floor units, flat ones unfilled, table-top units filled, overhead dashed on top", () => {
+    const p = testProject([
+      testItem("hood", "hood-wall", 2000, 550),
+      testItem("s", "prep-slicer", 1700, 300),
+      testItem("drain", "floor-drain", 2000, 350),
+      testItem("t", "table", 2000, 350),
+    ]);
+    const shapes = planDrawing(p, NONE).shapes;
+    const first = (id: string) => shapes.findIndex((s) => s.itemId === id);
+    expect(first("t")).toBeLessThan(first("drain"));
+    expect(first("drain")).toBeLessThan(first("s"));
+    expect(first("s")).toBeLessThan(first("hood"));
+    const outline = (id: string) => shapes[first(id)] as PolyShape;
+    expect([outline("t").pen, outline("t").fill]).toEqual(["item", "item"]);
+    expect([outline("drain").pen, outline("drain").fill]).toEqual(["item", "none"]);
+    expect([outline("s").pen, outline("s").fill]).toEqual(["item", "item"]);
+    expect([outline("hood").pen, outline("hood").fill]).toEqual(["overhead", "none"]);
+  });
+
+  it("draws a round column as a filled circle with the wall pen", () => {
+    const p = testProject([testItem("c", "column-round", 3000, 3000)]);
+    const outline = planDrawing(p, NONE).shapes.find((s) => s.itemId === "c") as PolyShape;
+    expect([outline.pen, outline.fill, outline.closed]).toEqual(["wall", "wall", true]);
+    expect(outline.pts.length).toBeGreaterThan(16);
+    for (const q of outline.pts) expect(Math.hypot(q.x - 3000, q.y - 3000)).toBeCloseTo(200, 6);
   });
 
   it("gives a range 4 or 6 plates by width and a sink 1 or 2 bowls", () => {
@@ -221,5 +271,49 @@ describe("planDrawing partitions", () => {
     // The sill edges on both faces of the partition.
     const sills = polys(shapes).filter((s) => s.pen === "opening" && s.pts.length === 2 && Math.abs(s.pts[0].x - s.pts[1].x) < 1e-6 && s.pts[0].x > 2000 && s.pts[0].x < 4000);
     expect(sills.map((s) => Math.round(s.pts[0].x)).sort()).toEqual([2950, 3050]);
+  });
+});
+
+describe("planDrawing position numbers", () => {
+  /** Centres of the position circles (plan mm) at a paper scale. */
+  const circles = (shapes: Shape[], ps: number) =>
+    shapes
+      .filter((s): s is TextShape => s.t === "text" && s.circled === true)
+      .map((s) => ({ id: s.itemId!, x: s.p.x, y: s.p.y - CIRCLE_CENTER_RISE * s.size * ps, r: CIRCLE_RADIUS * s.size * ps }));
+
+  // 40: the screen; 50: the exports (1:50).
+  it.each([40, 50])("never lets two numbers of the example kitchen overlap (1:%i)", (ps) => {
+    const p = exampleKitchen("de");
+    const cs = circles(planDrawing(p, { showNames: false, showDims: true, paperScale: ps }).shapes, ps);
+    expect(cs).toHaveLength(p.items.length);
+    for (let i = 0; i < cs.length; i++) {
+      for (let j = i + 1; j < cs.length; j++) {
+        const d = Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y);
+        expect(d, `${cs[i].id} / ${cs[j].id}`).toBeGreaterThanOrEqual(cs[i].r + cs[j].r);
+      }
+    }
+  });
+
+  it("puts a floor unit's number in its middle and the number of a hood above it towards the hood's front right", () => {
+    const p = testProject([testItem("h", "hood-wall", 2000, 550), testItem("r", "range-6", 2000, 450)]);
+    const cs = circles(planDrawing(p, { ...NONE, paperScale: 50 }).shapes, 50);
+    const range = cs.find((c) => c.id === "r")!;
+    const hood = cs.find((c) => c.id === "h")!;
+    expect([range.x, range.y]).toEqual([2000, 450]);
+    // The hood (2400 × 1100 at 2000, 550): right of and in front of its centre, inside it.
+    expect(hood.x).toBeGreaterThan(2000);
+    expect(hood.y).toBeGreaterThan(550);
+    expect(hood.x + hood.r).toBeLessThanOrEqual(3200);
+    expect(hood.y + hood.r).toBeLessThanOrEqual(1100);
+    expect(Math.hypot(hood.x - range.x, hood.y - range.y)).toBeGreaterThanOrEqual(2 * range.r);
+  });
+
+  it("moves a number off another one, the same way every time", () => {
+    // Two drains side by side, closer than two circles: the second number moves.
+    const p = testProject([testItem("a", "floor-drain", 2000, 2000), testItem("b", "floor-drain", 2150, 2000)]);
+    const one = circles(planDrawing(p, { ...NONE, paperScale: 50 }).shapes, 50);
+    expect([one[0].x, one[0].y]).toEqual([2000, 2000]);
+    expect(Math.hypot(one[1].x - one[0].x, one[1].y - one[0].y)).toBeGreaterThanOrEqual(2 * one[0].r);
+    expect(circles(planDrawing(p, { ...NONE, paperScale: 50 }).shapes, 50)).toEqual(one);
   });
 });

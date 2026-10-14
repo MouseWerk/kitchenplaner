@@ -75,3 +75,15 @@ describe("snapGroupGuides", () => {
     expect(s.guides.some((g) => g.kind === "wall")).toBe(true);
   });
 });
+
+describe("snapItemGuides wall reach", () => {
+  it("pulls the back against a wall only within the given reach", () => {
+    // The back 100 mm off the north wall.
+    const it0 = item({ x: 3000, y: 450 });
+    expect(snapItemGuides(it0, room, [], 50, 30).y).toBe(350);
+    const touchOnly = snapItemGuides(it0, room, [], 50, 30, 1);
+    expect(touchOnly.y).toBe(450);
+    expect(touchOnly.guides.some((g) => g.kind === "wall")).toBe(false);
+    expect(snapItemGuides(item({ x: 3000, y: 350 }), room, [], 50, 30, 1).guides.some((g) => g.kind === "wall")).toBe(true);
+  });
+});

@@ -49,6 +49,8 @@ export interface AppState {
   project: Project;
   /** Counts `load` calls, so views can refit when a project is opened or created (even an identical one). */
   loadCount: number;
+  /** Counts `markSaved` calls, so a running operator can tell that its state reached a file. */
+  saveCount: number;
   /** Path of the file the project was opened from or saved to; null for a new project. */
   path: string | null;
   /** True when the project changed since it was opened or saved. */
@@ -101,6 +103,7 @@ let gestureActive = false;
 export const useStore = create<AppState>((set, get) => ({
   project: newProject(),
   loadCount: 0,
+  saveCount: 0,
   path: null,
   dirty: false,
   past: [],
@@ -166,7 +169,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   markSaved(path) {
-    set({ path, dirty: false });
+    set((s) => ({ path, dirty: false, saveCount: s.saveCount + 1 }));
   },
 
   select(sel) {

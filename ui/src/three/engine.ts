@@ -21,7 +21,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import type { Item, Project, Room, Vec2 } from "../model/types";
+import type { Item, Project, Room } from "../model/types";
 import { bounds } from "../model/geometry";
 import { useStore, type Mode } from "../store/store";
 import { buildItemObject, itemIdOf, MM_PER_UNIT, releaseShared, retainShared, setItemHighlight } from "./meshes";
@@ -30,7 +30,7 @@ import { disposeMerged, mergeItemObject } from "./merge";
 import { applyRoomLook, buildContactShadows, disposeContactShadows, LOOK, RoomTextures } from "./look";
 import { distanceFor, easeInOut, fitDistance, halfHeightAt, orthoHalfHeightForBox, slerpDirection, VIEW_DIRECTION, viewKeyAction, type ViewName } from "./navigation";
 import { EYE_HEIGHT, intentOf, isWalkKey, look, startWalk, stepWalk, walkSpace, type WalkSpace, type WalkState } from "./walk";
-import { dragItems } from "./drag";
+import { canStartItemDrag, ItemDragSession } from "./dragSession";
 
 /** Pointer movement (px) up to which a press and release counts as a click, not a drag. */
 const CLICK_TOLERANCE = 4;
@@ -44,11 +44,8 @@ const FIT_MARGIN = 1.1;
 const FOCUS_MARGIN = 1.6;
 /** Background when the theme token cannot be read. */
 const FALLBACK_BACKGROUND = "#2a2b2f";
-/**
- * Outline colour: a dark neutral gray. The room and the steel are light in both themes, so a
- * theme colour (light in the dark theme) would vanish on them; no accent colour either.
- */
-const OUTLINE_COLOR = 0x2a2c30;
+/** Outline colour when the token `--draw-outline-3d` cannot be read (the same dark gray). */
+const FALLBACK_OUTLINE = "#2a2c30";
 /** How far an outline stands off the item (m), so it does not z-fight with its faces. */
 const OUTLINE_PAD = 0.008;
 /** The hover outline is the selection outline, fainter; hidden edges of a selection show faintly. */
@@ -97,12 +94,10 @@ interface View {
 }
 
 interface ItemDrag {
-  ids: string[];
-  origin: Map<string, Vec2>;
+  session: ItemDragSession;
   plane: THREE.Plane;
   start: THREE.Vector3;
   clickId: string;
-  moved: boolean;
 }
 
 export class Engine {
@@ -135,10 +130,10 @@ export class Engine {
   private ao: GTAOPass | null = null;
   private framed = false;
   private readonly outlineBox: THREE.EdgesGeometry;
-  private readonly selectedLine = new THREE.LineBasicMaterial({ color: OUTLINE_COLOR });
+  private readonly selectedLine = new THREE.LineBasicMaterial({ color: FALLBACK_OUTLINE });
   /** The selection's edges behind other things, so a hidden selected item can still be found. */
-  private readonly selectedHidden = new THREE.LineBasicMaterial({ color: OUTLINE_COLOR, transparent: true, opacity: HIDDEN_OPACITY, depthTest: false });
-  private readonly hoverLine = new THREE.LineBasicMaterial({ color: OUTLINE_COLOR, transparent: true, opacity: HOVER_OPACITY });
+  private readonly selectedHidden = new THREE.LineBasicMaterial({ color: FALLBACK_OUTLINE, transparent: true, opacity: HIDDEN_OPACITY, depthTest: false });
+  private readonly hoverLine = new THREE.LineBasicMaterial({ color: FALLBACK_OUTLINE, transparent: true, opacity: HOVER_OPACITY });
   private frame = 0;
   private lost = false;
   private down: { x: number; y: number; button: number } | null = null;
@@ -154,6 +149,8 @@ export class Engine {
   private readonly held = new Set<string>();
   private running = false;
   private walkFrame = 0;
+  /** A frame was requested while the walk loop was scheduled: the loop draws it, also when it stops. */
+  private walkPending = false;
   private lastStep = 0;
   private cube: HTMLElement | null = null;
   private cubeTransform = "";
@@ -212,13 +209,16 @@ export class Engine {
     this.scene.environment = this.environment;
     this.scene.environmentIntensity = LOOK.environmentIntensity;
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x8a857c, LOOK.hemiIntensity);
+    const hemi = new THREE.HemisphereLight(LOOK.hemiSky, LOOK.hemiGround, LOOK.hemiIntensity);
     this.sun.castShadow = true;
     this.sun.shadow.radius = 4;
     this.sun.shadow.bias = -0.0003;
     this.sun.shadow.normalBias = 0.015;
     this.scene.add(hemi, this.sun, this.sun.target, this.itemsRoot, this.overlayRoot);
-    this.outlineBox = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+    // The box only gives the edges their shape: dispose it once they are taken.
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    this.outlineBox = new THREE.EdgesGeometry(box);
+    box.dispose();
     this.applyQuality();
 
     this.listenDom<PointerEvent>(canvas, "pointermove", (e) => this.onPointerMove(e));
@@ -310,6 +310,8 @@ export class Engine {
   }
 
   setMode(mode: Mode): void {
+    // Leaving the mode in the middle of a drag cancels it, as in the plan.
+    if (mode !== this.mode) this.cancelDrag();
     this.mode = mode;
     if (mode !== "arrange") this.setHover(null);
   }
@@ -462,6 +464,8 @@ export class Engine {
     this.walkFrame = 0;
     if (!this.walk || this.held.size === 0) {
       this.lastStep = 0;
+      // The keys were let go: a frame asked for meanwhile (a change, a resize) still gets drawn.
+      if (this.walkPending) this.requestRender();
       return;
     }
     // A long gap (a hidden window) must not teleport the walker.
@@ -469,6 +473,7 @@ export class Engine {
     this.lastStep = now;
     this.walk = stepWalk(this.walk, intentOf(this.held, this.running), dt, this.space());
     this.applyWalkCamera();
+    this.walkPending = false;
     this.draw();
     this.walkFrame = requestAnimationFrame(this.walkLoop);
   };
@@ -539,7 +544,7 @@ export class Engine {
     cancelAnimationFrame(this.hoverFrame);
     cancelAnimationFrame(this.walkFrame);
     this.cancelMove();
-    if (this.drag?.moved) useStore.getState().endGesture();
+    this.cancelDrag();
     for (const f of this.cleanup) f();
     this.controls.dispose();
     this.clearOverlays();
@@ -906,6 +911,7 @@ export class Engine {
       return;
     }
     if (this.mode !== "arrange" || e.shiftKey || e.ctrlKey || e.metaKey) return;
+    if (!canStartItemDrag()) return;
     const hit = this.pickAt(e.clientX, e.clientY);
     if (!hit) return;
     // The press is on an item: a drag moves it (and the other selected ones), not the camera.
@@ -913,14 +919,12 @@ export class Engine {
     const st = useStore.getState();
     const ids = st.selection.items.includes(hit.id) ? [...st.selection.items] : [hit.id];
     if (!st.selection.items.includes(hit.id)) st.select({ items: ids, opening: null });
-    const origin = new Map(st.project.items.filter((i) => ids.includes(i.id)).map((i) => [i.id, { x: i.x, y: i.y }]));
     this.drag = {
-      ids,
-      origin,
+      // A file command in the middle ends the drag; the engine lets go of it then.
+      session: new ItemDragSession(ids, () => this.releaseDrag()),
       plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -hit.point.y),
       start: hit.point.clone(),
       clickId: hit.id,
-      moved: false,
     };
     canvas.setPointerCapture(e.pointerId);
   }
@@ -936,19 +940,13 @@ export class Engine {
     }
     const d = this.drag;
     if (d) {
-      if (!d.moved && !moved) return;
-      const st = useStore.getState();
-      if (!d.moved) {
-        st.beginGesture();
-        d.moved = true;
-        this.root.classList.add("is-dragging");
-      }
+      if (!d.session.moved && !moved) return;
       this.raycaster.setFromCamera(this.ndc(e.clientX, e.clientY), this.camera);
       const p = this.raycaster.ray.intersectPlane(d.plane, new THREE.Vector3());
       if (!p) return;
       const delta = { x: (p.x - d.start.x) * MM_PER_UNIT, y: (p.z - d.start.z) * MM_PER_UNIT };
-      const moves = dragItems(st.project, d.origin, delta, st.prefs.grid, e.altKey);
-      st.updateItems(d.ids, (it) => moves.get(it.id) ?? {}, { gesture: true });
+      if (!d.session.move(delta, e.altKey)) return this.releaseDrag();
+      this.root.classList.add("is-dragging");
       return;
     }
     // Orbiting out of a numpad view goes back to perspective, as in Blender.
@@ -982,10 +980,9 @@ export class Engine {
     }
     const d = this.drag;
     if (d) {
-      this.drag = null;
-      this.controls.enabled = true;
-      this.root.classList.remove("is-dragging");
-      if (d.moved) useStore.getState().endGesture();
+      const moved = d.session.moved;
+      this.releaseDrag();
+      if (moved) d.session.confirm();
       // A click on one of several selected items selects it alone.
       else if (click) useStore.getState().select({ items: [d.clickId], opening: null });
       return;
@@ -993,10 +990,27 @@ export class Engine {
     if (click) this.clickPick(e);
   }
 
+  /** Lets go of a drag without ending its session (the caller ends it). */
+  private releaseDrag(): void {
+    if (!this.drag) return;
+    this.drag = null;
+    this.controls.enabled = true;
+    this.root.classList.remove("is-dragging");
+  }
+
+  /** Cancels a running drag: the items go back to where they were, no undo step. */
+  private cancelDrag(): void {
+    const d = this.drag;
+    if (!d) return;
+    this.releaseDrag();
+    d.session.cancel();
+  }
+
   /** Selects the clicked item: alone, or toggled into the selection with Shift or Ctrl. */
   private clickPick(e: PointerEvent): void {
-    // In the room mode the 3D view only shows; items are not selectable there.
-    if (this.mode !== "arrange") return;
+    // In the room mode the 3D view only shows; items are not selectable there. Nor in the middle
+    // of an operator in the plan: it works on the selection it started with.
+    if (this.mode !== "arrange" || useStore.getState().isGestureActive()) return;
     const id = this.pickAt(e.clientX, e.clientY)?.id ?? null;
     const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     const { selection, select } = useStore.getState();
@@ -1034,11 +1048,19 @@ export class Engine {
   }
 
   private onKeyDown(e: KeyboardEvent): void {
-    if (!this.keysActive(e)) return;
     const consume = () => {
       e.preventDefault();
       e.stopPropagation();
     };
+    // Escape cancels a drag wherever the pointer went meanwhile; the view's own keys wait until it ends.
+    if (this.drag) {
+      if (e.key === "Escape") {
+        consume();
+        this.cancelDrag();
+      }
+      return;
+    }
+    if (!this.keysActive(e)) return;
     if (this.walk) {
       if (e.key === "Escape") {
         consume();
@@ -1057,7 +1079,7 @@ export class Engine {
       }
     }
     // A running operator (G, R) takes typed numbers as values; the view keeps out of its way.
-    if (useStore.getState().status !== null || this.drag) return;
+    if (useStore.getState().status !== null) return;
     const action = viewKeyAction(e);
     if (!action) return;
     consume();
@@ -1084,6 +1106,8 @@ export class Engine {
 
   private readTheme(): void {
     this.scene.background = cssColor(this.host, "--bg-canvas") ?? new THREE.Color(FALLBACK_BACKGROUND);
+    const outline = cssColor(this.host, "--draw-outline-3d") ?? new THREE.Color(FALLBACK_OUTLINE);
+    for (const m of [this.selectedLine, this.selectedHidden, this.hoverLine]) m.color.copy(outline);
     this.requestRender();
   }
 
@@ -1102,8 +1126,14 @@ export class Engine {
   }
 
   private requestRender(): void {
-    // A running camera move or walk draws every frame anyway.
-    if (this.frame || this.anim || this.walkFrame) return;
+    // A running camera move or walk draws every frame anyway; the walk loop may stop before its
+    // next frame, so it is told to draw this one in any case.
+    if (this.walkFrame) {
+      this.walkPending = true;
+      return;
+    }
+    this.walkPending = false;
+    if (this.frame || this.anim) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
       this.draw();

@@ -5,7 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
-import { CATALOG, CATEGORIES, isOverhead, kindOf, type CatalogEntry } from "../model/catalog";
+import { CATALOG, CATEGORIES, kindOf, placementOf, wallSnapReach, type CatalogEntry } from "../kinds/registry";
 import { drainText, waterText } from "../model/equipment";
 import { bounds, convexOverlap, footprint, snapItem } from "../model/geometry";
 import { itemFromCatalog } from "../model/project";
@@ -31,13 +31,13 @@ const PREFETCH_DELAY_MS = 150;
 const dims = (e: CatalogEntry) => `${e.width} × ${e.depth} × ${e.height}`;
 
 /**
- * True when every word of the query occurs in the entry's name, category or dimensions. "x" and
+ * True when every word of the query occurs in the entry's name, category, dimensions or tags. "x" and
  * "×" are the same, so "800x900" finds 800 × 900 × 900.
  */
 export function matchesQuery(entry: CatalogEntry, query: string, t: typeof translate = translate): boolean {
   const words = query.toLocaleLowerCase().replace(/×/g, "x").split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const hay = [t(entry.name), t(`category.${entry.category}` as const), `${entry.width}x${entry.depth}x${entry.height}`].join(" ").toLocaleLowerCase();
+  const hay = [t(entry.name), t(`category.${entry.category}` as const), `${entry.width}x${entry.depth}x${entry.height}`, ...(entry.tags ?? [])].join(" ").toLocaleLowerCase();
   return words.every((w) => hay.includes(w));
 }
 
@@ -335,6 +335,7 @@ function CatalogPreview({ entry, row, sidebar }: { entry: CatalogEntry; row: HTM
     >
       <Thumbnail entry={entry} size={PREVIEW_THUMB} priority={PRIORITY.preview} />
       <div className="cat-preview-name">{t(entry.name)}</div>
+      {entry.description && <p className="cat-preview-description">{t(entry.description)}</p>}
       <dl className="cat-preview-facts">
         {rows.map(([k, v]) => (
           <div key={k} className="cat-preview-row">
@@ -356,11 +357,12 @@ export function placeAtFreeSpot(entry: CatalogEntry) {
   const b = bounds(room.points);
   const centre = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
   const draft = itemFromCatalog(entry, centre.x, centre.y);
-  const others = items.filter((i) => isOverhead(kindOf(i.catalogId)) === isOverhead(entry.kind));
+  const placement = placementOf(entry.kind);
+  const others = items.filter((i) => placementOf(kindOf(i.catalogId)) === placement);
   // Try along the north wall first, left to right in grid steps, then the middle.
   const step = Math.max(st.prefs.grid, 50);
   for (let x = b.minX + entry.width / 2; x <= b.maxX - entry.width / 2; x += step) {
-    const s = snapItem({ ...draft, x, y: b.minY + entry.depth / 2 }, room, others, st.prefs.grid, true);
+    const s = snapItem({ ...draft, x, y: b.minY + entry.depth / 2 }, room, others, st.prefs.grid, true, wallSnapReach(entry.kind));
     const candidate = { ...draft, ...s };
     if (!others.some((o) => overlapsItem(o, candidate))) {
       st.addItems([{ ...draft, x: s.x, y: s.y, rotation: s.rotation }]);

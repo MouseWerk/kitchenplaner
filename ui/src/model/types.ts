@@ -67,6 +67,10 @@ export interface Connections {
   exhaustM3h?: number;
 }
 
+/** How an appliance is heated, for units offered in an electric and a gas version. */
+export type Energy = "electric" | "gas";
+export const ENERGIES: readonly Energy[] = ["electric", "gas"];
+
 export interface Item {
   id: string;
   /** The catalog entry it came from; its kind decides the drawing. */
@@ -81,6 +85,8 @@ export interface Item {
   /** Height of the lower edge above the floor (wall shelves, hoods, wall-mounted units). */
   elevation: number;
   connections: Connections;
+  /** The energy variant of a unit offered in several (absent for all others). */
+  energy?: Energy;
   note?: string;
 }
 

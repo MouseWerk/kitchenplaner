@@ -23,7 +23,8 @@ export const PEN_STYLE: Record<Pen, PenStyle> = {
   opening: { width: 0.25 },
   swing: { width: 0.13 },
   item: { width: 0.35 },
-  overhead: { width: 0.25, dash: DASHED },
+  // Lighter than the item outlines: a hood's outline and cross lie over the units below it.
+  overhead: { width: 0.18, dash: DASHED },
   detail: { width: 0.18 },
   hidden: { width: 0.18, dash: DASHED_FINE },
   floor: { width: 0.7 },

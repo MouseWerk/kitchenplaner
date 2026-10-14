@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 import type { Item } from "../model/types";
-import { isOverhead, kindOf } from "../model/catalog";
+import { kindOf, placementOf } from "../kinds/registry";
 import { footprint } from "../model/geometry";
 import { MM_PER_UNIT } from "./meshes";
 import { floorTilePixels, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels } from "./textures";
@@ -23,6 +23,9 @@ export const LOOK = {
   /** Blur of the reflected studio environment (0 sharp, 1 diffuse). */
   environmentBlur: 0.04,
   environmentIntensity: 0.5,
+  /** Sky and ground of the soft fill light: white from above, a warm gray from the floor. */
+  hemiSky: 0xffffff,
+  hemiGround: 0x8a857c,
   hemiIntensity: 0.35,
   sunIntensity: 3,
 } as const;
@@ -100,10 +103,11 @@ export function applyRoomLook(room: THREE.Object3D, tex: RoomTextures): void {
 
 /**
  * The corners of an item's contact shadow on the floor (plan mm): the footprint, and the
- * footprint grown by the feather. Null for items that do not stand on the floor.
+ * footprint grown by the feather. Null for items that do not stand on the floor (hanging, on a
+ * table, or lying flat in it).
  */
 export function contactOutline(item: Item): { inner: { x: number; y: number }[]; outer: { x: number; y: number }[] } | null {
-  if (isOverhead(kindOf(item.catalogId))) return null;
+  if (placementOf(kindOf(item.catalogId)) !== "floor") return null;
   const inner = footprint(item);
   const grown = footprint({ ...item, width: item.width + 2 * CONTACT_FEATHER * MM_PER_UNIT, depth: item.depth + 2 * CONTACT_FEATHER * MM_PER_UNIT });
   return { inner, outer: grown };

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CATALOG } from "../model/catalog";
+import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog, newProject } from "../model/project";
 import { useStore } from "./store";
 import { duplicateSelected, nudgeSelected, rotateSelected } from "../lib/commands";

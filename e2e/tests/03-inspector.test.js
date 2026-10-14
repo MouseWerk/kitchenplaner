@@ -21,7 +21,7 @@ appTest("a width typed with German digit grouping („1.600“) sets 1600 mm", a
 });
 
 appTest("focusing and leaving the fields changes nothing", async (app) => {
-  await place(app, "Elektroherd, 4 Platten, Backofen");
+  await place(app, "Herd, 4 Kochstellen, Backofen");
   const values = () =>
     app.exec((sel) => [...document.querySelectorAll(`${sel} input:not([type=checkbox]), ${sel} select, ${sel} textarea`)].map((e) => e.value), INSPECTOR);
   const before = await values();

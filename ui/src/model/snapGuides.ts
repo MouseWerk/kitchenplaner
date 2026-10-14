@@ -3,7 +3,7 @@
 // edges and centres of the other items and against the walls. Returns where the items land and
 // the guide lines and points that explain why, so the plan can draw them. Pure functions.
 
-import { bounds, footprint, nearestFace, placeAgainst, roomFaces, round, snapValue, type Box, type Face } from "./geometry";
+import { bounds, footprint, nearestFace, placeAgainst, roomFaces, round, snapValue, WALL_SNAP_DISTANCE, type Box, type Face } from "./geometry";
 import type { Item, Partition, Room, Vec2 } from "./types";
 
 /** What a guide aligns: edges, centres, or an item's back against a wall or partition face. */
@@ -106,16 +106,17 @@ export function snapBox(box: Box, targets: readonly Box[], faces: readonly Face[
 /**
  * Where a single moved item lands: its back against the nearest wall or partition face (when it
  * already faces away from it), then its edges and centre aligned with the other items and the
- * walls. `grid` rounds the position when nothing else snaps; `reach` is the alignment distance.
+ * walls. `grid` rounds the position when nothing else snaps; `reach` is the alignment distance,
+ * `wallReach` how close the back has to come to a face to be pulled against it.
  */
-export function snapItemGuides(item: Placed, room: RoomLike, others: readonly Placed[], grid: number, reach: number): SnappedItem {
+export function snapItemGuides(item: Placed, room: RoomLike, others: readonly Placed[], grid: number, reach: number, wallReach = WALL_SNAP_DISTANCE): SnappedItem {
   const faces = roomFaces(room);
   let pos = { x: snapValue(item.x, grid), y: snapValue(item.y, grid) };
   let rotation = item.rotation;
   const guides: Guide[] = [];
   const marks: Vec2[] = [];
   const lock: { x?: boolean; y?: boolean } = {};
-  const against = nearestFace(item, faces, false);
+  const against = nearestFace(item, faces, false, wallReach);
   if (against) {
     const { face } = against;
     rotation = against.rotation;

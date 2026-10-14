@@ -8,8 +8,13 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 docker build -t kitchenplaner-e2e e2e/docker
 files=("${@:-tests/*.test.js}")
-docker run --rm -t \
-  -v "$PWD":/repo \
+# Docker Desktop on Windows needs the Windows form of the checkout's path (F:/...), which Git
+# Bash's `pwd -W` gives; elsewhere `pwd -W` fails and the plain path is right. MSYS_NO_PATHCONV
+# keeps Git Bash from rewriting the container paths (/repo/...) into Windows paths; other shells
+# ignore it.
+host_dir="$(pwd -W 2>/dev/null || pwd)"
+MSYS_NO_PATHCONV=1 docker run --rm -t \
+  -v "$host_dir":/repo \
   -v kitchenplaner-e2e-target:/repo/target \
   -v kitchenplaner-e2e-cargo:/usr/local/cargo/registry \
   -v kitchenplaner-e2e-ui-modules:/repo/ui/node_modules \

@@ -142,6 +142,19 @@ describe("parseProject", () => {
     }
   });
 
+  // A crossing outline still has walls and a floor to edit; the plan check reports it instead.
+  it("opens a self-crossing outline", () => {
+    // Two lobes of different size, so the outline still encloses a floor area.
+    const bowtie = [{ x: 0, y: 0 }, { x: 4000, y: 3000 }, { x: 4000, y: 0 }, { x: 0, y: 1000 }];
+    const p = parseProject(
+      withRaw((r) => {
+        r.room.points = bowtie;
+        r.room.openings = [];
+      }),
+    );
+    expect(p.room.points).toEqual(bowtie);
+  });
+
   it("drops corners that repeat the previous one and keeps the openings on their walls", () => {
     const p = parseProject(
       withRaw((r) => {
@@ -318,5 +331,21 @@ describe("format version 2", () => {
     raw.room.openings[3].wall = 2;
     const p = parseProject(JSON.stringify(raw));
     expect(p.room.openings).toEqual(withPartitions().room.openings);
+  });
+});
+
+describe("item energy", () => {
+  it("writes the energy of an item after its connections and reads it back", () => {
+    const p = testProject([testItem("g", "range-4", 2000, 450, 0, { energy: "gas", connections: { gasKw: 21, electricKw: 0.1, voltage: 230 } })]);
+    const text = serializeProject(p);
+    expect(text).toContain('"gasKw": 21\n      },\n      "energy": "gas"');
+    expect(parseProject(text)).toEqual(p);
+  });
+
+  it("leaves it out for units without variants and rejects an unknown energy", () => {
+    expect(serializeProject(testProject([testItem("t", "table", 2000, 450)]))).not.toContain("energy");
+    const raw = JSON.parse(serializeProject(testProject([testItem("g", "range-4", 2000, 450, 0, { energy: "gas" })])));
+    raw.items[0].energy = "steam";
+    expect(errorOf(JSON.stringify(raw)).key).toBe("error.invalid");
   });
 });

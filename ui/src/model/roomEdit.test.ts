@@ -159,6 +159,19 @@ describe("moveCorners", () => {
     const r = room([]);
     expect(moveCorners(r, [1], { x: -8000, y: 0 })).toBe(r);
   });
+
+  // Such a room saved fine but could not be opened again.
+  it("refuses a move that leaves no floor or crosses the outline", () => {
+    const r = room([]);
+    // The south wall up to a sliver below the north wall.
+    expect(moveCorners(r, [2, 3], { x: 0, y: -5999 })).toBe(r);
+    // NW onto SE, a corner that is not its neighbour.
+    expect(moveCorners(r, [0], { x: 8000, y: 6000 })).toBe(r);
+    // NE pulled across the room: the walls cross.
+    expect(moveCorners(r, [1], { x: -8000, y: 6000 })).toBe(r);
+    // A short move stays possible.
+    expect(moveCorners(r, [1], { x: 500, y: 0 }).points[1]).toEqual({ x: 8500, y: 0 });
+  });
 });
 
 describe("removeCorners", () => {

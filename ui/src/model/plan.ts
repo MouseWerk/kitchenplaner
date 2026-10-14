@@ -1,13 +1,14 @@
 // The floor plan as a Drawing: cut walls with their openings, the equipment with its plan
 // symbols, position numbers and dimensions. Screen, SVG and DXF all draw this list.
 
-import { isOverhead, kindOf, sinkBowlCount, type ItemKind } from "./catalog";
 import { add, bounds, clampOpening, dot, EPS, footprint, scale, sub, toPlan, walls, type Wall } from "./geometry";
 import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, partitionBand, partitionLength } from "./partitions";
 import { positions } from "./project";
 import type { Item, Opening, Project, Vec2 } from "./types";
 import { mm, TEXT, type Drawing, type Fill, type Pen, type Shape } from "../render/drawing";
-import { CIRCLE_CENTER_RISE } from "../render/svg";
+import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "../render/svg";
+import { PlanSketch } from "../kinds/parts/plan";
+import { kindDef, kindOf, placementOf, type KindDef, type Placement } from "../kinds/registry";
 
 export interface PlanOptions {
   showNames: boolean;
@@ -28,23 +29,11 @@ const DIM_ROW = 7;
 /** Gap between the position number and the name below it (paper mm). */
 const NAME_GAP = 2;
 
-/** Height of the back upstand of work tables (mm, the usual 50 mm splash edge). */
-const UPSTAND = 50;
-/** Wall thickness of cold room panels (mm, common 100 mm PU sandwich panels). */
-const COLD_ROOM_PANEL = 100;
-/** Clear width of a cold room door (mm). */
-const COLD_ROOM_DOOR = 800;
-/** Range width from which the hob has six plates instead of four (800 mm = 4, 1200 mm = 6). */
-const RANGE_SIX_PLATES_FROM = 1000;
-/** Inner bowl size of a sink unit (mm, a common 500 × 400 bowl). */
-const BOWL_W = 500;
-const BOWL_D = 400;
-/** Width of one door of a refrigerated counter (mm, GN 1/1 door module). */
-const COUNTER_DOOR_MODULE = 600;
-/** Depth of the control strip at the front of cooking appliances (mm). */
-const CONTROL_STRIP = 150;
-/** Inset of inner symbols from the item outline (mm). */
-const INSET = 50;
+/**
+ * The order the plan draws items in, later ones on top: the floor units, then what lies in the
+ * floor (unfilled, so it shows under a sink), what stands on the tables, and what hangs above.
+ */
+const PLAN_ORDER: readonly Placement[] = ["floor", "flat", "tableTop", "overhead"];
 
 /**
  * The floor plan of a project.
@@ -52,8 +41,9 @@ const INSET = 50;
  * Walls are filled bands between the inner outline and the outline offset by the wall thickness
  * (mitered corners), split at openings. Partitions follow as bands of their own, cut flush where
  * they meet a wall or another partition (`partitionBand`); one lower than the room (a Brüstung,
- * below the plan's cut) gets the lighter fill. Floor items come first, overhead items (hoods,
- * wall shelves) dashed on top. Every item shape carries its `itemId`.
+ * below the plan's cut) gets the lighter fill. Items follow in `PLAN_ORDER`: floor units, flat
+ * ones (drains) without fill, table-top units, overhead units (hoods, wall shelves) dashed on
+ * top. Every item shape carries its `itemId`.
  *
  * Doors are hinged at the start of their opening (the end nearer the wall's or partition's
  * start) and drawn open at 90 degrees: into the room in an outer wall, to the left of a→b in a
@@ -69,21 +59,73 @@ export function planDrawing(project: Project, opts: PlanOptions): Drawing {
   drawPartitions(project, shapes);
 
   const pos = positions(project);
-  const floor = project.items.filter((it) => !isOverhead(kindOf(it.catalogId)));
-  const overhead = project.items.filter((it) => isOverhead(kindOf(it.catalogId)));
-  for (const it of [...floor, ...overhead]) drawItem(it, shapes);
-  for (const it of [...floor, ...overhead]) {
+  const ordered = PLAN_ORDER.flatMap((p) => project.items.filter((it) => placementOf(kindOf(it.catalogId)) === p));
+  for (const it of ordered) drawItem(it, shapes);
+  const centres = labelCentres(ordered, ps);
+  ordered.forEach((it, i) => {
     // Circled text hangs its circle above the baseline; lower it so the circle sits on the centre.
-    const p = { x: it.x, y: it.y + CIRCLE_CENTER_RISE * TEXT.normal * ps };
+    const p = { x: centres[i].x, y: centres[i].y + CIRCLE_CENTER_RISE * TEXT.normal * ps };
     shapes.push({ t: "text", pen: "item", itemId: it.id, p, text: String(pos.get(it.id) ?? ""), size: TEXT.normal, anchor: "middle", circled: true });
     if (opts.showNames && it.name) {
       const below = { x: p.x, y: p.y + (NAME_GAP + TEXT.normal + TEXT.small) * ps };
       shapes.push({ t: "text", pen: "item", itemId: it.id, p: below, text: it.name, size: TEXT.small, anchor: "middle" });
     }
-  }
+  });
 
   if (opts.showDims) drawDims(project, ps, shapes);
   return { shapes };
+}
+
+// ---- Position numbers ----
+
+/** Least gap between two position circles (paper mm). */
+const LABEL_GAP = 0.5;
+/** How many rings of places around its first place a crowded number tries. */
+const LABEL_RINGS = 4;
+/** Places tried on each ring, evenly around it, starting towards the front right. */
+const LABEL_STEPS = 12;
+
+/**
+ * Where the circled position numbers go (centres, plan mm), in the order of `items` (floor
+ * units first). A floor or flat unit's number sits in its middle; a unit on a table or overhead
+ * puts it towards its front right corner, so it does not cover the number of the unit below or
+ * above. A number that would still overlap one placed before it moves to the nearest free place
+ * on rings around it, preferring places where the circle stays inside the item's footprint, then
+ * its centre does; with no free place it stays. Deterministic: the same plan gives the same places.
+ */
+export function labelCentres(items: readonly Item[], ps: number): Vec2[] {
+  const r = TEXT.normal * CIRCLE_RADIUS * ps;
+  const clear = 2 * r + LABEL_GAP * ps;
+  const placed: Vec2[] = [];
+  for (const it of items) {
+    const placement = placementOf(kindOf(it.catalogId));
+    const raised = placement === "overhead" || placement === "tableTop";
+    // In the item's frame: x along the width, y towards the front.
+    const home = raised ? { x: Math.max(0, it.width / 2 - r * 1.5), y: Math.max(0, it.depth / 2 - r * 1.5) } : { x: 0, y: 0 };
+    const free = (q: Vec2) => placed.every((o) => Math.hypot(o.x - q.x, o.y - q.y) >= clear - EPS);
+    const first = toPlan(it, home);
+    let best = first;
+    if (!free(first)) {
+      // Rank: circle inside the footprint (0), centre inside (1), outside (2); then distance.
+      let bestRank = Infinity;
+      for (let ring = 1; ring <= LABEL_RINGS; ring++) {
+        for (let k = 0; k < LABEL_STEPS; k++) {
+          const a = (Math.PI / 4) + (2 * Math.PI * k) / LABEL_STEPS;
+          const local = { x: home.x + Math.cos(a) * clear * ring * 0.5, y: home.y + Math.sin(a) * clear * ring * 0.5 };
+          const q = toPlan(it, local);
+          if (!free(q)) continue;
+          const inside = (m: number) => Math.abs(local.x) <= it.width / 2 - m + EPS && Math.abs(local.y) <= it.depth / 2 - m + EPS;
+          const rank = (inside(r) ? 0 : inside(0) ? 1 : 2) * 1e9 + ring * LABEL_STEPS + k;
+          if (rank < bestRank) {
+            bestRank = rank;
+            best = q;
+          }
+        }
+      }
+    }
+    placed.push(best);
+  }
+  return placed;
 }
 
 // ---- Walls and openings ----
@@ -251,192 +293,25 @@ function drawOpening(f: OpeningFrame, o: Opening, shapes: Shape[]) {
 
 // ---- Items ----
 
+/** Pen and fill of an item's outline by where it stands; building parts look like walls. */
+function outlineStyle(def: KindDef): { pen: Pen; fill: Fill } {
+  if (def.structural) return { pen: "wall", fill: "wall" };
+  switch (def.placement ?? "floor") {
+    case "overhead":
+      return { pen: "overhead", fill: "none" };
+    case "flat":
+      // In the floor: shows through what stands on it, as the installer needs to see it.
+      return { pen: "item", fill: "none" };
+    default:
+      return { pen: "item", fill: "item" };
+  }
+}
+
 function drawItem(it: Item, shapes: Shape[]) {
-  const kind = kindOf(it.catalogId);
-  const overhead = isOverhead(kind);
-  const fp = footprint(it);
-  let pen: Pen = overhead ? "overhead" : "item";
-  let fill: Fill = overhead ? "none" : "item";
-  if (kind === "column") {
-    pen = "wall";
-    fill = "wall";
-  }
-  shapes.push({ t: "poly", pen, fill, pts: fp, closed: true, itemId: it.id });
-  symbols(it, kind, shapes);
-}
-
-/** Collects shapes given in an item's own frame (x along the width, y from back to front). */
-class Local {
-  constructor(
-    private readonly it: Item,
-    private readonly out: Shape[],
-  ) {}
-
-  private p(x: number, y: number): Vec2 {
-    return toPlan(this.it, { x, y });
-  }
-
-  line(pen: Pen, ...pts: [number, number][]) {
-    this.out.push({ t: "poly", pen, itemId: this.it.id, pts: pts.map(([x, y]) => this.p(x, y)), closed: false });
-  }
-
-  rect(pen: Pen, x0: number, y0: number, x1: number, y1: number) {
-    const pts = [this.p(x0, y0), this.p(x1, y0), this.p(x1, y1), this.p(x0, y1)];
-    this.out.push({ t: "poly", pen, itemId: this.it.id, pts, closed: true });
-  }
-
-  circle(pen: Pen, x: number, y: number, r: number) {
-    this.out.push({ t: "circle", pen, itemId: this.it.id, c: this.p(x, y), r });
-  }
-
-  /** A quarter arc around (x, y), from the local direction at `from` degrees clockwise by 90. */
-  quarter(pen: Pen, x: number, y: number, r: number, from: number) {
-    // The item frame is only turned, never mirrored, so local angles just shift by the rotation.
-    const a0 = from + this.it.rotation;
-    this.out.push({ t: "arc", pen, itemId: this.it.id, c: this.p(x, y), r, a0, a1: a0 + 90 });
-  }
-}
-
-/** Plate grid of a hob: `cols` × 2 circles in the area behind the control strip. */
-function hob(l: Local, w: number, d: number, cols: number, round: boolean) {
-  const x0 = -w / 2 + INSET;
-  const y0 = -d / 2 + INSET;
-  const cw = (w - 2 * INSET) / cols;
-  const rh = (d - INSET - CONTROL_STRIP) / 2;
-  for (let c = 0; c < cols; c++) {
-    for (let r = 0; r < 2; r++) {
-      const cx = x0 + cw * (c + 0.5);
-      const cy = y0 + rh * (r + 0.5);
-      const half = Math.min(cw, rh) * 0.4;
-      if (round) l.circle("detail", cx, cy, half);
-      else l.rect("detail", cx - half, cy - half, cx + half, cy + half);
-    }
-  }
-  controlStrip(l, w, d);
-}
-
-function controlStrip(l: Local, w: number, d: number) {
-  l.line("detail", [-w / 2, d / 2 - CONTROL_STRIP + INSET], [w / 2, d / 2 - CONTROL_STRIP + INSET]);
-}
-
-function symbols(it: Item, kind: ItemKind, shapes: Shape[]) {
-  const l = new Local(it, shapes);
-  const w = it.width;
-  const d = it.depth;
-  const L = -w / 2;
-  const R = w / 2;
-  const B = -d / 2;
-  const F = d / 2;
-
-  switch (kind) {
-    case "range":
-      hob(l, w, d, w >= RANGE_SIX_PLATES_FROM ? 3 : 2, true);
-      break;
-    case "induction":
-      hob(l, w, d, 2, false);
-      break;
-    case "fryer": {
-      // Two baskets side by side.
-      const bw = (w - 3 * INSET) / 2;
-      for (const x of [L + INSET, L + 2 * INSET + bw]) l.rect("detail", x, B + INSET, x + bw, F - CONTROL_STRIP);
-      controlStrip(l, w, d);
-      break;
-    }
-    case "griddle":
-      l.rect("detail", L + INSET, B + INSET, R - INSET, F - CONTROL_STRIP);
-      controlStrip(l, w, d);
-      break;
-    case "kettle":
-      l.circle("detail", 0, (B + F - CONTROL_STRIP) / 2, Math.min(w, d - CONTROL_STRIP) * 0.42);
-      controlStrip(l, w, d);
-      break;
-    case "tiltingPan": {
-      // The pan tilts forward around an axis near the front; the pivots sit at both sides.
-      const axisY = F - CONTROL_STRIP;
-      l.rect("detail", L + 2 * INSET, B + INSET, R - 2 * INSET, axisY - INSET);
-      l.line("hidden", [L + INSET, axisY], [R - INSET, axisY]);
-      l.circle("detail", L + INSET, axisY, INSET / 2);
-      l.circle("detail", R - INSET, axisY, INSET / 2);
-      break;
-    }
-    case "combiOven": {
-      // Door across the front, the control panel at the right.
-      const panel = Math.min(CONTROL_STRIP, w / 4);
-      l.rect("detail", L + INSET / 2, F - INSET, R - panel, F);
-      l.line("detail", [R - panel, B + INSET], [R - panel, F]);
-      break;
-    }
-    case "fridge":
-      // Closed door at the front, its swing (hinge left) dashed in front of the unit.
-      l.line("detail", [L, F - INSET / 2], [R, F - INSET / 2]);
-      l.quarter("hidden", L, F, w, 0);
-      break;
-    case "counterFridge": {
-      const n = Math.max(1, Math.floor(w / COUNTER_DOOR_MODULE));
-      const gap = INSET / 2;
-      const dw = (w - (n + 1) * gap) / n;
-      for (let i = 0; i < n; i++) {
-        const x = L + gap + i * (dw + gap);
-        l.line("detail", [x, F - INSET / 2], [x + dw, F - INSET / 2]);
-      }
-      l.line("detail", [L, B + UPSTAND], [R, B + UPSTAND]);
-      break;
-    }
-    case "sink": {
-      const n = sinkBowlCount(w);
-      const bw = Math.min(BOWL_W, (w - (n + 1) * INSET) / n);
-      const bd = Math.min(BOWL_D, d - 2 * INSET - UPSTAND);
-      const cy = (B + UPSTAND + F) / 2;
-      // Bowls at the right end, the drainer to their left.
-      for (let i = 0; i < n; i++) {
-        const x1 = R - INSET - i * (bw + INSET);
-        l.rect("detail", x1 - bw, cy - bd / 2, x1, cy + bd / 2);
-        l.circle("detail", x1 - bw / 2, cy, INSET / 2);
-      }
-      const tapX = R - INSET - (n * bw + (n - 1) * INSET) / 2;
-      l.circle("detail", tapX, B + UPSTAND / 2 + INSET / 2, INSET / 2);
-      l.line("detail", [L, B + UPSTAND], [R, B + UPSTAND]);
-      break;
-    }
-    case "handwash":
-      l.circle("detail", 0, INSET / 2, Math.min(w, d) * 0.35);
-      l.circle("detail", 0, B + INSET / 2, INSET / 3);
-      break;
-    case "dishwasher":
-      l.rect("detail", L + INSET, B + INSET, R - INSET, F - INSET);
-      break;
-    case "hood":
-      l.line("overhead", [L, B], [R, F]);
-      l.line("overhead", [R, B], [L, F]);
-      break;
-    case "wallShelf":
-      l.line("overhead", [L, B], [R, F]);
-      break;
-    case "shelving":
-      l.line("detail", [L, B], [R, F]);
-      break;
-    case "coldRoom": {
-      // Panel walls with a door gap in the front panel; the door swings out of the cell.
-      const p = COLD_ROOM_PANEL;
-      const door = Math.min(COLD_ROOM_DOOR, w - 4 * p);
-      const dl = -door / 2;
-      const dr = door / 2;
-      l.line("item", [dl, F - p], [L + p, F - p], [L + p, B + p], [R - p, B + p], [R - p, F - p], [dr, F - p]);
-      // The door opening cuts through the front panel.
-      l.line("item", [dl, F - p], [dl, F]);
-      l.line("item", [dr, F - p], [dr, F]);
-      l.line("opening", [dl, F], [dl, F + door]);
-      l.quarter("swing", dl, F, door, 0);
-      break;
-    }
-    case "column":
-      break;
-    case "worktable":
-    case "cabinet":
-    case "drawers":
-      l.line("detail", [L, B + UPSTAND], [R, B + UPSTAND]);
-      break;
-  }
+  const def = kindDef(kindOf(it.catalogId));
+  const pts = def.planOutline ? def.planOutline(it.width, it.depth).map((p) => toPlan(it, p)) : footprint(it);
+  shapes.push({ t: "poly", ...outlineStyle(def), pts, closed: true, itemId: it.id });
+  def.plan(new PlanSketch(it, shapes));
 }
 
 // ---- Dimensions ----
@@ -445,7 +320,8 @@ function drawDims(project: Project, ps: number, shapes: Shape[]) {
   const { room } = project;
   const t = room.wallThickness;
   const first = t / ps + DIM_GAP;
-  for (const w of walls(room)) {
+  const ws = walls(room);
+  for (const w of ws) {
     // The dimension line lies to the left of a→b; put it outside, away from the room.
     const left = { x: w.dir.y, y: -w.dir.x };
     const outside = dot(left, w.inward) < 0 ? 1 : -1;
@@ -453,7 +329,18 @@ function drawDims(project: Project, ps: number, shapes: Shape[]) {
   }
   const box = bounds(room.points);
   const second = first + DIM_ROW;
-  // Overall width above the north side (left of west→east), overall depth left of the west side.
-  shapes.push({ t: "dim", pen: "dim", a: { x: box.minX, y: box.minY }, b: { x: box.maxX, y: box.minY }, offset: second, text: mm(box.maxX - box.minX) });
-  shapes.push({ t: "dim", pen: "dim", a: { x: box.minX, y: box.maxY }, b: { x: box.minX, y: box.minY }, offset: second, text: mm(box.maxY - box.minY) });
+  // Overall width above the north side (left of west→east), overall depth left of the west side;
+  // left out where one wall already runs the whole side, as its own dimension says the same.
+  const north = { a: { x: box.minX, y: box.minY }, b: { x: box.maxX, y: box.minY } };
+  const west = { a: { x: box.minX, y: box.maxY }, b: { x: box.minX, y: box.minY } };
+  for (const side of [north, west]) {
+    if (ws.some((w) => sameSegment(w, side))) continue;
+    shapes.push({ t: "dim", pen: "dim", a: side.a, b: side.b, offset: second, text: mm(Math.hypot(side.b.x - side.a.x, side.b.y - side.a.y)) });
+  }
+}
+
+/** Do the segments have the same ends (either way round)? */
+function sameSegment(p: { a: Vec2; b: Vec2 }, q: { a: Vec2; b: Vec2 }): boolean {
+  const at = (u: Vec2, v: Vec2) => Math.abs(u.x - v.x) < EPS && Math.abs(u.y - v.y) < EPS;
+  return (at(p.a, q.a) && at(p.b, q.b)) || (at(p.a, q.b) && at(p.b, q.a));
 }
