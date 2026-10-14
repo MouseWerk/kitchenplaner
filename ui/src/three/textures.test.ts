@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { brushedSteelPixels, floorTilePixels, GROUT, periodicNoise, random, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels, type Pixels } from "./textures";
+import { brushedSteelPixels, floorTilePixels, GROUT, MAX_ANISOTROPY, periodicNoise, random, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels, type Pixels } from "./textures";
 
 const at = (p: Pixels, x: number, y: number, ch = 1) => p.data[(y * p.width + x) * 4 + ch];
 
@@ -47,6 +47,22 @@ describe("procedural textures", () => {
     expect(across).toBeGreaterThan(along * 3);
   });
 
+  it("brushed steel has no slow bands across the stroke, which read as planks on a hood", () => {
+    const size = 256;
+    const p = brushedSteelPixels(size);
+    const rowMean = Array.from({ length: size }, (_, y) => {
+      let sum = 0;
+      for (let x = 0; x < size; x++) sum += at(p, x, y);
+      return sum / size;
+    });
+    // Means over bands of 16 rows (16 mm on a panel) stay within a few levels of each other.
+    const bands = Array.from({ length: size / 16 }, (_, b) => rowMean.slice(b * 16, b * 16 + 16).reduce((a, v) => a + v, 0) / 16);
+    expect(Math.max(...bands) - Math.min(...bands)).toBeLessThan(12);
+    // The hairlines themselves stay faint: no row far from the mean roughness.
+    const mean = rowMean.reduce((a, v) => a + v, 0) / size;
+    for (const m of rowMean) expect(Math.abs(m - mean)).toBeLessThan(255 * 0.15);
+  });
+
   it("floor tiles are 300 mm with darker grout lines on the tile grid", () => {
     expect(TILE).toBe(300);
     const size = 600;
@@ -70,6 +86,8 @@ describe("procedural textures", () => {
     expect(d.colorSpace).toBe(THREE.NoColorSpace);
     expect(c.wrapS).toBe(THREE.RepeatWrapping);
     expect(c.generateMipmaps).toBe(true);
+    expect(c.minFilter).toBe(THREE.LinearMipmapLinearFilter);
+    expect(d.anisotropy).toBe(MAX_ANISOTROPY);
     c.dispose();
     d.dispose();
   });

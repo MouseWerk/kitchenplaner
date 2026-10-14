@@ -144,7 +144,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* View cube: CSS 3D, turned by the engine like the world (no second WebGL context). */
+/* View cube: each face is placed with a 2D transform the engine computes from the camera
+   (three/viewCube.ts) and hidden while turned away. No CSS 3D: without 3D compositing (WebKitGTK
+   on software rendering) a preserve-3d cube collapses into one mirrored face. */
 .v3d-cube-wrap {
   --cube: calc(var(--ctl-lg) * 1.5);
   position: absolute;
@@ -152,7 +154,6 @@
   bottom: var(--sp-4);
   width: var(--cube);
   height: var(--cube);
-  perspective: none;
 }
 
 /* A small pane gets a smaller cube closer to the corner; the smallest none (View3D.tsx). */
@@ -170,7 +171,6 @@
   position: relative;
   width: 100%;
   height: 100%;
-  transform-style: preserve-3d;
 }
 
 .v3d-face {
@@ -186,9 +186,10 @@
   color: var(--text-muted);
   font: inherit;
   font-size: var(--fs-xs);
-  backface-visibility: hidden;
   cursor: pointer;
   user-select: none;
+  /* Until the engine has placed it (and in tests without an engine) a face stays hidden. */
+  visibility: hidden;
 }
 
 .v3d-face:hover {
@@ -205,28 +206,7 @@
   outline-offset: -2px;
 }
 
-.v3d-face-front {
-  transform: translateZ(calc(var(--cube) / 2));
-}
-
-.v3d-face-back {
-  transform: rotateY(180deg) translateZ(calc(var(--cube) / 2));
-}
-
-.v3d-face-right {
-  transform: rotateY(90deg) translateZ(calc(var(--cube) / 2));
-}
-
-.v3d-face-left {
-  transform: rotateY(-90deg) translateZ(calc(var(--cube) / 2));
-}
-
-.v3d-face-top {
-  transform: rotateX(90deg) translateZ(calc(var(--cube) / 2));
-}
-
-.v3d-face-bottom {
-  transform: rotateX(-90deg) translateZ(calc(var(--cube) / 2));
+.v3d-face[data-face="bottom"] {
   cursor: default;
 }
 

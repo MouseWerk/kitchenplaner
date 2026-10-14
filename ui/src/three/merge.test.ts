@@ -4,9 +4,8 @@ import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
 import { testItem, testProject } from "../model/testProject";
 import { buildItemObject, itemIdOf } from "./meshes";
-import { disposeMerged, mergeItemObject } from "./merge";
+import { disposeMerged, mergeItemObject, metricUv } from "./merge";
 import { buildContactShadows, CONTACT_FEATHER, contactOutline } from "./look";
-import { cubeTransform } from "./engine";
 
 // Precise (per vertex): a turned item's box is the same however its parts are grouped.
 const boxOf = (o: THREE.Object3D) => new THREE.Box3().setFromObject(o, true);
@@ -67,16 +66,56 @@ describe("contact shadows", () => {
   });
 });
 
-describe("view cube", () => {
-  it("shows the front face to a camera looking north", () => {
-    // Camera with no turn looks along -z (north): the cube is not turned either.
-    expect(cubeTransform(new THREE.Quaternion())).toBe("matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)");
+describe("metric UVs", () => {
+  const uvRange = (geo: THREE.BufferGeometry, from: number, to: number) => {
+    const uv = geo.getAttribute("uv");
+    const us: number[] = [];
+    const vs: number[] = [];
+    for (let i = from; i < to; i++) {
+      us.push(uv.getX(i));
+      vs.push(uv.getY(i));
+    }
+    return [Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs)];
+  };
+
+  it("give every face of a scaled box its size in metres, so a large panel is not stretched", () => {
+    // A hood-sized box: 2.4 m wide, 0.45 m high, 2 m deep. BoxGeometry lists its faces as
+    // +x, -x, +y, -y, +z, -z with four vertices each.
+    const geo = metricUv(new THREE.BoxGeometry(1, 1, 1).applyMatrix4(new THREE.Matrix4().makeScale(2.4, 0.45, 2)));
+    const near = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 6));
+    near(uvRange(geo, 0, 4), [2, 0.45]);
+    near(uvRange(geo, 8, 12), [2.4, 2]);
+    near(uvRange(geo, 16, 20), [2.4, 0.45]);
   });
 
-  it("shows the top face to a camera looking down", () => {
-    const down = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-    const m = cubeTransform(down).slice("matrix3d(".length, -1).split(",").map(Number);
-    // The cube's top normal (CSS: -y) must point at the viewer (CSS: +z): column 1, row 2 is -1.
-    expect(m[1 * 4 + 2]).toBeCloseTo(-1, 6);
+  it("are the same for a turned part, and the original geometry keeps its UVs", () => {
+    const unit = new THREE.BoxGeometry(1, 1, 1);
+    const turned = new THREE.Matrix4().makeRotationY(0.7).multiply(new THREE.Matrix4().makeScale(0.6, 0.9, 0.7));
+    const geo = metricUv(unit.clone().applyMatrix4(turned));
+    const [u, v] = uvRange(geo, 16, 20);
+    expect(u).toBeCloseTo(0.6, 6);
+    expect(v).toBeCloseTo(0.9, 6);
+    expect(uvRange(unit, 16, 20)).toEqual([1, 1]);
+  });
+
+  it("measure a cylinder's side around its circumference", () => {
+    const geo = metricUv(new THREE.CylinderGeometry(0.5, 0.5, 1, 24, 1, false).applyMatrix4(new THREE.Matrix4().makeScale(0.1, 0.8, 0.1)));
+    // The side: (24 + 1) × 2 vertices first. The polygon's perimeter is a little under π·d.
+    const [u, v] = uvRange(geo, 0, 50);
+    expect(u).toBeGreaterThan(0.31);
+    expect(u).toBeLessThan(Math.PI * 0.1);
+    expect(v).toBeCloseTo(0.8, 6);
+  });
+
+  it("are what the merged steel parts of an item carry", () => {
+    const entry = CATALOG.find((e) => e.id === "hood-island")!;
+    const merged = mergeItemObject(buildItemObject({ ...itemFromCatalog(entry, 0, 0), id: "uv" }));
+    const steel = merged.children.find((m) => m.name === "steel") as THREE.Mesh;
+    const uv = steel.geometry.getAttribute("uv");
+    let max = 0;
+    for (let i = 0; i < uv.count; i++) max = Math.max(max, Math.abs(uv.getX(i)), Math.abs(uv.getY(i)));
+    // 2.4 m wide: UVs reach metres, not just 1.
+    expect(max).toBeGreaterThan(2);
+    disposeMerged(merged);
   });
 });

@@ -28,7 +28,7 @@ import { newId, positions, variantPatch } from "../model/project";
 import type { Connections, Item, Opening, OpeningKind, Partition, Project, Vec2 } from "../model/types";
 import { selectedItems, useStore } from "../store/store";
 import { num, useT, type TKey } from "../lib/i18n";
-import { CheckField, NumberField, SelectField, TextField } from "./Fields";
+import { CheckField, DateField, NumberField, SelectField, TextField } from "./Fields";
 import { duplicateSelected, rotateSelected } from "../lib/commands";
 
 /** Smallest item size (mm). */
@@ -472,7 +472,7 @@ function ProjectPanel({ project }: { project: Project }) {
           <TextField label={t("sheet.project")} value={info.name} onChange={(v) => setInfo({ name: v })} wide />
           <TextField label={t("sheet.client")} value={info.client} onChange={(v) => setInfo({ client: v })} wide />
           <TextField label={t("sheet.author")} value={info.author} onChange={(v) => setInfo({ author: v })} />
-          <TextField label={t("sheet.date")} type="date" value={info.date} onChange={(v) => setInfo({ date: v })} />
+          <DateField label={t("sheet.date")} value={info.date} onChange={(v) => setInfo({ date: v })} />
         </div>
       </Section>
       <Section title={t("inspector.room")}>

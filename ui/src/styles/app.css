@@ -385,6 +385,15 @@
   flex: 1 1 0;
 }
 
+/* A compact select in a pane header (the elevation cut depth). */
+.pane-head .pane-select {
+  flex: none;
+  height: var(--ctl-xs);
+  padding-left: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
 .pane-head .icon-btn {
   width: var(--ctl-xs);
   height: var(--ctl-xs);
@@ -783,7 +792,7 @@
   width: 100%;
 }
 
-.field > input[type="date"] {
+.field > .date-input {
   font-variant-numeric: tabular-nums;
 }
 

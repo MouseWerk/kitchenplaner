@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.js"
+    "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.js",
+    "pitch": "node pitch/shots.js"
   },
   "dependencies": {
     "webdriverio": "^9.32.0"

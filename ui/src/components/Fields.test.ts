@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { NumberField, TextField } from "./Fields";
-import { setLang } from "../lib/i18n";
+import { DateField, NumberField, TextField } from "./Fields";
+import { formatDate, parseDate, setLang } from "../lib/i18n";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -98,4 +98,73 @@ describe("TextField", () => {
     blur();
     expect(onChange).not.toHaveBeenCalled();
   });
+});
+
+describe("DateField", () => {
+  it.each([
+    ["de", "13.10.2026", "TT.MM.JJJJ"],
+    ["en", "2026-10-13", "YYYY-MM-DD"],
+  ] as const)("shows the ISO date in the display language, not the system's (%s)", (lang, shown, placeholder) => {
+    setLang(lang);
+    act(() => root.render(createElement(DateField, { label: "Datum", value: "2026-10-13", onChange: () => {} })));
+    expect(input().type).toBe("text");
+    expect(input().value).toBe(shown);
+    expect(input().placeholder).toBe(placeholder);
+  });
+
+  it("reads a typed date tolerantly and stores it as ISO", () => {
+    const onChange = vi.fn();
+    act(() => root.render(createElement(DateField, { label: "Datum", value: "2026-10-13", onChange })));
+    focus();
+    type("1.2.27");
+    key("Enter");
+    expect(onChange).toHaveBeenLastCalledWith("2027-02-01");
+    act(() => root.render(createElement(DateField, { label: "Datum", value: "2027-02-01", onChange })));
+    expect(input().value).toBe("01.02.2027");
+  });
+
+  it("puts the shown date back on Escape and for a text that is no date", () => {
+    const onChange = vi.fn();
+    act(() => root.render(createElement(DateField, { label: "Datum", value: "2026-10-13", onChange })));
+    focus();
+    type("14.10.2026");
+    key("Escape");
+    expect(input().value).toBe("13.10.2026");
+    expect(onChange).not.toHaveBeenCalled();
+    focus();
+    type("31.02.2026");
+    blur();
+    expect(input().value).toBe("13.10.2026");
+    expect(onChange).not.toHaveBeenCalled();
+    // Left untouched: nothing changes. Emptied: no date.
+    focus();
+    blur();
+    expect(onChange).not.toHaveBeenCalled();
+    focus();
+    type("");
+    blur();
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+});
+
+describe("formatDate and parseDate", () => {
+  it("formats per language and leaves anything else as it is", () => {
+    expect(formatDate("2026-10-13", "de")).toBe("13.10.2026");
+    expect(formatDate("2026-10-13", "en")).toBe("2026-10-13");
+    expect(formatDate("", "de")).toBe("");
+    expect(formatDate("Herbst", "de")).toBe("Herbst");
+  });
+
+  it.each([
+    ["13.10.2026", "2026-10-13"],
+    ["13.10.26", "2026-10-13"],
+    [" 3. 1. 2027 ", "2027-01-03"],
+    ["13/10/2026", "2026-10-13"],
+    ["2026-10-13", "2026-10-13"],
+    ["2026/1/3", "2026-01-03"],
+    ["29.02.2028", "2028-02-29"],
+    ["", ""],
+  ])("reads %j as %j", (text, iso) => expect(parseDate(text)).toBe(iso));
+
+  it.each(["29.02.2027", "32.01.2026", "13.13.2026", "10/13/2026", "13.10", "heute", "1.2.3.4"])("refuses %j", (text) => expect(parseDate(text)).toBeNull());
 });

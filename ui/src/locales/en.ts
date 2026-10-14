@@ -490,6 +490,10 @@ export const en: Record<keyof typeof de, Msg> = {
   "view.elevation": "Elevation {facing}",
   "view.elevations": "Elevations",
   "view.split": "All views",
+  "view.cut": "Elevation cut depth",
+  "view.cut.wall": "Wall ({m} m)",
+  "view.cut.half": "Half the room",
+  "view.cut.room": "Whole room",
 
   // 3D view
   "view3d.toolbar": "3D view",
@@ -524,6 +528,7 @@ export const en: Record<keyof typeof de, Msg> = {
   "sheet.client": "Client",
   "sheet.author": "Drawn by",
   "sheet.date": "Date",
+  "field.datePlaceholder": "YYYY-MM-DD",
   "sheet.scale": "Scale",
   "sheet.drawing": "Drawing",
   "sheet.dimensionsInMm": "Dimensions in mm",

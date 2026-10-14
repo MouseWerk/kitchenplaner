@@ -5,7 +5,7 @@ import { drawingBounds, expandDim, mm as mmText, TEXT, type Drawing, type Fill, 
 import { PAPER, PEN_STYLE } from "./style";
 import type { Box } from "../model/geometry";
 import type { ProjectInfo, Vec2 } from "../model/types";
-import { t, type Lang, type TKey } from "../lib/i18n";
+import { formatDate, t, type Lang, type TKey } from "../lib/i18n";
 
 export interface SvgOptions {
   /** Drawing units per paper millimetre (50 for 1:50). */
@@ -152,32 +152,34 @@ export interface Sheet {
   bounds: Box;
 }
 
-/** The ISO date shown as the language writes it ("12.10.2026" in German). */
-function formatDate(iso: string, lang: Lang): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return iso;
-  return lang === "de" ? `${m[3]}.${m[2]}.${m[1]}` : iso;
-}
+/**
+ * A drawing at a paper scale: position numbers, names and dimension rows are spaced in paper mm,
+ * so a drawing laid out for one scale crowds its labels at a coarser one.
+ */
+export type DrawingAtScale = (paperScale: number) => Drawing;
 
 /**
  * A drawing placed on an A3 landscape sheet at the most detailed standard scale it fits,
  * centred in the area above the title block, with frame and title block as Drawing primitives
- * (so the DXF export can reuse it).
+ * (so the DXF export can reuse it). Given as a `DrawingAtScale`, the drawing is laid out again
+ * for each scale tried, so the sheet carries it laid out for the scale it is printed at.
  */
-export function sheetDrawing(drawing: Drawing, info: ProjectInfo, drawingTitle: string, lang: Lang): Sheet {
+export function sheetDrawing(source: Drawing | DrawingAtScale, info: ProjectInfo, drawingTitle: string, lang: Lang): Sheet {
+  const at = typeof source === "function" ? source : () => source;
   const frame = { minX: FRAME_LEFT, minY: FRAME_OTHER, maxX: SHEET_W - FRAME_OTHER, maxY: SHEET_H - FRAME_OTHER };
   const titleH = TITLE_ROW * TITLE_ROWS;
   const area = { minX: frame.minX + DRAWING_PADDING, minY: frame.minY + DRAWING_PADDING, maxX: frame.maxX - DRAWING_PADDING, maxY: frame.maxY - titleH - DRAWING_PADDING };
   const areaW = area.maxX - area.minX;
   const areaH = area.maxY - area.minY;
 
-  let ps: number = SHEET_SCALES[SHEET_SCALES.length - 1];
+  // The most detailed scale it fits, else the coarsest (the last one tried).
+  let ps = 0;
+  let drawing: Drawing = { shapes: [] };
   for (const s of SHEET_SCALES) {
+    ps = s;
+    drawing = at(s);
     const b = drawingBounds(drawing, s);
-    if ((b.maxX - b.minX) / s <= areaW && (b.maxY - b.minY) / s <= areaH) {
-      ps = s;
-      break;
-    }
+    if ((b.maxX - b.minX) / s <= areaW && (b.maxY - b.minY) / s <= areaH) break;
   }
 
   // Paper mm → drawing units, the drawing's centre on the area's centre.
@@ -225,7 +227,7 @@ export function sheetDrawing(drawing: Drawing, info: ProjectInfo, drawingTitle: 
 }
 
 /** A complete A3 sheet as SVG: the drawing at a standard scale with frame and title block. */
-export function sheetSvg(drawing: Drawing, info: ProjectInfo, drawingTitle: string, lang: Lang): string {
+export function sheetSvg(drawing: Drawing | DrawingAtScale, info: ProjectInfo, drawingTitle: string, lang: Lang): string {
   const sheet = sheetDrawing(drawing, info, drawingTitle, lang);
   return drawingToSvg(sheet.drawing, { paperScale: sheet.paperScale, bounds: sheet.bounds });
 }

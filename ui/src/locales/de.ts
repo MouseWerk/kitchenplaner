@@ -499,6 +499,10 @@ export const de = {
   "view.elevation": "Ansicht {facing}",
   "view.elevations": "Ansichten",
   "view.split": "Alle Ansichten",
+  "view.cut": "Schnitttiefe der Ansicht",
+  "view.cut.wall": "Wand ({m} m)",
+  "view.cut.half": "Halber Raum",
+  "view.cut.room": "Ganzer Raum",
 
   // 3D view
   "view3d.toolbar": "3D-Ansicht",
@@ -535,6 +539,7 @@ export const de = {
   "sheet.client": "Bauherr",
   "sheet.author": "Gezeichnet",
   "sheet.date": "Datum",
+  "field.datePlaceholder": "TT.MM.JJJJ",
   "sheet.scale": "Maßstab",
   "sheet.drawing": "Zeichnung",
   "sheet.dimensionsInMm": "Maße in mm",

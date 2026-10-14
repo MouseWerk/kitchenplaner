@@ -1,6 +1,6 @@
 // File commands and exports, shared by the toolbar, the menus and the keyboard shortcuts.
 
-import { elevationDrawing } from "../model/elevation";
+import { elevationDrawing, type ElevationCut } from "../model/elevation";
 import { equipmentCsv } from "../model/equipment";
 import { planDrawing } from "../model/plan";
 import { newProject } from "../model/project";
@@ -101,17 +101,17 @@ export async function runExport(kind: ExportKind, facing: Facing) {
     let written: string | null = null;
     switch (kind) {
       case "plan-svg": {
-        const s = sheetDrawing(planDrawing(project, { showNames: prefs.showNames, showDims: true }), project.info, t("view.plan"), lang);
+        const s = sheetDrawing((paperScale) => planDrawing(project, { showNames: prefs.showNames, showDims: true, paperScale }), project.info, t("view.plan"), lang);
         written = await saveText(null, `${base} - ${t("view.plan")}.svg`, SVG, drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }));
         break;
       }
       case "plan-dxf": {
-        const s = sheetDrawing(planDrawing(project, { showNames: prefs.showNames, showDims: true }), project.info, t("view.plan"), lang);
+        const s = sheetDrawing((paperScale) => planDrawing(project, { showNames: prefs.showNames, showDims: true, paperScale }), project.info, t("view.plan"), lang);
         written = await saveText(null, `${base} - ${t("view.plan")}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale));
         break;
       }
       case "plan-png": {
-        const s = sheetDrawing(planDrawing(project, { showNames: prefs.showNames, showDims: true }), project.info, t("view.plan"), lang);
+        const s = sheetDrawing((paperScale) => planDrawing(project, { showNames: prefs.showNames, showDims: true, paperScale }), project.info, t("view.plan"), lang);
         const png = await svgToPng(drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }), PNG_WIDTH);
         written = await saveBinary(`${base} - ${t("view.plan")}.png`, PNG, png);
         break;
@@ -119,7 +119,7 @@ export async function runExport(kind: ExportKind, facing: Facing) {
       case "elevation-svg":
       case "elevation-dxf": {
         const title = t("view.elevation", { facing: facingName });
-        const s = sheetDrawing(elevationDrawing(project, facing, { showDims: true }), project.info, title, lang);
+        const s = sheetDrawing((paperScale) => elevationDrawing(project, facing, { showDims: true, cut: prefs.elevationCut, paperScale }), project.info, title, lang);
         written =
           kind === "elevation-svg"
             ? await saveText(null, `${base} - ${title}.svg`, SVG, drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }))
@@ -127,7 +127,7 @@ export async function runExport(kind: ExportKind, facing: Facing) {
         break;
       }
       case "elevations-svg": {
-        const s = sheetDrawing(allElevations(project), project.info, t("view.elevations"), lang);
+        const s = sheetDrawing((paperScale) => allElevations(project, prefs.elevationCut, paperScale), project.info, t("view.elevations"), lang);
         written = await saveText(null, `${base} - ${t("view.elevations")}.svg`, SVG, drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }));
         break;
       }
@@ -146,14 +146,15 @@ export async function runExport(kind: ExportKind, facing: Facing) {
   }
 }
 
-/** The four elevations stacked on one drawing, each with its title above it. */
-export function allElevations(project: Project): Drawing {
-  // Laid out for the screen scale; the sheet picks its own scale for the whole stack.
-  const paperScale = 50;
+/**
+ * The four elevations stacked on one drawing, each with its title above it, cut at `cut` and laid
+ * out for `paperScale` (titles, gaps and position numbers are spaced in paper mm).
+ */
+export function allElevations(project: Project, cut: ElevationCut = "wall", paperScale = 50): Drawing {
   const shapes: Shape[] = [];
   let y = 0;
   for (const facing of FACINGS) {
-    const d = elevationDrawing(project, facing, { showDims: true });
+    const d = elevationDrawing(project, facing, { showDims: true, cut, paperScale });
     const b = drawingBounds(d, paperScale);
     const dy = y - b.minY + TEXT.large * paperScale * 2;
     shapes.push({ t: "text", pen: "frame", p: { x: b.minX, y: y + TEXT.large * paperScale }, text: t("view.elevation", { facing: t(`facing.${facing}` as const) }), size: TEXT.large, anchor: "start" });

@@ -2,7 +2,7 @@
 // (every change is one undo step); Escape restores the shown value.
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { currentLang, num, type Lang } from "../lib/i18n";
+import { currentLang, formatDate, num, parseDate, useT, type Lang } from "../lib/i18n";
 
 export function Field(props: { label: string; children: (id: string) => ReactNode; wide?: boolean }) {
   const id = useId();
@@ -129,7 +129,7 @@ export function NumberField(props: {
   );
 }
 
-export function TextField(props: { label: string; value: string; onChange: (v: string) => void; wide?: boolean; type?: "text" | "date"; multiline?: boolean }) {
+export function TextField(props: { label: string; value: string; onChange: (v: string) => void; wide?: boolean; multiline?: boolean }) {
   const [text, setText] = useState(props.value);
   useEffect(() => setText(props.value), [props.value]);
   const commit = () => {
@@ -143,7 +143,7 @@ export function TextField(props: { label: string; value: string; onChange: (v: s
         ) : (
           <input
             id={id}
-            type={props.type ?? "text"}
+            type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onBlur={commit}
@@ -157,6 +157,68 @@ export function TextField(props: { label: string; value: string; onChange: (v: s
           />
         )
       }
+    </Field>
+  );
+}
+
+/**
+ * A date (stored as ISO, "" for none) as a text field in the display language's format, not the
+ * native date input, which follows the system locale instead of the app's language. Typed dates
+ * are read tolerantly (`parseDate`); one that is no date puts the shown value back, as Escape does.
+ */
+export function DateField(props: { label: string; value: string; onChange: (v: string) => void }) {
+  const t = useT();
+  const shown = formatDate(props.value);
+  const [text, setText] = useState(shown);
+  const [editing, setEditing] = useState(false);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    if (!editing) setText(shown);
+  }, [shown, editing]);
+
+  const commit = (raw: string) => {
+    if (raw === shown) return;
+    const iso = parseDate(raw);
+    if (iso === null) {
+      setText(shown);
+      return;
+    }
+    if (iso !== props.value) props.onChange(iso);
+    setText(formatDate(iso));
+  };
+
+  return (
+    <Field label={props.label}>
+      {(id) => (
+        <input
+          id={id}
+          type="text"
+          className="date-input"
+          inputMode="numeric"
+          placeholder={t("field.datePlaceholder")}
+          value={text}
+          onFocus={() => {
+            cancelled.current = false;
+            setEditing(true);
+          }}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={(e) => {
+            setEditing(false);
+            if (cancelled.current) {
+              cancelled.current = false;
+              setText(shown);
+            } else commit(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            else if (e.key === "Escape") {
+              cancelled.current = true;
+              (e.target as HTMLInputElement).blur();
+              e.stopPropagation();
+            }
+          }}
+        />
+      )}
     </Field>
   );
 }

@@ -25,48 +25,48 @@ function strokeOf(pen: Pen): string {
   return pen === "dim" ? "var(--draw-dim)" : pen === "detail" || pen === "hidden" || pen === "swing" ? "var(--draw-detail)" : "var(--draw-line)";
 }
 
-function penProps(pen: Pen) {
+function penProps(pen: Pen, ps: number) {
   const st = PEN_STYLE[pen];
   return {
     stroke: strokeOf(pen),
     strokeWidth: Math.max(MIN_STROKE_PX, st.width * PX_PER_PEN_MM),
-    strokeDasharray: st.dash?.map((d) => d * SCREEN_PAPER_SCALE).join(" "),
+    strokeDasharray: st.dash?.map((d) => d * ps).join(" "),
     vectorEffect: "non-scaling-stroke" as const,
   };
 }
 
-function ShapeEl({ s }: { s: Shape }) {
+function ShapeEl({ s, ps }: { s: Shape; ps: number }) {
   switch (s.t) {
     case "poly": {
       const d = s.pts.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`).join("") + (s.closed ? "Z" : "");
-      return <path d={d} fill={s.closed ? FILL_VAR[s.fill ?? "none"] : "none"} {...penProps(s.pen)} data-item={s.itemId} />;
+      return <path d={d} fill={s.closed ? FILL_VAR[s.fill ?? "none"] : "none"} {...penProps(s.pen, ps)} data-item={s.itemId} />;
     }
     case "circle":
-      return <circle cx={s.c.x} cy={s.c.y} r={s.r} fill={FILL_VAR[s.fill ?? "none"]} {...penProps(s.pen)} data-item={s.itemId} />;
+      return <circle cx={s.c.x} cy={s.c.y} r={s.r} fill={FILL_VAR[s.fill ?? "none"]} {...penProps(s.pen, ps)} data-item={s.itemId} />;
     case "arc":
-      return <path d={arcPath(s.c.x, s.c.y, s.r, s.a0, s.a1)} fill="none" {...penProps(s.pen)} data-item={s.itemId} />;
+      return <path d={arcPath(s.c.x, s.c.y, s.r, s.a0, s.a1)} fill="none" {...penProps(s.pen, ps)} data-item={s.itemId} />;
     case "text":
-      return <TextEl s={s} />;
+      return <TextEl s={s} ps={ps} />;
     case "dim": {
-      const e = expandDim(s, SCREEN_PAPER_SCALE);
+      const e = expandDim(s, ps);
       return (
         <g>
           {e.lines.map(([a, b], i) => (
-            <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...penProps("dim")} />
+            <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...penProps("dim", ps)} />
           ))}
-          <TextEl s={e.text} />
+          <TextEl s={e.text} ps={ps} />
         </g>
       );
     }
   }
 }
 
-function TextEl({ s }: { s: Extract<Shape, { t: "text" }> }) {
-  const size = s.size * SCREEN_PAPER_SCALE;
+function TextEl({ s, ps }: { s: Extract<Shape, { t: "text" }>; ps: number }) {
+  const size = s.size * ps;
   const transform = s.angle ? `rotate(${s.angle} ${s.p.x} ${s.p.y})` : undefined;
   return (
     <g transform={transform} data-item={s.itemId}>
-      {s.circled && <circle cx={s.p.x} cy={s.p.y - size * 0.36} r={size * 0.95} fill="var(--draw-item-fill)" {...penProps("detail")} />}
+      {s.circled && <circle cx={s.p.x} cy={s.p.y - size * 0.36} r={size * 0.95} fill="var(--draw-item-fill)" {...penProps("detail", ps)} />}
       <text
         x={s.p.x}
         y={s.circled ? s.p.y - size * 0.36 : s.p.y}
@@ -90,12 +90,15 @@ export function arcPath(cx: number, cy: number, r: number, a0: number, a1: numbe
   return `M${p0.x} ${p0.y}A${r} ${r} 0 ${sweep > 180 ? 1 : 0} 1 ${p1.x} ${p1.y}`;
 }
 
-/** The shapes of a drawing as SVG elements, in drawing units (the parent applies the viewport). */
-export const DrawingShapes = memo(function DrawingShapes({ drawing }: { drawing: Drawing }) {
+/**
+ * The shapes of a drawing as SVG elements, in drawing units (the parent applies the viewport).
+ * `paperScale` is the one the drawing was laid out for (text sizes, dimension offsets, dashes).
+ */
+export const DrawingShapes = memo(function DrawingShapes({ drawing, paperScale = SCREEN_PAPER_SCALE }: { drawing: Drawing; paperScale?: number }) {
   return (
     <>
       {drawing.shapes.map((s, i) => (
-        <ShapeEl key={i} s={s} />
+        <ShapeEl key={i} s={s} ps={paperScale} />
       ))}
     </>
   );

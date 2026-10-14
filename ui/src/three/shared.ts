@@ -56,8 +56,12 @@ function std(color: number, metalness: number, roughness: number, extra: THREE.M
   return new THREE.MeshStandardMaterial({ color, metalness, roughness, ...extra });
 }
 
-/** Brushed grain repeats: finer across the stroke so a tall door shows hairlines, not bands. */
-const BRUSH_REPEAT = { u: 1, v: 4 };
+/**
+ * Brushed grain repeats per metre (merged models have UVs in metres, `merge.ts`): finer across
+ * the stroke, so the 256 rows of the map are hairlines of half a millimetre on every surface,
+ * below a pixel from a normal viewing distance (the mipmaps then average them into a sheen).
+ */
+export const BRUSH_REPEAT = { u: 1, v: 8 };
 
 export function getShared(): Shared {
   if (shared) return shared;

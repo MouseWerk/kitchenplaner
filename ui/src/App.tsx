@@ -11,6 +11,7 @@ import { isTauri } from "./lib/platform";
 import { handleShortcut } from "./lib/shortcuts";
 import { dismissToast, useToasts } from "./lib/toast";
 import { checkProject } from "./model/checks";
+import { ELEVATION_CUTS, WALL_CUT_DEPTH } from "./model/elevation";
 import { FACINGS, type Facing, type Vec2 } from "./model/types";
 import { useStore } from "./store/store";
 import { ElevationView } from "./views/ElevationView";
@@ -54,7 +55,16 @@ export function App() {
     </Pane>
   );
   const elevation = (f: Facing, onFacing: (f: Facing) => void, key: string) => (
-    <Pane title={t("view.elevation", { facing: t(`facing.${f}` as const) })} key={key} controls={<FacingSwitch value={f} onChange={onFacing} />}>
+    <Pane
+      title={t("view.elevation", { facing: t(`facing.${f}` as const) })}
+      key={key}
+      controls={
+        <>
+          <CutSelect />
+          <FacingSwitch value={f} onChange={onFacing} />
+        </>
+      }
+    >
       <ElevationView facing={f} fitSignal={fitSignal} />
     </Pane>
   );
@@ -69,7 +79,7 @@ export function App() {
       break;
     case "elevations":
       panes = FACINGS.map((f) => (
-        <Pane title={t("view.elevation", { facing: t(`facing.${f}` as const) })} key={f}>
+        <Pane title={t("view.elevation", { facing: t(`facing.${f}` as const) })} key={f} controls={<CutSelect />}>
           <ElevationView facing={f} fitSignal={fitSignal} />
         </Pane>
       ));
@@ -113,6 +123,21 @@ function FacingSwitch(props: { value: Facing; onChange: (f: Facing) => void }) {
         </button>
       ))}
     </div>
+  );
+}
+
+/** How deep the elevations reach into the room; one setting for all of them and the exports. */
+function CutSelect() {
+  const t = useT();
+  const cut = useStore((s) => s.prefs.elevationCut);
+  return (
+    <select className="pane-select" value={cut} aria-label={t("view.cut")} title={t("view.cut")} onChange={(e) => useStore.getState().setPrefs({ elevationCut: e.target.value as typeof cut })}>
+      {ELEVATION_CUTS.map((c) => (
+        <option key={c} value={c}>
+          {t(`view.cut.${c}` as const, { m: num(WALL_CUT_DEPTH / 1000, 1) })}
+        </option>
+      ))}
+    </select>
   );
 }
 

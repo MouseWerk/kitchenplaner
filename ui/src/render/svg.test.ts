@@ -5,6 +5,7 @@ import { planDrawing } from "../model/plan";
 import { elevationDrawing } from "../model/elevation";
 import { rectRoom } from "../model/geometry";
 import { testItem, testProject } from "../model/testProject";
+import { exampleKitchen } from "../examples/exampleKitchen";
 
 const box: Drawing = { shapes: [{ t: "poly", pen: "item", fill: "item", pts: rectRoom(1000, 500), closed: true }] };
 
@@ -64,6 +65,25 @@ describe("sheetDrawing", () => {
     expect(sheet.paperScale).toBe(200);
     expect(sheet.drawing.shapes.some((s) => s.t === "text" && s.text === "Dimensions in mm")).toBe(true);
     expect(sheet.drawing.shapes.some((s) => s.t === "text" && s.text === "2026-10-12")).toBe(true);
+  });
+
+  it("lays a drawing given per scale out again for the scale the sheet prints it at", () => {
+    const p = exampleKitchen("de");
+    const asked: number[] = [];
+    const sheet = sheetDrawing(
+      (paperScale) => {
+        asked.push(paperScale);
+        return planDrawing(p, { showNames: false, showDims: true, paperScale });
+      },
+      p.info,
+      "Grundriss",
+      "de",
+    );
+    // 13.2 × 9.6 m with dimensions does not fit A3 at 1:50: printed at 1:75, laid out for 1:75.
+    expect(sheet.paperScale).toBe(75);
+    expect(asked).toEqual([20, 25, 50, 75]);
+    const own = planDrawing(p, { showNames: false, showDims: true, paperScale: 75 }).shapes;
+    expect(sheet.drawing.shapes.slice(0, own.length)).toEqual(own);
   });
 
   it("places an elevation at a detailed scale", () => {

@@ -75,4 +75,17 @@ describe("View3D overlay", () => {
     render(320);
     expect(cube().hidden).toBe(true);
   });
+
+  it("adds nothing to the document outside its own element, and leaves nothing when unmounted", () => {
+    const outside = () => [...document.body.children].filter((c) => c !== host);
+    expect(outside()).toEqual([]);
+    render(900);
+    // The cube's faces are placed by the engine; until then they stay hidden.
+    expect(host.querySelectorAll(".v3d-face[data-face]")).toHaveLength(6);
+    expect(outside()).toEqual([]);
+    act(() => root.unmount());
+    expect(host.innerHTML).toBe("");
+    expect(outside()).toEqual([]);
+    root = createRoot(host);
+  });
 });

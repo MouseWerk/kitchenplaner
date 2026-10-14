@@ -39,11 +39,19 @@ export function zoomAt(v: Viewport, at: Vec2, factor: number): Viewport {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+const fitTo = (box: FitBox, width: number, height: number) => fitViewport(typeof box === "function" ? box(width, height) : box, width, height);
+
+/**
+ * What a view fits: a box, or the box for a pane size, for a drawing whose annotations grow
+ * when the pane is small (the elevations).
+ */
+export type FitBox = Box | ((width: number, height: number) => Box);
+
 /**
  * The viewport of a view element: fits `box` on first layout and when `fitKey` changes, zooms
  * with the wheel (at the cursor) and keeps the centre when the element is resized.
  */
-export function useViewport(box: Box, fitKey: unknown) {
+export function useViewport(box: FitBox, fitKey: unknown) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [vp, setVp] = useState<Viewport>({ k: 0.1, ox: 0, oy: 0 });
@@ -60,7 +68,7 @@ export function useViewport(box: Box, fitKey: unknown) {
       const r = el.getBoundingClientRect();
       setSize((old) => {
         if (auto.current) {
-          if (r.width > 0 && r.height > 0) setVp(fitViewport(boxRef.current, r.width, r.height));
+          if (r.width > 0 && r.height > 0) setVp(fitTo(boxRef.current, r.width, r.height));
         } else if (old.w > 0 && old.h > 0 && (old.w !== r.width || old.h !== r.height)) {
           // Keep what was in the middle in the middle.
           setVp((v) => ({ ...v, ox: v.ox + (r.width - old.w) / 2, oy: v.oy + (r.height - old.h) / 2 }));
@@ -77,7 +85,7 @@ export function useViewport(box: Box, fitKey: unknown) {
     if (fitted.current === fitKey) return;
     fitted.current = fitKey;
     auto.current = true;
-    setVp(fitViewport(boxRef.current, size.w, size.h));
+    setVp(fitTo(boxRef.current, size.w, size.h));
   }, [fitKey, size.w, size.h]);
 
   useEffect(() => {
@@ -98,7 +106,7 @@ export function useViewport(box: Box, fitKey: unknown) {
 
   const fit = useCallback(() => {
     auto.current = true;
-    if (size.w > 0) setVp(fitViewport(boxRef.current, size.w, size.h));
+    if (size.w > 0) setVp(fitTo(boxRef.current, size.w, size.h));
   }, [size.w, size.h]);
 
   /** Sets the viewport by a user action (pan): stops following the pane size. */

@@ -211,11 +211,11 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
           <div className="v3d-cube-wrap" role="group" aria-label={t("view3d.cube")} hidden={layout.cube === "none"}>
             <div ref={cubeRef} className="v3d-cube">
               {CUBE_FACES.map(({ view, key, face }) => (
-                <button key={face} type="button" className={`v3d-face v3d-face-${face}`} onClick={() => engineRef.current?.preset(view)} title={t(key)}>
+                <button key={face} type="button" className="v3d-face" data-face={face} onClick={() => engineRef.current?.preset(view)} title={t(key)}>
                   {t(key)}
                 </button>
               ))}
-              <span className="v3d-face v3d-face-bottom" aria-hidden />
+              <span className="v3d-face" data-face="bottom" aria-hidden />
             </div>
           </div>
           {walking && (

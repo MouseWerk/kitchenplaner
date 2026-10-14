@@ -56,3 +56,32 @@ appTest("Tab switches between Einrichten and Raum, shown in the status bar", asy
   await app.keys(Key.Tab);
   assert.equal(await pressed(app, "Modus"), "Einrichten");
 });
+
+appTest("the view cube shows three faces of a cube from the perspective view", async (app, t) => {
+  await pressOnViews(app, "3");
+  await waitPanes(app, (p) => p.includes("3D"), "3 shows the 3D view");
+  await app.waitUntil(
+    () => app.exec(() => !!document.querySelector("section[aria-label='3D'] canvas") || /WebGL/.test(document.querySelector("section[aria-label='3D']")?.innerText ?? "")),
+    "the 3D view neither rendered nor reported a missing WebGL",
+    30000,
+  );
+  if (!(await app.exec(() => !!document.querySelector("section[aria-label='3D'] canvas")))) {
+    await app.exec(() => (window.__E2E_ERRORS__ = window.__E2E_ERRORS__.filter((e) => !/WebGL/i.test(e))));
+    t.skip("no WebGL in this environment");
+    return;
+  }
+  await app.waitUntil(() => app.exec(() => !!document.querySelector(".v3d-cube")?.dataset.turn), "the cube was never turned", 30000);
+  // The faces are placed with 2D transforms, so even a browser without 3D compositing shows the
+  // cube: front, right and top visible, the others hidden, no face mirrored.
+  const faces = await app.exec(() =>
+    [...document.querySelectorAll(".v3d-face")].map((f) => {
+      const m = new DOMMatrix(getComputedStyle(f).transform);
+      return { face: f.dataset.face, visible: getComputedStyle(f).visibility === "visible", det: m.a * m.d - m.b * m.c, is2D: m.is2D };
+    }),
+  );
+  assert.deepEqual(faces.filter((f) => f.visible).map((f) => f.face), ["front", "right", "top"]);
+  for (const f of faces.filter((x) => x.visible)) {
+    assert.ok(f.is2D, `${f.face} has a 3D transform`);
+    assert.ok(f.det > 0.1, `${f.face} is mirrored or edge-on (${f.det})`);
+  }
+});

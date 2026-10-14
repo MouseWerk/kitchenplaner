@@ -5,6 +5,7 @@
 // true})` while moving, so all the moves of one drag undo together; `endGesture()` when it ends.
 
 import { create } from "zustand";
+import type { ElevationCut } from "../model/elevation";
 import type { Facing, Item, Opening, Project, Room } from "../model/types";
 import { newProject } from "../model/project";
 
@@ -43,6 +44,8 @@ export interface Prefs {
   showNames: boolean;
   /** Shows dimensions in the plan. */
   showDims: boolean;
+  /** How deep the elevations reach into the room, on screen and in the exports. */
+  elevationCut: ElevationCut;
 }
 
 export interface AppState {
@@ -111,7 +114,7 @@ export const useStore = create<AppState>((set, get) => ({
   selection: EMPTY_SELECTION,
   layout: "split",
   facing: "north",
-  prefs: { grid: 50, showNames: false, showDims: true },
+  prefs: { grid: 50, showNames: false, showDims: true, elevationCut: "wall" },
   mode: "arrange",
   roomTool: "select",
   status: null,

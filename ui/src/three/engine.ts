@@ -17,10 +17,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import type { Item, Project, Room } from "../model/types";
 import { bounds } from "../model/geometry";
 import { useStore, type Mode } from "../store/store";
@@ -31,6 +27,8 @@ import { applyRoomLook, buildContactShadows, disposeContactShadows, LOOK, RoomTe
 import { distanceFor, easeInOut, fitDistance, halfHeightAt, orthoHalfHeightForBox, slerpDirection, VIEW_DIRECTION, viewKeyAction, type ViewName } from "./navigation";
 import { EYE_HEIGHT, intentOf, isWalkKey, look, startWalk, stepWalk, walkSpace, type WalkSpace, type WalkState } from "./walk";
 import { canStartItemDrag, ItemDragSession } from "./dragSession";
+import { captureSize, encodePng, PostChain } from "./post";
+import { CUBE_FACE_NAMES, cubeFaces, type CubeFace } from "./viewCube";
 
 /** Pointer movement (px) up to which a press and release counts as a click, not a drag. */
 const CLICK_TOLERANCE = 4;
@@ -69,9 +67,6 @@ const QUALITY: Record<Quality, { shadowMap: number; ao: boolean }> = {
   standard: { shadowMap: 2048, ao: false },
   high: { shadowMap: 4096, ao: true },
 };
-
-/** Ambient occlusion: radius (m) and strength tuned for counters against walls and floors. */
-const AO = { radius: 0.35, distanceExponent: 1.5, thickness: 1, scale: 1.1, samples: 16 };
 
 export type Status = "ok" | "unavailable" | "lost";
 
@@ -125,9 +120,10 @@ export class Engine {
   private mode: Mode = "arrange";
   private cutaway = true;
   private quality: Quality = "standard";
-  private composer: EffectComposer | null = null;
-  private renderPass: RenderPass | null = null;
-  private ao: GTAOPass | null = null;
+  /** The ambient occlusion chain of the high quality (`post.ts`); none in standard. */
+  private post: PostChain | null = null;
+  /** The canvas background (`--bg-canvas`), never tone mapped. */
+  private background = new THREE.Color(FALLBACK_BACKGROUND);
   private framed = false;
   private readonly outlineBox: THREE.EdgesGeometry;
   private readonly selectedLine = new THREE.LineBasicMaterial({ color: FALLBACK_OUTLINE });
@@ -336,7 +332,7 @@ export class Engine {
     this.requestRender();
   }
 
-  /** The element of the view cube; its transform follows the camera on every frame. */
+  /** The element of the view cube; its faces follow the camera on every frame. */
   setCube(el: HTMLElement | null): void {
     this.cube = el;
     this.cubeTransform = "";
@@ -481,30 +477,35 @@ export class Engine {
   // -------------------------------------------------------------------------------------------
   // Capture and life cycle
 
-  /** Renders the view into a PNG, at the shown size or `widthPx` wide with the same aspect. */
+  /**
+   * Renders the view into a PNG, at the shown size or `widthPx` wide with the same aspect. The
+   * picture is drawn offscreen at its full size through a chain of its own (`post.ts`), with the
+   * view's quality (ambient occlusion in high) and multisampling, never scaled from the canvas.
+   */
   async capture(widthPx?: number): Promise<Uint8Array> {
     if (this.lost) throw new Error("3D capture: the graphics context is lost; try again in a moment.");
     const r = this.renderer;
-    const { width, height } = this.size();
-    const ratio = r.getPixelRatio();
-    const maxWidth = Math.min(MAX_CAPTURE_WIDTH, r.capabilities.maxTextureSize);
-    const w = Math.round(Math.min(widthPx ?? width * ratio, maxWidth));
-    const h = Math.max(1, Math.round((w * height) / width));
+    const gl = r.getContext();
+    const maxSize = Math.min(MAX_CAPTURE_WIDTH, r.capabilities.maxTextureSize, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number);
+    const { width: w, height: h } = captureSize(this.size(), r.getPixelRatio(), widthPx, maxSize);
+    const chain = new PostChain(r, this.scene, this.camera, w, h, QUALITY[this.quality].ao);
+    const target = new THREE.WebGLRenderTarget(w, h, { depthBuffer: false });
+    const pixels = new Uint8ClampedArray(w * h * 4);
     // Outlines and hover are editing aids, not part of the picture.
     this.overlayRoot.visible = false;
-    r.setPixelRatio(1);
-    r.setSize(w, h, false);
-    this.resizeComposer(w, h);
-    this.draw();
-    // `toBlob` takes the canvas content as it is now, right after the draw in the same task.
-    const blob = await new Promise<Blob | null>((resolve) => r.domElement.toBlob(resolve, "image/png"));
-    this.overlayRoot.visible = true;
-    r.setPixelRatio(ratio);
-    r.setSize(width, height, false);
-    this.resizeComposer(width, height);
-    this.draw();
-    if (!blob) throw new Error("3D capture: the canvas could not be encoded as PNG.");
-    return new Uint8Array(await blob.arrayBuffer());
+    try {
+      if (this.roomObject) applyCutaway(this.roomObject, this.camera.position, this.cutaway);
+      this.camera.updateMatrixWorld();
+      chain.render(this.camera, this.background, target);
+      r.readRenderTargetPixels(target, 0, 0, w, h, pixels);
+    } finally {
+      this.overlayRoot.visible = true;
+      r.setRenderTarget(null);
+      chain.dispose();
+      target.dispose();
+      this.requestRender();
+    }
+    return encodePng(pixels, w, h);
   }
 
   /**
@@ -636,79 +637,18 @@ export class Engine {
     if (!q.ao) return;
     const { width, height } = this.size();
     const ratio = this.renderer.getPixelRatio();
-    // Multisampled so edges stay as smooth as in the standard path. The depth of the main render
-    // feeds the ambient occlusion, which then rebuilds normals from it instead of drawing the
-    // whole scene a second time (half the CPU cost of the pass).
-    const depth = new THREE.DepthTexture(width * ratio, height * ratio);
-    const target = new THREE.WebGLRenderTarget(width * ratio, height * ratio, { type: THREE.HalfFloatType, samples: 4, depthTexture: depth });
-    const composer = new EffectComposer(this.renderer, target);
-    // The composer clones the target for its second buffer, depth texture included, and the
-    // clone shares the depth's storage, which breaks the multisample resolve. Only the first
-    // buffer needs depth: the scene is always drawn into it (two swaps per frame).
-    composer.renderTarget2.dispose();
-    composer.renderTarget2 = new THREE.WebGLRenderTarget(width * ratio, height * ratio, { type: THREE.HalfFloatType, samples: 4 });
-    composer.writeBuffer = composer.renderTarget2;
-    composer.setPixelRatio(ratio);
-    composer.setSize(width, height);
-    this.renderPass = new RenderPass(this.scene, this.camera);
-    this.ao = new GTAOPass(this.scene, this.camera, width * ratio, height * ratio);
-    this.ao.setGBuffer(depth);
-    this.ao.updateGtaoMaterial(AO);
-    composer.addPass(this.renderPass);
-    composer.addPass(this.ao);
-    composer.addPass(new OutputPass());
-    this.composer = composer;
+    this.post = new PostChain(this.renderer, this.scene, this.camera, Math.floor(width * ratio), Math.floor(height * ratio), true);
   }
 
-  /** Resizes the post-processing buffers to the canvas. */
+  /** Resizes the post-processing buffers to the canvas (CSS pixels, at the renderer's ratio). */
   private resizeComposer(width: number, height: number): void {
-    const c = this.composer;
-    if (!c) return;
-    // The composer follows the renderer's pixel ratio (both are set together).
     const ratio = this.renderer.getPixelRatio();
-    const w = width * ratio;
-    const h = height * ratio;
-    // three resizes a target's colour textures but not its depth texture; the resize disposes
-    // the target, so the depth is allocated again at the new size.
-    const depth = c.renderTarget1.depthTexture;
-    if (depth && (depth.image.width !== w || depth.image.height !== h)) {
-      depth.image.width = w;
-      depth.image.height = h;
-    }
-    c.setPixelRatio(ratio);
-    c.setSize(width, height);
+    this.post?.setSize(Math.floor(width * ratio), Math.floor(height * ratio));
   }
 
   private disposeComposer(): void {
-    if (!this.composer) return;
-    this.ao?.dispose();
-    this.composer.renderTarget1.dispose();
-    this.composer.renderTarget2.dispose();
-    for (const p of this.composer.passes) p.dispose();
-    this.composer.dispose();
-    this.composer = null;
-    this.renderPass = null;
-    this.ao = null;
-  }
-
-  /** GTAO reads the camera's projection only when sized; zoom and projection switches change it. */
-  private syncAo(): void {
-    const ao = this.ao;
-    if (!ao || !this.renderPass) return;
-    const cam = this.camera;
-    this.renderPass.camera = cam;
-    ao.camera = cam;
-    const u = ao.gtaoMaterial.uniforms;
-    u.cameraNear.value = cam.near;
-    u.cameraFar.value = cam.far;
-    u.cameraProjectionMatrix.value.copy(cam.projectionMatrix);
-    u.cameraProjectionMatrixInverse.value.copy(cam.projectionMatrixInverse);
-    ao.pdMaterial.uniforms.cameraProjectionMatrixInverse.value.copy(cam.projectionMatrixInverse);
-    const perspective = cam === this.persp ? 1 : 0;
-    if (ao.gtaoMaterial.defines.PERSPECTIVE_CAMERA !== perspective) {
-      ao.gtaoMaterial.defines.PERSPECTIVE_CAMERA = perspective;
-      ao.gtaoMaterial.needsUpdate = true;
-    }
+    this.post?.dispose();
+    this.post = null;
   }
 
   // -------------------------------------------------------------------------------------------
@@ -1105,7 +1045,8 @@ export class Engine {
   // Frame
 
   private readTheme(): void {
-    this.scene.background = cssColor(this.host, "--bg-canvas") ?? new THREE.Color(FALLBACK_BACKGROUND);
+    this.background = cssColor(this.host, "--bg-canvas") ?? new THREE.Color(FALLBACK_BACKGROUND);
+    this.scene.background = this.background;
     const outline = cssColor(this.host, "--draw-outline-3d") ?? new THREE.Color(FALLBACK_OUTLINE);
     for (const m of [this.selectedLine, this.selectedHidden, this.hoverLine]) m.color.copy(outline);
     this.requestRender();
@@ -1145,24 +1086,31 @@ export class Engine {
     if (this.roomObject) applyCutaway(this.roomObject, this.camera.position, this.cutaway);
     this.camera.updateMatrixWorld();
     this.updateCube();
-    if (this.composer) {
-      this.syncAo();
-      this.composer.render();
+    if (this.post) {
+      this.post.render(this.camera, this.background);
     } else {
       this.renderer.render(this.scene, this.camera);
     }
   }
 
   /**
-   * Turns the view cube like the world as the camera sees it. CSS has y down where three has
-   * y up, so the camera's inverse rotation is mirrored on y: M = S R S with S = diag(1, -1, 1).
+   * Turns the view cube like the world as the camera sees it: each face gets a 2D transform
+   * (`viewCube.ts`), the faces turned away are hidden. `data-turn` tells tests the camera's turn.
    */
   private updateCube(): void {
-    if (!this.cube) return;
-    const value = cubeTransform(this.camera.quaternion);
-    if (value === this.cubeTransform) return;
-    this.cubeTransform = value;
-    this.cube.style.transform = value;
+    const cube = this.cube;
+    if (!cube) return;
+    const faces = cubeFaces(this.camera.quaternion);
+    const key = CUBE_FACE_NAMES.map((f) => (faces[f].visible ? faces[f].transform : "")).join(";");
+    if (key === this.cubeTransform) return;
+    this.cubeTransform = key;
+    for (const el of cube.querySelectorAll<HTMLElement>("[data-face]")) {
+      const face = faces[el.dataset.face as CubeFace];
+      if (!face) continue;
+      el.style.transform = face.transform;
+      el.style.visibility = face.visible ? "visible" : "hidden";
+    }
+    cube.dataset.turn = key;
   }
 
   private listen(target: THREE.EventDispatcher<{ change: object }>, type: "change", f: () => void): void {
@@ -1176,19 +1124,6 @@ export class Engine {
     el.addEventListener(type, l, capture);
     this.cleanup.push(() => el.removeEventListener(type, l, capture));
   }
-}
-
-/** The CSS transform that shows a cube in world axes as the camera with `q` sees it. */
-export function cubeTransform(q: THREE.Quaternion): string {
-  const e = new THREE.Matrix4().makeRotationFromQuaternion(q.clone().invert()).elements;
-  const s = [1, -1, 1, 1];
-  const m = e.map((v, i) => {
-    const col = Math.floor(i / 4);
-    const row = i % 4;
-    // Rounded so tiny float noise does not restyle the cube on every frame.
-    return Math.round(v * s[row] * s[col] * 1e4) / 1e4 || 0;
-  });
-  return `matrix3d(${m.join(",")})`;
 }
 
 /**

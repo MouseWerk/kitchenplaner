@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { planDrawing } from "./plan";
+import { leaderLine, planDrawing } from "./plan";
 import { exampleKitchen } from "../examples/exampleKitchen";
-import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "../render/svg";
-import { area, bounds, pointInPolygon } from "./geometry";
+import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS, SHEET_SCALES } from "../render/svg";
+import { area, bounds, footprint, pointInPolygon } from "./geometry";
 import { testItem, testProject } from "./testProject";
 import type { Opening, Partition } from "./types";
 import { expandDim, type ArcShape, type DimShape, type PolyShape, type Shape, type TextShape } from "../render/drawing";
@@ -281,8 +281,8 @@ describe("planDrawing position numbers", () => {
       .filter((s): s is TextShape => s.t === "text" && s.circled === true)
       .map((s) => ({ id: s.itemId!, x: s.p.x, y: s.p.y - CIRCLE_CENTER_RISE * s.size * ps, r: CIRCLE_RADIUS * s.size * ps }));
 
-  // 40: the screen; 50: the exports (1:50).
-  it.each([40, 50])("never lets two numbers of the example kitchen overlap (1:%i)", (ps) => {
+  // 40: the screen; the others: every scale a sheet may print the plan at.
+  it.each([40, ...SHEET_SCALES])("never lets two numbers of the example kitchen overlap (1:%i)", (ps) => {
     const p = exampleKitchen("de");
     const cs = circles(planDrawing(p, { showNames: false, showDims: true, paperScale: ps }).shapes, ps);
     expect(cs).toHaveLength(p.items.length);
@@ -292,6 +292,30 @@ describe("planDrawing position numbers", () => {
         expect(d, `${cs[i].id} / ${cs[j].id}`).toBeGreaterThanOrEqual(cs[i].r + cs[j].r);
       }
     }
+  });
+
+  it("draws a leader to a unit whose number had to move clear of it, and none for a number on its unit", () => {
+    // At 1:500 the circles are 2.4 m wide: the example kitchen's small units get numbers outside.
+    const p = exampleKitchen("de");
+    const shapes = planDrawing(p, { ...NONE, paperScale: 500 }).shapes;
+    const cs = circles(shapes, 500);
+    const leaders = polys(shapes).filter((s) => s.pen === "detail" && !s.closed && s.pts.length === 2 && cs.some((c) => c.id === s.itemId && Math.abs(Math.hypot(s.pts[0].x - c.x, s.pts[0].y - c.y) - c.r) < 1));
+    expect(leaders.length).toBeGreaterThan(0);
+    for (const l of leaders) {
+      const it = p.items.find((x) => x.id === l.itemId)!;
+      // It ends on the unit's outline.
+      const b = bounds(footprint(it));
+      expect(l.pts[1].x).toBeGreaterThanOrEqual(b.minX - 1);
+      expect(l.pts[1].x).toBeLessThanOrEqual(b.maxX + 1);
+      expect(l.pts[1].y).toBeGreaterThanOrEqual(b.minY - 1);
+      expect(l.pts[1].y).toBeLessThanOrEqual(b.maxY + 1);
+    }
+    expect(leaderLine(testItem("t", "table", 2000, 2000), { x: 2000, y: 2000 }, 100)).toBeNull();
+    expect(leaderLine(testItem("t", "table", 2000, 2000), { x: 2000, y: 2400 }, 100)).toBeNull();
+    expect(leaderLine(testItem("t", "table", 2000, 2000), { x: 2000, y: 2700 }, 100)).toEqual([
+      { x: 2000, y: 2600 },
+      { x: 2000, y: 2350 },
+    ]);
   });
 
   it("puts a floor unit's number in its middle and the number of a hood above it towards the hood's front right", () => {

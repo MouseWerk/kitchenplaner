@@ -61,22 +61,39 @@ function pixels(width: number, height: number, f: (x: number, y: number) => [num
   return { width, height, data };
 }
 
+/** How far a row of the brushed grain departs from the mean (share of the map's range, see below). */
+export const BRUSH_CONTRAST = 0.05;
+/** Rows per block of the stratified grain (see `brushedSteelPixels`). */
+const STRATA = 16;
+
 /**
  * Brushed stainless steel as a roughness map (three reads the green channel): fine streaks
  * along x, each row a little smoother or rougher, slowly changing along the stroke. The
  * streaks make the reflection smear sideways like real grain, without an anisotropic shader.
+ * Rows are hairlines of half a millimetre (`shared.ts` repeats the map per metre); slow
+ * variations across the stroke would read as planks on a large hood, so there are none, and the
+ * row contrast stays very low: the width of a light's reflection on metal goes with the square
+ * of the roughness and its brightness with the inverse, so a step of 0.05 in roughness already
+ * changes a highlight by half and every hairline shows as a stripe.
  */
 export function brushedSteelPixels(size = 256, seed = 7): Pixels {
   const rnd = random(seed);
-  // One value per row (the stroke), plus a gentle variation along it.
-  const rows = Array.from({ length: size }, () => rnd());
+  // One value per row (the stroke), plus a gentle variation along it. The rows are stratified:
+  // every block of 16 rows holds one value from each sixteenth of the range, shuffled, so plain
+  // random clumps of smooth or rough rows cannot add up to a band.
+  const rows: number[] = [];
+  while (rows.length < size) {
+    const block = Array.from({ length: STRATA }, (_, k) => (k + rnd()) / STRATA);
+    for (let i = block.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [block[i], block[j]] = [block[j], block[i]];
+    }
+    rows.push(...block);
+  }
   const along = periodicNoise(8, seed + 1);
-  const across = periodicNoise(16, seed + 2);
   return pixels(size, size, (x, y) => {
     const streak = rows[y] * 0.6 + rows[(y + 1) % size] * 0.4;
-    // Mostly fine hairlines; the slow variations only break up repetition and stay faint, or
-    // large panels read as planks.
-    const v = 0.5 + (streak - 0.5) * 0.35 + (along((x / size) * 8, (y / size) * 8) - 0.5) * 0.08 + (across(0, (y / size) * 16) - 0.5) * 0.06;
+    const v = 0.5 + (streak - 0.5) * BRUSH_CONTRAST + (along((x / size) * 8, (y / size) * 8) - 0.5) * 0.03;
     const g = 255 * v;
     return [g, g, g];
   });
@@ -136,6 +153,9 @@ export function wallPaintPixels(size = 128, seed = 23): Pixels {
   });
 }
 
+/** Anisotropic filtering asked for: 16 is the most any GPU offers; three clamps it per device. */
+export const MAX_ANISOTROPY = 16;
+
 /**
  * A repeating, mipmapped texture from pixel data. Colour maps are sRGB, data maps (roughness,
  * bump) linear. The caller owns it and disposes it.
@@ -147,8 +167,9 @@ export function toTexture(p: Pixels, colour: boolean): THREE.DataTexture {
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.generateMipmaps = true;
-  // Floors seen at a grazing angle stay sharp; the renderer clamps to what the GPU offers.
-  tex.anisotropy = 8;
+  // Floors and long steel panels seen at a grazing angle stay sharp instead of blurring or
+  // shimmering; three clamps this to the most the GPU offers (`getMaxAnisotropy`).
+  tex.anisotropy = MAX_ANISOTROPY;
   tex.needsUpdate = true;
   return tex;
 }

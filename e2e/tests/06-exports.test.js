@@ -70,4 +70,14 @@ appTest("the 3D view exports as PNG when it is shown", async (app, t) => {
   const png = await exportTo(app, "3D-Ansicht als PNG…", "3d.png");
   assert.deepEqual([...png.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.ok(png.length > 10_000, `the PNG is suspiciously small (${png.length} bytes)`);
+  // Rendered at the export width (lib/actions.ts), larger than the pane: the IHDR chunk holds
+  // width and height, and the height follows the pane's aspect.
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  assert.equal(width, 3200);
+  const pane = await app.exec(() => {
+    const r = document.querySelector("section[aria-label='3D'] canvas").getBoundingClientRect();
+    return r.width / r.height;
+  });
+  assert.ok(Math.abs(width / height - pane) < 0.01, `the PNG's aspect ${width / height} is not the pane's ${pane}`);
 });

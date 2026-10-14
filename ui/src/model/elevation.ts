@@ -1,21 +1,44 @@
 // The four elevations (Ansichten) as Drawings: a section through the room looking at one wall,
 // with the equipment in front of it drawn far to near so nearer items cover farther ones.
 //
+// An elevation is a wall elevation (Wandabwicklung): the section plane stands a cut depth in front
+// of the walls looked at, so the units across the room (an island, the pass at the opposite wall)
+// do not hide the wall's own equipment. The cut can be widened to half the room or the whole room.
+//
 // Drawing coordinates: X runs along the viewer's right axis u, Y = -height (y down on screen,
 // so higher up is further up on the sheet). The floor is Y = 0.
 
-import { dot, EPS, footprint, frontOf, openingSpan, walls } from "./geometry";
+import { dot, EPS, footprint, frontOf, openingSpan, walls, type Wall } from "./geometry";
 import { clampPartitionOpening, HATCH_SHELF_THICKNESS, openingSpanOnPartition, partitionAxes, partitionBand, partitionLength } from "./partitions";
 import { positions } from "./project";
-import type { Facing, Item, Opening, Partition, Project, Vec2 } from "./types";
-import { mm, TEXT, type Drawing, type Pen, type Shape, type Fill } from "../render/drawing";
+import type { Facing, Item, Opening, Partition, Project, Room, Vec2 } from "./types";
+import { mm, TEXT, type Drawing, type Pen, type Shape, type Fill, type TextShape } from "../render/drawing";
+import { CIRCLE_RADIUS } from "../render/svg";
 import { Front, rect, TOP } from "../kinds/parts/elevation";
 import { kindDef, kindOf } from "../kinds/registry";
+
+/**
+ * How deep in front of the walls looked at an elevation reaches: "wall" a fixed band
+ * (`WALL_CUT_DEPTH`), "half" half the room's depth in the view direction, "room" the whole room
+ * (everything projected, a view without a section).
+ */
+export type ElevationCut = "wall" | "half" | "room";
+export const ELEVATION_CUTS: readonly ElevationCut[] = ["wall", "half", "room"];
+
+/**
+ * The default cut depth (mm). A 900 mm cooking line, a wall hood reaching 1100 to 1300 mm into
+ * the room and a wall shelf lie inside it; a unit across the aisle (at least 1200 mm in front of a
+ * 900 mm line, so from 2100 mm on) lies outside. A fixed depth rather than half the room: in a
+ * deep room half of it reaches the island again, in a narrow one it cuts the cooking line.
+ */
+export const WALL_CUT_DEPTH = 1500;
 
 export interface ElevationOptions {
   showDims: boolean;
   /** Drawing units per paper millimetre (default 1:50); spaces the position numbers. */
   paperScale?: number;
+  /** How deep the elevation reaches into the room (default "wall"). */
+  cut?: ElevationCut;
 }
 
 const DEFAULT_PAPER_SCALE = 50;
@@ -40,6 +63,13 @@ const VIEW_DIR: Record<Facing, Vec2> = {
 const FACES_VIEWER = 0.7;
 /** A wall counts as the one looked at when its inward normal is within about 25 degrees of -v. */
 const WALL_FACES_VIEWER = 0.9;
+/**
+ * A wall the cut depth is measured from: any wall turned towards the viewer at all (its inward
+ * normal within about 85 degrees of -v), so a chamfered corner counts in both views beside it.
+ */
+const WALL_BACKS_VIEW = 0.1;
+/** How far a point may lie behind the wall line and still count as standing at it (mm). */
+const BEHIND_TOLERANCE = 1;
 /** Gap between the bottom of an item and its position number (paper mm). */
 const POS_LIFT = 3;
 /** Distance of the dimension lines from the room section (paper mm). */
@@ -55,6 +85,10 @@ const OPENING_FRAME = 60;
  * Partitions stand in the room like items and are painted in the same far-to-near order: one
  * seen face-on as a wall surface with its openings, one seen end-on as a section band (wall
  * fill), any other as the surface it covers.
+ *
+ * Only what lies within the cut depth (`opts.cut`) in front of the walls looked at is drawn: an
+ * item when its centre does (so most of it), a column also when the section plane cuts it, a
+ * partition with its part inside the band and a section band where the plane cuts it.
  */
 export function elevationDrawing(project: Project, facing: Facing, opts: ElevationOptions): Drawing {
   const ps = opts.paperScale ?? DEFAULT_PAPER_SCALE;
@@ -86,19 +120,33 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
   // Painter's order: whatever has its nearest corner farthest from the viewer first.
   const nearest = (pts: Vec2[]) => Math.min(...pts.map((p) => dot(p, v)));
   const pos = positions(project);
+  const D = cutDepth(room, facing, opts.cut ?? "wall");
+  const depthOf = (p: Vec2, l = dot(p, u), r = l) => wallDepth(ws, u, v, p, l, r);
   const scene: { depth: number; draw: () => void }[] = [];
   for (const p of room.partitions) {
     if (partitionLength(p) < EPS) continue;
     const band = partitionBand(room, p);
-    const outline = [...band.start, ...band.end];
-    scene.push({ depth: nearest(outline), draw: () => drawPartition(project, p, outline, u, v, shapes) });
+    // The band as a polygon: along the left face from a to b, back along the right face.
+    const outline = [band.start[0], band.end[0], band.end[1], band.start[1]];
+    const kept = D === Infinity ? { pts: outline, cut: [] } : clipPolygon(outline, (q) => D - depthOf(q));
+    if (kept.pts.length < 3) continue;
+    scene.push({ depth: nearest(kept.pts), draw: () => drawPartition(project, p, kept.pts, kept.cut, u, v, shapes) });
   }
   for (const it of project.items) {
-    scene.push({ depth: nearest(footprint(it)), draw: () => drawPlacedItem(it, u, v, pos, ps, shapes) });
+    const fp = footprint(it);
+    if (D !== Infinity) {
+      const us = fp.map((q) => dot(q, u));
+      const inBand = depthOf({ x: it.x, y: it.y }, Math.min(...us), Math.max(...us)) <= D;
+      // A column the section plane cuts shows as a cut section, though its centre lies beyond.
+      const cutColumn = !inBand && kindDef(kindOf(it.catalogId)).structural === true && fp.some((q) => depthOf(q) <= D);
+      if (!inBand && !cutColumn) continue;
+    }
+    scene.push({ depth: nearest(fp), draw: () => drawPlacedItem(it, u, v, pos, ps, shapes) });
   }
   // A stable sort keeps the list order for equal depths.
   scene.sort((a, b) => b.depth - a.depth);
   for (const s of scene) s.draw();
+  liftCrowdedNumbers(shapes, ps);
 
   if (opts.showDims) {
     // Width below the floor (left of a→b is up, so a negative offset), height left of the room.
@@ -106,6 +154,67 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
     shapes.push({ t: "dim", pen: "dim", a: { x: x0 - t, y: 0 }, b: { x: x0 - t, y: -H }, offset: DIM_OFFSET, text: mm(H) });
   }
   return { shapes };
+}
+
+/**
+ * The cut depth in mm: "wall" `WALL_CUT_DEPTH`, "half" half the room's extent along the view
+ * direction, "room" no limit (Infinity).
+ */
+export function cutDepth(room: Pick<Room, "points">, facing: Facing, cut: ElevationCut): number {
+  if (cut === "room" || room.points.length < 3) return Infinity;
+  if (cut === "wall") return WALL_CUT_DEPTH;
+  const { v } = facingAxes(facing);
+  const ds = room.points.map((p) => dot(p, v));
+  return (Math.max(...ds) - Math.min(...ds)) / 2;
+}
+
+/**
+ * How far `p` stands in front of the nearest wall behind it, measured along the view direction,
+ * among the walls turned towards the viewer. `l`..`r` is the stretch along u the thing covers: a
+ * wall counts when it overlaps that stretch, at the point of it nearest to `p` along u. So in an
+ * L-shaped room a unit is measured from the near leg when it stands in front of it, from the far
+ * leg elsewhere. Infinity when no wall lies behind it.
+ */
+function wallDepth(ws: readonly Wall[], u: Vec2, v: Vec2, p: Vec2, l: number, r: number): number {
+  const pu = dot(p, u);
+  const pv = dot(p, v);
+  let best = Infinity;
+  for (const w of ws) {
+    if (-dot(w.inward, v) < WALL_BACKS_VIEW) continue;
+    const au = dot(w.a, u);
+    const bu = dot(w.b, u);
+    const lo = Math.min(au, bu);
+    const hi = Math.max(au, bu);
+    if (hi - lo < EPS || hi < l - EPS || lo > r + EPS) continue;
+    const at = Math.min(hi, Math.max(lo, pu));
+    const wv = dot(w.a, v) + ((at - au) / (bu - au)) * (dot(w.b, v) - dot(w.a, v));
+    const d = wv - pv;
+    if (d >= -BEHIND_TOLERANCE) best = Math.min(best, Math.max(0, d));
+  }
+  return best;
+}
+
+/**
+ * The part of a convex polygon where `f` >= 0, with f taken as linear along each edge, and the
+ * points where the outline crosses f = 0 (the section through the polygon).
+ */
+export function clipPolygon(pts: readonly Vec2[], f: (p: Vec2) => number): { pts: Vec2[]; cut: Vec2[] } {
+  const out: Vec2[] = [];
+  const cut: Vec2[] = [];
+  const fs = pts.map(f);
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    const [a, b, fa, fb] = [pts[i], pts[j], fs[i], fs[j]];
+    if (fa >= 0) out.push(a);
+    if ((fa >= 0) === (fb >= 0)) continue;
+    // An end with no wall behind it (f = -Infinity) has no place to interpolate to: the section
+    // sits at the end inside the band.
+    const k = Number.isFinite(fa) && Number.isFinite(fb) ? fa / (fa - fb) : fa >= 0 ? 0 : 1;
+    const q = { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+    out.push(q);
+    cut.push(q);
+  }
+  return { pts: out, cut };
 }
 
 function drawPlacedItem(it: Item, u: Vec2, v: Vec2, pos: Map<string, number>, ps: number, shapes: Shape[]) {
@@ -126,17 +235,60 @@ function drawPlacedItem(it: Item, u: Vec2, v: Vec2, pos: Map<string, number>, ps
   });
 }
 
+/** Least gap between two position circles (paper mm). */
+const POS_GAP = 0.5;
+/** How many circle heights a crowded number may rise, and how many circles it may move aside. */
+const POS_MAX_LIFT = 12;
+const POS_MAX_SHIFT = 2;
+
 /**
- * A partition as the viewer sees it: its outline (`outline`, the joined band) projected on the
- * view, from the floor to its height, covering what lies behind it.
+ * Moves a position number that would overlap one placed before it to the nearest free place:
+ * up one circle at a time, then also a circle or two aside. Narrow units side by side (a 400 mm
+ * fryer next to a pasta cooker) and units seen behind one another keep readable numbers.
+ * Numbers are placed from the lowest, left to right, so the result does not depend on the
+ * painting order.
  */
-function drawPartition(project: Project, p: Partition, outline: Vec2[], u: Vec2, v: Vec2, shapes: Shape[]) {
+function liftCrowdedNumbers(shapes: Shape[], ps: number) {
+  const r = TEXT.normal * CIRCLE_RADIUS * ps;
+  const clear = 2 * r + POS_GAP * ps;
+  const labels = shapes.filter((s): s is TextShape => s.t === "text" && s.circled === true);
+  labels.sort((a, b) => b.p.y - a.p.y || a.p.x - b.p.x);
+  const placed: Vec2[] = [];
+  for (const l of labels) {
+    const free = (q: Vec2) => placed.every((o) => Math.hypot(o.x - q.x, o.y - q.y) >= clear - EPS);
+    search: for (let lift = 0; lift <= POS_MAX_LIFT; lift++) {
+      for (let k = 0; k <= 2 * POS_MAX_SHIFT; k++) {
+        // Aside in the order 0, +1, -1, +2, -2 circles.
+        const dx = (k % 2 === 1 ? 1 : -1) * Math.ceil(k / 2);
+        const q = { x: l.p.x + dx * clear, y: l.p.y - lift * clear };
+        if (free(q)) {
+          l.p = q;
+          break search;
+        }
+      }
+    }
+    placed.push(l.p);
+  }
+}
+
+/**
+ * A partition as the viewer sees it: its outline (`outline`, the part of the joined band within
+ * the cut depth) projected on the view, from the floor to its height, covering what lies behind
+ * it. Where the section plane cuts it (`cut`, the crossing points) a section band goes on top.
+ */
+function drawPartition(project: Project, p: Partition, outline: Vec2[], cut: Vec2[], u: Vec2, v: Vec2, shapes: Shape[]) {
   const xs = outline.map((q) => dot(q, u));
   const l = Math.min(...xs);
   const r = Math.max(...xs);
   const { dir, left } = partitionAxes(p);
   const endOn = Math.abs(dot(dir, v)) > WALL_FACES_VIEWER;
   shapes.push({ t: "poly", pen: "wall", fill: endOn ? "wall" : "item", pts: rect(l, r, 0, p.height), closed: true });
+  if (!endOn && cut.length >= 2) {
+    const cs = cut.map((q) => dot(q, u));
+    const cl = Math.min(...cs);
+    const cr = Math.max(...cs);
+    if (cr - cl > EPS) shapes.push({ t: "poly", pen: "wall", fill: "wall", pts: rect(cl, cr, 0, p.height), closed: true });
+  }
   if (Math.abs(dot(left, v)) < WALL_FACES_VIEWER) return;
   for (const o of project.room.openings) {
     if (o.partition !== p.id) continue;

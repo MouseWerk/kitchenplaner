@@ -1,7 +1,7 @@
 // The floor plan as a Drawing: cut walls with their openings, the equipment with its plan
 // symbols, position numbers and dimensions. Screen, SVG and DXF all draw this list.
 
-import { add, bounds, clampOpening, dot, EPS, footprint, scale, sub, toPlan, walls, type Wall } from "./geometry";
+import { add, bounds, clampOpening, dot, EPS, footprint, pointInPolygon, scale, sub, toPlan, walls, type Wall } from "./geometry";
 import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, partitionBand, partitionLength } from "./partitions";
 import { positions } from "./project";
 import type { Item, Opening, Project, Vec2 } from "./types";
@@ -23,7 +23,7 @@ export interface PlanOptions {
 /** The usual plan scale of kitchen plans (1:50). */
 const DEFAULT_PAPER_SCALE = 50;
 /** Gap between the outer wall face and the first dimension row (paper mm). */
-const DIM_GAP = 6;
+export const DIM_GAP = 6;
 /** Distance between the wall dimension row and the overall dimension row (paper mm). */
 const DIM_ROW = 7;
 /** Gap between the position number and the name below it (paper mm). */
@@ -65,6 +65,8 @@ export function planDrawing(project: Project, opts: PlanOptions): Drawing {
   ordered.forEach((it, i) => {
     // Circled text hangs its circle above the baseline; lower it so the circle sits on the centre.
     const p = { x: centres[i].x, y: centres[i].y + CIRCLE_CENTER_RISE * TEXT.normal * ps };
+    const leader = leaderLine(it, centres[i], TEXT.normal * CIRCLE_RADIUS * ps);
+    if (leader) shapes.push({ t: "poly", pen: "detail", itemId: it.id, pts: leader, closed: false });
     shapes.push({ t: "text", pen: "item", itemId: it.id, p, text: String(pos.get(it.id) ?? ""), size: TEXT.normal, anchor: "middle", circled: true });
     if (opts.showNames && it.name) {
       const below = { x: p.x, y: p.y + (NAME_GAP + TEXT.normal + TEXT.small) * ps };
@@ -84,6 +86,8 @@ const LABEL_GAP = 0.5;
 const LABEL_RINGS = 4;
 /** Places tried on each ring, evenly around it, starting towards the front right. */
 const LABEL_STEPS = 12;
+/** The farthest ring a number goes out to when all nearer places are taken. */
+const LABEL_RINGS_MAX = 200;
 
 /**
  * Where the circled position numbers go (centres, plan mm), in the order of `items` (floor
@@ -91,7 +95,9 @@ const LABEL_STEPS = 12;
  * puts it towards its front right corner, so it does not cover the number of the unit below or
  * above. A number that would still overlap one placed before it moves to the nearest free place
  * on rings around it, preferring places where the circle stays inside the item's footprint, then
- * its centre does; with no free place it stays. Deterministic: the same plan gives the same places.
+ * its centre does. Where these rings are all taken (circles wide against small units, at a coarse
+ * scale) it goes further out to the first free place; `planDrawing` then draws a leader to the
+ * unit. Deterministic: the same plan gives the same places.
  */
 export function labelCentres(items: readonly Item[], ps: number): Vec2[] {
   const r = TEXT.normal * CIRCLE_RADIUS * ps;
@@ -122,10 +128,49 @@ export function labelCentres(items: readonly Item[], ps: number): Vec2[] {
           }
         }
       }
+      // Crowded at a coarse scale (circles wide against the units): further out, ring by ring,
+      // with as many places on a ring as fit around it, the first free one.
+      for (let ring = LABEL_RINGS + 1; bestRank === Infinity && ring <= LABEL_RINGS_MAX; ring++) {
+        const steps = Math.max(LABEL_STEPS, Math.ceil(2 * Math.PI * ring));
+        for (let k = 0; k < steps; k++) {
+          const a = Math.PI / 4 + (2 * Math.PI * k) / steps;
+          const q = toPlan(it, { x: home.x + Math.cos(a) * clear * ring * 0.5, y: home.y + Math.sin(a) * clear * ring * 0.5 });
+          if (free(q)) {
+            bestRank = 0;
+            best = q;
+            break;
+          }
+        }
+      }
     }
     placed.push(best);
   }
   return placed;
+}
+
+/**
+ * A leader from a position circle (centre `c`, radius `r`) to the nearest point of its unit's
+ * outline, when the circle sits clear of the unit; null when it touches or covers it.
+ */
+export function leaderLine(it: Item, c: Vec2, r: number): Vec2[] | null {
+  const fp = footprint(it);
+  if (pointInPolygon(c, fp)) return null;
+  let near = fp[0];
+  let d = Infinity;
+  for (let i = 0; i < fp.length; i++) {
+    const a = fp[i];
+    const ab = sub(fp[(i + 1) % fp.length], a);
+    const l2 = dot(ab, ab);
+    const k = l2 < EPS ? 0 : Math.max(0, Math.min(1, dot(sub(c, a), ab) / l2));
+    const q = add(a, scale(ab, k));
+    const dq = Math.hypot(q.x - c.x, q.y - c.y);
+    if (dq < d) {
+      d = dq;
+      near = q;
+    }
+  }
+  if (d <= r + EPS) return null;
+  return [add(c, scale(sub(near, c), r / d)), near];
 }
 
 // ---- Walls and openings ----
