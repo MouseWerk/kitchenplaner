@@ -56,4 +56,23 @@ describe("Menu", () => {
     expect(parseFloat(menu.style.left)).toBeGreaterThanOrEqual(8);
     expect(parseFloat(menu.style.left) + menu.offsetWidth).toBeLessThanOrEqual(window.innerWidth - 8);
   });
+  it("offers choices as radio items, opens on the current one and picks with the keyboard", () => {
+    const picked: string[] = [];
+    const entries = ["Wall", "Half", "Room"].map((label) => ({ label, checked: label === "Half", radio: true, onSelect: () => picked.push(label) }));
+    act(() => root.render(createElement(Menu, { label: "Half", title: "Cut", className: "tb-btn pane-menu", entries })));
+    const button = host.querySelector<HTMLButtonElement>("button")!;
+    expect(button.className).toBe("tb-btn pane-menu");
+    act(() => button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    const items = [...host.querySelectorAll<HTMLButtonElement>("[role=menu] button")];
+    expect(items.map((b) => b.getAttribute("role"))).toEqual(["menuitemradio", "menuitemradio", "menuitemradio"]);
+    expect(items.map((b) => b.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(items[1].querySelector(".menu-check")!.textContent).toBe("✓");
+    expect(document.activeElement).toBe(items[1]);
+    act(() => items[1].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    expect(document.activeElement).toBe(items[2]);
+    act(() => items[2].click());
+    expect(picked).toEqual(["Room"]);
+    expect(host.querySelector("[role=menu]")).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
 });

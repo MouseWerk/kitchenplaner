@@ -40,6 +40,20 @@
   fill: var(--draw-selected-fill);
 }
 
+/* The plan's own dimension of the selected or hovered wall, marked like the wall itself. */
+.room-dim-mark {
+  stroke: none;
+  pointer-events: none;
+}
+
+.room-dim-mark.is-hover {
+  fill: var(--draw-hover-fill);
+}
+
+.room-dim-mark.is-selected {
+  fill: var(--draw-selected-fill);
+}
+
 .room-handle {
   fill: var(--draw-handle-fill);
   stroke: var(--draw-handle);

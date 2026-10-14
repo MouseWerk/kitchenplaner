@@ -123,6 +123,11 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
   const D = cutDepth(room, facing, opts.cut ?? "wall");
   const depthOf = (p: Vec2, l = dot(p, u), r = l) => wallDepth(ws, u, v, p, l, r);
   const scene: { depth: number; draw: () => void }[] = [];
+  // The position numbers go on top of all the units: painted with its unit, a number (lifted or
+  // not) is covered by any nearer unit drawn after it, such as a hood over the oven's number.
+  // Only a unit a nearer partition hides completely keeps its number hidden (`covers`).
+  const labels: { label: TextShape; depth: number; l: number; r: number; top: number }[] = [];
+  const covers: { depth: number; l: number; r: number; top: number }[] = [];
   for (const p of room.partitions) {
     if (partitionLength(p) < EPS) continue;
     const band = partitionBand(room, p);
@@ -130,7 +135,10 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
     const outline = [band.start[0], band.end[0], band.end[1], band.start[1]];
     const kept = D === Infinity ? { pts: outline, cut: [] } : clipPolygon(outline, (q) => D - depthOf(q));
     if (kept.pts.length < 3) continue;
-    scene.push({ depth: nearest(kept.pts), draw: () => drawPartition(project, p, kept.pts, kept.cut, u, v, shapes) });
+    const depth = nearest(kept.pts);
+    const xs = kept.pts.map((q) => dot(q, u));
+    covers.push({ depth, l: Math.min(...xs), r: Math.max(...xs), top: p.height });
+    scene.push({ depth, draw: () => drawPartition(project, p, kept.pts, kept.cut, u, v, shapes) });
   }
   for (const it of project.items) {
     const fp = footprint(it);
@@ -141,12 +149,23 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
       const cutColumn = !inBand && kindDef(kindOf(it.catalogId)).structural === true && fp.some((q) => depthOf(q) <= D);
       if (!inBand && !cutColumn) continue;
     }
-    scene.push({ depth: nearest(fp), draw: () => drawPlacedItem(it, u, v, pos, ps, shapes) });
+    const depth = nearest(fp);
+    scene.push({
+      depth,
+      draw: () => {
+        const label = drawPlacedItem(it, u, v, pos, ps, shapes);
+        const us = fp.map((q) => dot(q, u));
+        labels.push({ label, depth, l: Math.min(...us), r: Math.max(...us), top: it.elevation + it.height });
+      },
+    });
   }
   // A stable sort keeps the list order for equal depths.
   scene.sort((a, b) => b.depth - a.depth);
   for (const s of scene) s.draw();
-  liftCrowdedNumbers(shapes, ps);
+  const hidden = (x: (typeof labels)[number]) => covers.some((c) => c.depth < x.depth && c.l <= x.l + EPS && x.r <= c.r + EPS && x.top <= c.top + EPS);
+  const shown = labels.filter((x) => !hidden(x)).map((x) => x.label);
+  liftCrowdedNumbers(shown, ps);
+  shapes.push(...shown);
 
   if (opts.showDims) {
     // Width below the floor (left of a→b is up, so a negative offset), height left of the room.
@@ -217,13 +236,14 @@ export function clipPolygon(pts: readonly Vec2[], f: (p: Vec2) => number): { pts
   return { pts: out, cut };
 }
 
-function drawPlacedItem(it: Item, u: Vec2, v: Vec2, pos: Map<string, number>, ps: number, shapes: Shape[]) {
+/** Draws one item and returns its position number (not yet added to `shapes`). */
+function drawPlacedItem(it: Item, u: Vec2, v: Vec2, pos: Map<string, number>, ps: number, shapes: Shape[]): TextShape {
   const ext = footprint(it).map((p) => dot(p, u));
   const left = Math.min(...ext);
   const right = Math.max(...ext);
   const facesViewer = dot(frontOf(it.rotation), { x: -v.x, y: -v.y }) > FACES_VIEWER;
   drawItem(it, left, right, facesViewer, shapes);
-  shapes.push({
+  return {
     t: "text",
     pen: "item",
     itemId: it.id,
@@ -232,7 +252,7 @@ function drawPlacedItem(it: Item, u: Vec2, v: Vec2, pos: Map<string, number>, ps
     size: TEXT.normal,
     anchor: "middle",
     circled: true,
-  });
+  };
 }
 
 /** Least gap between two position circles (paper mm). */
@@ -248,25 +268,32 @@ const POS_MAX_SHIFT = 2;
  * Numbers are placed from the lowest, left to right, so the result does not depend on the
  * painting order.
  */
-function liftCrowdedNumbers(shapes: Shape[], ps: number) {
+function liftCrowdedNumbers(labels: TextShape[], ps: number) {
   const r = TEXT.normal * CIRCLE_RADIUS * ps;
   const clear = 2 * r + POS_GAP * ps;
-  const labels = shapes.filter((s): s is TextShape => s.t === "text" && s.circled === true);
-  labels.sort((a, b) => b.p.y - a.p.y || a.p.x - b.p.x);
+  const order = [...labels].sort((a, b) => b.p.y - a.p.y || a.p.x - b.p.x);
   const placed: Vec2[] = [];
-  for (const l of labels) {
+  for (const l of order) {
     const free = (q: Vec2) => placed.every((o) => Math.hypot(o.x - q.x, o.y - q.y) >= clear - EPS);
+    let found: Vec2 | null = null;
     search: for (let lift = 0; lift <= POS_MAX_LIFT; lift++) {
       for (let k = 0; k <= 2 * POS_MAX_SHIFT; k++) {
         // Aside in the order 0, +1, -1, +2, -2 circles.
         const dx = (k % 2 === 1 ? 1 : -1) * Math.ceil(k / 2);
         const q = { x: l.p.x + dx * clear, y: l.p.y - lift * clear };
         if (free(q)) {
-          l.p = q;
+          found = q;
           break search;
         }
       }
     }
+    // At a very coarse scale every place nearby may be taken (the circles grow, the room does
+    // not): then further up until free, which always ends, rather than on top of another number.
+    for (let lift = POS_MAX_LIFT + 1; !found; lift++) {
+      const q = { x: l.p.x, y: l.p.y - lift * clear };
+      if (free(q)) found = q;
+    }
+    l.p = found;
     placed.push(l.p);
   }
 }

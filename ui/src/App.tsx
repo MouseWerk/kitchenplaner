@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { CatalogPanel } from "./components/CatalogPanel";
 import { Inspector, connectionTotals } from "./components/Inspector";
+import { Menu } from "./components/Menu";
 import { Toolbar } from "./components/Toolbar";
 import { confirmDiscard, openPath } from "./lib/actions";
 import { num, useT } from "./lib/i18n";
@@ -11,7 +12,7 @@ import { isTauri } from "./lib/platform";
 import { handleShortcut } from "./lib/shortcuts";
 import { dismissToast, useToasts } from "./lib/toast";
 import { checkProject } from "./model/checks";
-import { ELEVATION_CUTS, WALL_CUT_DEPTH } from "./model/elevation";
+import { ELEVATION_CUTS, WALL_CUT_DEPTH, type ElevationCut } from "./model/elevation";
 import { FACINGS, type Facing, type Vec2 } from "./model/types";
 import { useStore } from "./store/store";
 import { ElevationView } from "./views/ElevationView";
@@ -126,18 +127,23 @@ function FacingSwitch(props: { value: Facing; onChange: (f: Facing) => void }) {
   );
 }
 
-/** How deep the elevations reach into the room; one setting for all of them and the exports. */
+/**
+ * How deep the elevations reach into the room; one setting for all of them and the exports. The
+ * app's own menu rather than a native select: its list stays inside the window and in the app's
+ * look on every system (GTK draws a native list in its own theme).
+ */
 function CutSelect() {
   const t = useT();
   const cut = useStore((s) => s.prefs.elevationCut);
+  const label = (c: ElevationCut) => t(`view.cut.${c}` as const, { m: num(WALL_CUT_DEPTH / 1000, 1) });
   return (
-    <select className="pane-select" value={cut} aria-label={t("view.cut")} title={t("view.cut")} onChange={(e) => useStore.getState().setPrefs({ elevationCut: e.target.value as typeof cut })}>
-      {ELEVATION_CUTS.map((c) => (
-        <option key={c} value={c}>
-          {t(`view.cut.${c}` as const, { m: num(WALL_CUT_DEPTH / 1000, 1) })}
-        </option>
-      ))}
-    </select>
+    <Menu
+      className="tb-btn pane-menu"
+      align="end"
+      label={label(cut)}
+      title={t("view.cut")}
+      entries={ELEVATION_CUTS.map((c) => ({ label: label(c), checked: c === cut, radio: true, onSelect: () => useStore.getState().setPrefs({ elevationCut: c }) }))}
+    />
   );
 }
 

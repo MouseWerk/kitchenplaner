@@ -385,13 +385,16 @@
   flex: 1 1 0;
 }
 
-/* A compact select in a pane header (the elevation cut depth). */
-.pane-head .pane-select {
+/* A compact menu button in a pane header (the elevation cut depth). */
+.pane-head .menu-anchor {
   flex: none;
+}
+
+.pane-head .pane-menu {
   height: var(--ctl-xs);
-  padding-left: var(--sp-2);
+  gap: var(--sp-1);
   font-size: var(--fs-xs);
-  color: var(--text-muted);
+  font-weight: var(--fw-normal);
 }
 
 .pane-head .icon-btn {

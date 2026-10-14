@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cutDepth, elevationDrawing, facingAxes, WALL_CUT_DEPTH } from "./elevation";
+import { cutDepth, ELEVATION_CUTS, elevationDrawing, facingAxes, WALL_CUT_DEPTH } from "./elevation";
 import { bounds, lRoom } from "./geometry";
 import { positions } from "./project";
 import { exampleKitchen } from "../examples/exampleKitchen";
@@ -253,15 +253,47 @@ describe("elevationDrawing cut depth", () => {
 });
 
 describe("elevationDrawing position numbers", () => {
-  it.each([40, 50, 80, 100])("lifts crowded numbers so none overlap in the example kitchen (1:%i)", (ps) => {
+  // Every quarter octave from 1:20 to 1:200: the screen's annotation scales (1:40 and coarser in
+  // quarter octaves) and the export scales lie among them.
+  const scales = [...Array.from({ length: 14 }, (_, q) => 20 * 2 ** (q / 4)), 200];
+
+  it.each(scales.map((ps) => [Math.round(ps * 10) / 10, ps]))("lifts crowded numbers so none overlap in the example kitchen (1:%s)", (_, ps) => {
     const p = exampleKitchen("de");
     for (const facing of ["north", "east", "south", "west"] as const) {
-      for (const cut of ["wall", "room"] as const) {
+      for (const cut of ELEVATION_CUTS) {
         const cs = elevationDrawing(p, facing, { showDims: true, cut, paperScale: ps }).shapes.filter((s): s is TextShape => s.t === "text" && s.circled === true);
         const r = CIRCLE_RADIUS * TEXT.normal * ps;
         for (let i = 0; i < cs.length; i++)
           for (let j = i + 1; j < cs.length; j++) expect(Math.hypot(cs[i].p.x - cs[j].p.x, cs[i].p.y - cs[j].p.y), `${facing} ${cut} ${cs[i].text}/${cs[j].text}`).toBeGreaterThanOrEqual(2 * r);
       }
+    }
+  });
+
+  it("draws the position numbers on top of every unit, so no nearer unit covers one", () => {
+    const p = exampleKitchen("de");
+    for (const facing of ["north", "east", "south", "west"] as const) {
+      for (const cut of ELEVATION_CUTS) {
+        const shapes = elevationDrawing(p, facing, { showDims: true, cut }).shapes;
+        const firstNumber = shapes.findIndex((s) => s.t === "text" && s.circled === true);
+        const lastItemShape = shapes.findLastIndex((s) => s.t === "poly");
+        expect(firstNumber, `${facing} ${cut}`).toBeGreaterThan(lastItemShape);
+      }
+    }
+  });
+
+  it("finds a free place for every number even at a scale where the nearby places are all taken", () => {
+    const p = exampleKitchen("de");
+    const ps = 1000;
+    const cs = elevationDrawing(p, "north", { showDims: false, cut: "room", paperScale: ps }).shapes.filter((s): s is TextShape => s.t === "text" && s.circled === true);
+    const r = CIRCLE_RADIUS * TEXT.normal * ps;
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) expect(Math.hypot(cs[i].p.x - cs[j].p.x, cs[i].p.y - cs[j].p.y)).toBeGreaterThanOrEqual(2 * r);
+  });
+  it("hides the number of a unit a nearer partition covers completely, not of one it covers in part", () => {
+    const p = testProject([testItem("hid", "table", 4000, 350), testItem("part", "table", 6000, 350)]);
+    p.room.partitions = [{ id: "ew", a: { x: 2000, y: 1000 }, b: { x: 6000, y: 1000 }, thickness: 100, height: 3000 }];
+    for (const cut of ELEVATION_CUTS) {
+      const numbers = elevationDrawing(p, "north", { showDims: false, cut }).shapes.filter((s) => s.t === "text" && s.circled === true).map((s) => s.itemId);
+      expect(numbers, cut).toEqual(["part"]);
     }
   });
 });

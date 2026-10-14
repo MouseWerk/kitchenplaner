@@ -29,6 +29,34 @@ appTest("the keys 1 to 4 switch the layout of the views", async (app) => {
 appTest("the layout buttons switch the views", async (app) => {
   await app.click("Ansichten", "header [role=group][aria-label='Ansicht wählen']");
   await waitPanes(app, (p) => p.length === 4 && p.every((x) => x.startsWith("Ansicht ")), "the elevations button");
+
+  // The cut depth of the elevations: the app's own menu (inside the window, the current choice
+  // checked), one setting for all four panes.
+  const cutLabels = () => app.exec(() => [...document.querySelectorAll("section[aria-label^='Ansicht '] .pane-head [aria-haspopup=menu]")].map((b) => b.innerText.trim()));
+  assert.deepEqual(await cutLabels(), Array(4).fill("Wand (1,5 m)"));
+  await app.click("Wand (1,5 m)", "section[aria-label='Ansicht Nord'] .pane-head");
+  await app.waitFor("[role=menu]");
+  const menu = await app.exec(() => {
+    const m = document.querySelector("[role=menu]");
+    const r = m.getBoundingClientRect();
+    const items = [...m.querySelectorAll("[role=menuitemradio]")].map((b) => ({ label: b.innerText.replace("✓", "").trim(), checked: b.getAttribute("aria-checked") }));
+    return { items, inside: r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight, focused: document.activeElement?.getAttribute("aria-checked") };
+  });
+  assert.deepEqual(menu.items, [
+    { label: "Wand (1,5 m)", checked: "true" },
+    { label: "Halber Raum", checked: "false" },
+    { label: "Ganzer Raum", checked: "false" },
+  ]);
+  assert.ok(menu.inside, "the cut depth menu reaches out of the window");
+  assert.equal(menu.focused, "true", "the menu does not open on the current choice");
+  // By keyboard: down to „Ganzer Raum“, Enter.
+  // One key at a time: a list of keys is one chord to WebDriver, and a repeated key in it counts once.
+  for (const k of [Key.ArrowDown, Key.ArrowDown, Key.Enter]) await app.keys(k);
+  await app.waitUntil(async () => JSON.stringify(await cutLabels()) === JSON.stringify(Array(4).fill("Ganzer Raum")), `the cut depth did not change: ${JSON.stringify(await cutLabels())}`);
+  assert.equal(await app.exec(() => !!document.querySelector("[role=menu]")), false, "the menu stayed open");
+  await app.click("Ganzer Raum", "section[aria-label='Ansicht Ost'] .pane-head");
+  await app.click("Wand (1,5 m)", "[role=menu]");
+  await app.waitUntil(async () => JSON.stringify(await cutLabels()) === JSON.stringify(Array(4).fill("Wand (1,5 m)")), "the cut depth did not change back");
   await app.click("Alle Ansichten", "header [role=group][aria-label='Ansicht wählen']");
   await waitPanes(app, (p) => p.length === 4 && p.includes("Grundriss"), "the all-views button");
   await app.click("Grundriss", "header [role=group][aria-label='Ansicht wählen']");

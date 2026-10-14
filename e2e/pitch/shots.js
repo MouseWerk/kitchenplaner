@@ -5,6 +5,7 @@
 //
 // Every wait is for a condition: toasts gone, catalog previews rendered, the 3D camera at rest.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Key, launch } from "../lib/harness.js";
@@ -19,6 +20,8 @@ const HEIGHT = Number(process.env.PITCH_HEIGHT ?? 1440);
 /** Only these shots (numbers), e.g. PITCH_ONLY=4,5 while working on them; exports run with "x". */
 const ONLY = process.env.PITCH_ONLY ? new Set(process.env.PITCH_ONLY.split(",").map((s) => s.trim())) : null;
 const want = (n) => !ONLY || ONLY.has(String(n));
+/** Capture through the X server (device pixels, native popups included); set by e2e/docker/pitch.sh. */
+const XSHOT = process.env.PITCH_XSHOT === "1";
 
 const PLAN = "section[aria-label='Grundriss']";
 const V3D = "section[aria-label='3D']";
@@ -26,6 +29,16 @@ const V3D = "section[aria-label='3D']";
 const ISLAND = { minX: 7600, minY: 2400, maxX: 12000, maxY: 4200 };
 
 fs.mkdirSync(EXPORTS, { recursive: true });
+/** The window's size in device pixels (measured after the start). */
+const WINDOW_PX = { w: WIDTH, h: HEIGHT };
+/** The X screen in device pixels. */
+const SCREEN = (() => {
+  if (process.env.PITCH_XSHOT !== "1") return { w: 0, h: 0 };
+  const m = /dimensions:\s+(\d+)x(\d+) pixels/.exec(execFileSync("xdpyinfo", { encoding: "utf8" }));
+  return { w: +m[1], h: +m[2] };
+})();
+/** Device pixels per CSS pixel, measured after the start. */
+let SCALE = 1;
 const app = await launch({ width: WIDTH, height: HEIGHT });
 const b = app.browser;
 const log = (s) => console.log(`[pitch] ${s}`);
@@ -33,6 +46,19 @@ const log = (s) => console.log(`[pitch] ${s}`);
 try {
   const inner = await app.exec(() => [window.innerWidth, window.innerHeight, window.devicePixelRatio]);
   log(`window ${inner.join(" × ")}`);
+  WINDOW_PX.w = Math.round(inner[0] * inner[2]);
+  WINDOW_PX.h = Math.round(inner[1] * inner[2]);
+  SCALE = inner[2];
+  // Without a window manager GTK places the window itself: put it at the screen's origin, and
+  // cut every picture from where it is.
+  if (XSHOT) {
+    await b.setWindowRect(0, 0, WIDTH, HEIGHT).catch(() => {});
+    await app.waitUntil(async () => {
+      const w = appWindow();
+      return w.w === WINDOW_PX.w && w.h === WINDOW_PX.h && w.x >= 0 && w.y >= 0 && w.x + w.w <= SCREEN.w && w.y + w.h <= SCREEN.h;
+    }, `the window is not wholly on the screen: ${JSON.stringify(appWindow())}`);
+    log(`X window ${JSON.stringify(appWindow())}`);
+  }
 
   await theme("Dunkles Design");
   await openExample();
@@ -111,8 +137,10 @@ try {
   await layout("Alle Ansichten");
   await ready3d();
   await catalogSearch("kombi");
+  // The pointer out of the way first: moving it over the rows later would switch the preview.
+  await settle();
   await catalogPreview("Kombidämpfer 20 × GN 1/1");
-  await settle({ toasts: true, catalog: true, park: false });
+  await settle({ park: false });
   if (want(10)) await shot("10-katalog-vorschau");
   await clearSearch();
 
@@ -173,6 +201,16 @@ try {
   const warnings = await app.consoleWarnings();
   if (errors?.length) log(`console errors:\n${errors.join("\n")}`);
   if (warnings?.length) log(`console warnings:\n${warnings.join("\n")}`);
+
+  // 16: the cut depth of an elevation pane, its menu open (the app's own menu, inside the window).
+  if (want(16)) {
+    await layout("Ansichten");
+    await settle();
+    await app.click("Wand (1,5 m)", "section[aria-label='Ansicht Nord'] .pane-head");
+    await app.waitFor("[role=menu]");
+    await shot("16-ansicht-schnitttiefe");
+    await app.keys(Key.Escape);
+  }
   log("done");
 } catch (e) {
   await b.saveScreenshot(path.join(OUT, "FAIL.png")).catch(() => {});
@@ -388,13 +426,17 @@ async function clearSearch() {
   await app.blur();
 }
 
+/**
+ * Opens the large preview of catalog entry `name` from the keyboard (Tab from the search field to
+ * its row), so no pointer hovers it: a hovered row would also show its native tooltip.
+ */
 async function catalogPreview(name) {
-  const row = await app.button(name, CATALOG);
-  const r = await app.exec((e) => {
-    const x = e.getBoundingClientRect();
-    return { x: x.left + x.width * 0.6, y: x.top + x.height / 2 };
-  }, row);
-  await hover(app, r);
+  for (let i = 0; i < 12; i++) {
+    const at = await app.exec(() => document.activeElement?.innerText ?? "");
+    if (at.includes(name)) break;
+    await app.keys(Key.Tab);
+  }
+  await app.waitUntil(() => app.exec((n) => (document.activeElement?.innerText ?? "").includes(n), name), `the row „${name}“ did not take the focus`);
   await app.waitUntil(() => app.exec(() => !!document.querySelector(".cat-preview img")?.complete && document.querySelector(".cat-preview img").naturalWidth > 0), "the catalog preview did not open", 20000);
 }
 
@@ -431,15 +473,64 @@ async function settle({ toasts = true, catalog = true, park = true } = {}) {
 async function shot(name) {
   const errorToast = await app.exec(() => !!document.querySelector(".toast.danger"));
   if (errorToast) throw new Error(`error message on screen before ${name}`);
-  await b.saveScreenshot(path.join(OUT, `${name}.png`));
-  log(name);
+  const file = path.join(OUT, `${name}.png`);
+  if (XSHOT) xshot(file);
+  else await b.saveScreenshot(file);
+  log(`${name} ${pngSize(file)}`);
 }
 
+/** A pane alone: the X screen cut to the pane's box (device pixels), or WebDriver's element shot. */
 async function shotOf(sel, name) {
   const el = await app.waitFor(sel);
-  await el.saveScreenshot(path.join(OUT, `${name}.png`));
-  log(`${name} (pane)`);
+  const file = path.join(OUT, `${name}.png`);
+  if (XSHOT) {
+    const r = await app.exec((e) => {
+      const x = e.getBoundingClientRect();
+      return { x: x.left, y: x.top, w: x.width, h: x.height, dpr: window.devicePixelRatio };
+    }, el);
+    const k = (v) => Math.round(v * r.dpr);
+    xshot(file, { x: k(r.x), y: k(r.y), w: k(r.w), h: k(r.h) });
+  } else await el.saveScreenshot(file);
+  log(`${name} ${pngSize(file)} (pane)`);
 }
+
+/**
+ * The window as the X server shows it, in device pixels (WebDriver's screenshot of WebKitGTK is
+ * in CSS pixels, and it leaves out native popups such as an open select list). The window is the
+ * only one on the virtual screen and sits at its origin (no window manager), so it is cut out of
+ * the root window.
+ */
+function xshot(file, crop) {
+  const win = appWindow();
+  const c = crop ?? { x: 0, y: 0, w: win.w, h: win.h };
+  const size = `${c.w}x${c.h}+${win.x + c.x}+${win.y + c.y}`;
+  execFileSync("import", ["-silent", "-window", "root", "-crop", size, "+repage", file]);
+}
+
+/** The shown top-level windows of the X screen with their screen boxes (device pixels). */
+function xWindowsShown() {
+  const out = execFileSync("xwininfo", ["-root", "-children"], { encoding: "utf8" });
+  const wins = [];
+  for (const m of out.matchAll(/^\s+(0x[0-9a-f]+) .*?(\d+)x(\d+)\+-?\d+\+-?\d+\s+\+(-?\d+)\+(-?\d+)\s*$/gm)) {
+    const info = execFileSync("xwininfo", ["-id", m[1]], { encoding: "utf8" });
+    if (/Map State: IsViewable/.test(info)) wins.push({ id: m[1], w: +m[2], h: +m[3], x: +m[4], y: +m[5] });
+  }
+  return wins;
+}
+
+/** The app's window: the largest shown one. */
+function appWindow() {
+  const wins = xWindowsShown().sort((a, b) => b.w * b.h - a.w * a.h);
+  if (!wins.length) throw new Error("no window on the X screen");
+  return wins[0];
+}
+
+/** Width x height of a PNG (from its header). */
+function pngSize(file) {
+  const b = fs.readFileSync(file);
+  return `${b.readUInt32BE(16)}x${b.readUInt32BE(20)}`;
+}
+
 
 async function exportTo(entry, name) {
   const target = path.join(EXPORTS, name);

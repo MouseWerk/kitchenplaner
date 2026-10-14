@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { RoomEditLayer, wallLengthLabels } from "./RoomEditLayer";
+import { RoomEditLayer, wallDimMarks, wallLengthLabels } from "./RoomEditLayer";
+import { SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
+import { wallDim } from "../model/plan";
+import { expandDim } from "../render/drawing";
 import { exampleKitchen } from "../examples/exampleKitchen";
 import { dot, pointInPolygon, sub, walls } from "../model/geometry";
-import { toWorld } from "../lib/viewport";
+import { toScreen, toWorld } from "../lib/viewport";
 import { setLang, t } from "../lib/i18n";
 import { handleShortcut } from "../lib/shortcuts";
 import { parseProject, serializeProject } from "../model/serialize";
@@ -149,48 +152,90 @@ describe("outline tool", () => {
 describe("wallLengthLabels", () => {
   const p = exampleKitchen("de");
   const room = p.room;
-  /** The plan's dimensions on screen (1:40): first row 240 mm out, text 100 mm high. */
-  const DIMS = { gap: 240, text: 100 };
 
   it.each([0.02, 0.08, 0.3])("puts every label outside the room beyond the wall, along it, none over another (k %f)", (k) => {
-    for (const dims of [null, DIMS]) {
-      const vp = { k, ox: 50, oy: 40 };
-      const labels = wallLengthLabels(room, vp, dims);
-      const ws = walls(room);
-      for (const l of labels) {
-        const w = ws[l.index];
-        const at = toWorld(vp, l.p);
-        // Outside the inner outline, beyond the outer face of its own wall.
-        expect(pointInPolygon(at, room.points)).toBe(false);
-        expect(-dot(sub(at, w.a), w.inward)).toBeGreaterThan(room.wallThickness);
-        // Along the wall, readable: horizontal walls 0 degrees, vertical ones 90.
-        expect(Math.abs(l.angle)).toBe(Math.abs(w.dir.x) > 0.5 ? 0 : 90);
-      }
-      for (let i = 0; i < labels.length; i++)
-        for (let j = i + 1; j < labels.length; j++) expect(Math.hypot(labels[i].p.x - labels[j].p.x, labels[i].p.y - labels[j].p.y)).toBeGreaterThan(12);
+    const vp = { k, ox: 50, oy: 40 };
+    const labels = wallLengthLabels(room, vp);
+    const ws = walls(room);
+    for (const l of labels) {
+      const w = ws[l.index];
+      const at = toWorld(vp, l.p);
+      // Outside the inner outline, beyond the outer face of its own wall.
+      expect(pointInPolygon(at, room.points)).toBe(false);
+      expect(-dot(sub(at, w.a), w.inward)).toBeGreaterThan(room.wallThickness);
+      // Along the wall, readable: horizontal walls 0 degrees, vertical ones 90.
+      expect(Math.abs(l.angle)).toBe(Math.abs(w.dir.x) > 0.5 ? 0 : 90);
     }
+    for (let i = 0; i < labels.length; i++)
+      for (let j = i + 1; j < labels.length; j++) expect(Math.hypot(labels[i].p.x - labels[j].p.x, labels[i].p.y - labels[j].p.y)).toBeGreaterThan(12);
   });
 
-  it("labels every wall at a usual zoom and sits between the wall and the plan's first dimension row", () => {
+  it("labels every wall at a usual zoom in plain millimetres, as the plan's dimensions write them", () => {
     const vp = { k: 0.2, ox: 0, oy: 0 };
-    const labels = wallLengthLabels(room, vp, DIMS);
-    expect(labels.map((l) => l.text)).toEqual(["13.200", "6.400", "6.900", "3.200", "6.300", "9.600"]);
-    // The north wall: outer face at y -300, dimension row at y -540: the label at y -420.
-    expect(toWorld(vp, labels[0].p).y).toBeCloseTo(-420);
-  });
-
-  it("zoomed out, keeps beside the dimension text in the middle of the wall", () => {
-    // 0.05 px/mm: the 12 px gap between the face and the dimension row is too small for a label.
-    const vp = { k: 0.05, ox: 0, oy: 0 };
-    const north = wallLengthLabels(room, vp, DIMS).find((l) => l.index === 0)!;
-    const at = toWorld(vp, north.p);
-    // The dimension text "13200" (5 × 60 mm wide) is centred at x 6600: the label (6 × 6.5 px =
-    // 780 mm) starts beyond it.
-    expect(at.x - 390).toBeGreaterThan(6600 + 150);
-    expect(at.y).toBeCloseTo(-300 - 200);
+    const labels = wallLengthLabels(room, vp);
+    expect(labels.map((l) => l.text)).toEqual(["13200", "6400", "6900", "3200", "6300", "9600"]);
+    const dims = walls(room).map((w) => wallDim(room, w, SCREEN_PAPER_SCALE).text);
+    expect(labels.map((l) => l.text)).toEqual(dims);
+    // The north wall: outer face at y -300, the label (12 px high) 4 px clear of it.
+    expect(toWorld(vp, labels[0].p).y).toBeCloseTo(-300 - 10 / 0.2);
   });
 
   it("leaves out the labels of walls too short on screen", () => {
-    expect(wallLengthLabels(room, { k: 0.003, ox: 0, oy: 0 }, null)).toEqual([]);
+    expect(wallLengthLabels(room, { k: 0.003, ox: 0, oy: 0 })).toEqual([]);
+  });
+});
+
+describe("wallDimMarks", () => {
+  const room = exampleKitchen("de").room;
+
+  it.each([0.02, 0.08, 0.3])("marks the plan's own dimension text of each wall asked for (k %f)", (k) => {
+    const vp = { k, ox: 50, oy: 40 };
+    const ws = walls(room);
+    const marks = wallDimMarks(room, vp, ws.map((w) => w.index), SCREEN_PAPER_SCALE);
+    expect(marks.map((m) => m.index)).toEqual(ws.map((w) => w.index));
+    for (const m of marks) {
+      const text = expandDim(wallDim(room, ws[m.index], SCREEN_PAPER_SCALE), SCREEN_PAPER_SCALE).text;
+      // The text's middle (half an x-height above its baseline point, across the text) lies in
+      // the mark, the wall's middle does not: the mark sits on the dimension, not on the wall.
+      const r = ((text.angle ?? 0) * Math.PI) / 180;
+      const up = { x: Math.sin(r), y: -Math.cos(r) };
+      const mid = { x: text.p.x + up.x * 0.36 * text.size * SCREEN_PAPER_SCALE, y: text.p.y + up.y * 0.36 * text.size * SCREEN_PAPER_SCALE };
+      expect(pointInPolygon(toWorld(vp, toScreen(vp, mid)), m.pts.map((q) => toWorld(vp, q)))).toBe(true);
+      const wallMid = { x: (ws[m.index].a.x + ws[m.index].b.x) / 2, y: (ws[m.index].a.y + ws[m.index].b.y) / 2 };
+      expect(pointInPolygon(wallMid, m.pts.map((q) => toWorld(vp, q)))).toBe(false);
+    }
+  });
+});
+
+describe("room mode wall lengths", () => {
+  // A tool left on by an earlier test would draw instead of hovering.
+  beforeEach(() => act(() => st().setRoomTool("select")));
+  const labels = () => [...host.querySelectorAll("text.room-label")].map((x) => x.textContent);
+
+  it("with the plan's dimensions shown draws no length labels of its own and marks the selected wall's dimension", () => {
+    act(() => st().setPrefs({ showDims: true }));
+    expect(labels()).toEqual([]);
+    expect(host.querySelectorAll(".room-dim-mark")).toHaveLength(0);
+    act(() => st().select({ corners: [0, 1] }));
+    expect(host.querySelectorAll(".room-dim-mark.is-selected")).toHaveLength(1);
+  });
+
+  it("marks the hovered wall's dimension, neutral and lighter than the selected one", () => {
+    act(() => st().setPrefs({ showDims: true }));
+    const room = st().project.room;
+    const w = walls(room)[0];
+    // In the middle of the wall band, half the thickness out from the inner face.
+    const out = room.wallThickness / 2;
+    move((w.a.x + w.b.x) / 2 - w.inward.x * out, (w.a.y + w.b.y) / 2 - w.inward.y * out);
+    expect(host.querySelectorAll(".room-dim-mark.is-hover")).toHaveLength(1);
+  });
+
+  it("without the dimensions labels the walls in plain millimetres", () => {
+    act(() => st().setPrefs({ showDims: false }));
+    const lengths = walls(st().project.room).map((w) => String(Math.round(w.length)));
+    expect(labels().length).toBeGreaterThan(0);
+    for (const l of labels()) expect(lengths).toContain(l);
+    expect(host.querySelectorAll(".room-dim-mark")).toHaveLength(0);
+    act(() => st().setPrefs({ showDims: true }));
   });
 });

@@ -38,8 +38,8 @@ import { setModeKeyHandler } from "../lib/shortcuts";
 import { num, t, useT } from "../lib/i18n";
 import { toast } from "../lib/toast";
 import { toScreen, toWorld, type Viewport } from "../lib/viewport";
-import { DIM_GAP } from "../model/plan";
-import { TEXT } from "../render/drawing";
+import { wallDim } from "../model/plan";
+import { expandDim, mm } from "../render/drawing";
 import { SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
 import { useStore, type AppState } from "../store/store";
 
@@ -695,11 +695,17 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
         <polygon key={x.key} points={pts(x.pts)} className={x.cls} />
       ))}
 
-      {wallLengthLabels(room, vp, showDims ? { gap: DIM_GAP * SCREEN_PAPER_SCALE, text: TEXT.normal * SCREEN_PAPER_SCALE } : null).map((l) => (
-        <text key={`l${l.index}`} x={l.p.x} y={l.p.y} transform={`rotate(${l.angle} ${l.p.x} ${l.p.y})`} className="room-label" textAnchor="middle" dominantBaseline="central">
-          {l.text}
-        </text>
-      ))}
+      {showDims &&
+        wallDimMarks(room, vp, [...ws.filter((w) => wallSelected(w.index)).map((w) => w.index), ...(hover?.kind === "wall" ? [hover.index] : [])], SCREEN_PAPER_SCALE).map((m) => (
+          <polygon key={`m${m.index}`} points={m.pts.map((q) => `${q.x},${q.y}`).join(" ")} className={`room-dim-mark${wallSelected(m.index) ? " is-selected" : " is-hover"}`} />
+        ))}
+
+      {!showDims &&
+        wallLengthLabels(room, vp).map((l) => (
+          <text key={`l${l.index}`} x={l.p.x} y={l.p.y} transform={`rotate(${l.angle} ${l.p.x} ${l.p.y})`} className="room-label" textAnchor="middle" dominantBaseline="central">
+            {l.text}
+          </text>
+        ))}
 
       {guides.map((g, i) => {
         const a = S(g.from);
@@ -736,7 +742,7 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
           const c = S(p);
           return <rect key={`d${i}`} x={c.x - HANDLE_HALF} y={c.y - HANDLE_HALF} width={HANDLE_HALF * 2} height={HANDLE_HALF * 2} className={i === 0 && e.closing ? "room-handle is-hover" : "room-handle"} />;
         })}
-      {drawing && last && preview && dist(last, preview) > 0 && <LengthLabel a={S(last)} b={S(preview)} text={`${num(dist(last, preview))}${e.typed ? `  [${e.typed}]` : ""}`} />}
+      {drawing && last && preview && dist(last, preview) > 0 && <LengthLabel a={S(last)} b={S(preview)} text={`${mm(dist(last, preview))}${e.typed ? `  [${e.typed}]` : ""}`} />}
       {drawing && preview && (
         <circle cx={S(preview).x} cy={S(preview).y} r={3} className="room-cursor" />
       )}
@@ -760,23 +766,14 @@ export interface WallLabel {
   angle: number;
 }
 
-/** The plan's wall dimensions as the length labels keep clear of them (drawing mm). */
-export interface PlanDims {
-  /** Distance of the first dimension row from the outer wall face. */
-  gap: number;
-  /** Height of the dimension text, centred on the wall's middle. */
-  text: number;
-}
-
 /**
- * The length labels of the walls on screen: outside the room along each wall's outer face, beyond
- * the wall thickness, running along the wall. With the plan's dimensions shown (`dims`) a label
- * sits in the middle between the face and the first dimension row while it fits there; zoomed
- * out it sits just clear of the face and moves along the wall beside the dimension's own text.
- * A label that would cover one placed before it (longer walls first) or that does not fit its
- * wall is left out.
+ * The length labels of the walls on screen, for a plan drawn without its dimensions: outside the
+ * room just clear of each wall's outer face, running along the wall, in plain millimetres like
+ * the plan's dimensions. A label that would cover one placed before it (longer walls first) or
+ * that does not fit its wall is left out. With the dimensions shown the plan already gives every
+ * wall's length; the editor marks the selected wall's dimension instead (`wallDimMarks`).
  */
-export function wallLengthLabels(room: Pick<Room, "points" | "wallThickness">, vp: Viewport, dims: PlanDims | null): WallLabel[] {
+export function wallLengthLabels(room: Pick<Room, "points" | "wallThickness">, vp: Viewport): WallLabel[] {
   const ws = walls(room);
   const out: WallLabel[] = [];
   const boxes: { minX: number; maxX: number; minY: number; maxY: number }[] = [];
@@ -785,18 +782,12 @@ export function wallLengthLabels(room: Pick<Room, "points" | "wallThickness">, v
     const a = toScreen(vp, w.a);
     const b = toScreen(vp, w.b);
     const lenPx = Math.hypot(b.x - a.x, b.y - a.y);
-    const text = num(Math.round(w.length));
+    const text = mm(w.length);
     const textW = text.length * LABEL_CHAR_W;
-    const facePx = room.wallThickness * vp.k;
-    const gapPx = dims ? dims.gap * vp.k : 0;
-    const inGap = dims !== null && gapPx >= LABEL_H + 2 * LABEL_CLEAR;
-    const off = facePx + (inGap ? gapPx / 2 : LABEL_CLEAR + LABEL_H / 2);
-    // Beside the dimension text (as wide as `mm` writes the length, 0.6 em a digit).
-    const dimTextW = dims ? String(Math.round(w.length)).length * 0.6 * dims.text * vp.k : 0;
-    const along = dims && !inGap ? dimTextW / 2 + textW / 2 + LABEL_CLEAR : 0;
-    if (lenPx < Math.max(LABEL_MIN_PX, textW + 2 * LABEL_CLEAR + 2 * along)) continue;
+    const off = room.wallThickness * vp.k + LABEL_CLEAR + LABEL_H / 2;
+    if (lenPx < Math.max(LABEL_MIN_PX, textW + 2 * LABEL_CLEAR)) continue;
     // Outwards on screen: the plan's y axis points down the screen like the screen's.
-    const p = add(add(scale(add(a, b), 0.5), scale(w.inward, -off)), scale(norm(sub(b, a)), along));
+    const p = add(scale(add(a, b), 0.5), scale(w.inward, -off));
     let angle = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
     if (angle > 90) angle -= 180;
     else if (angle <= -90) angle += 180;
@@ -809,6 +800,36 @@ export function wallLengthLabels(room: Pick<Room, "points" | "wallThickness">, v
     out.push({ index: w.index, text, p, angle: Math.round(angle * 100) / 100 + 0 });
   }
   return out.sort((x, y) => x.index - y.index);
+}
+
+/** Margin of a dimension mark around the dimension text (em). */
+const DIM_MARK_PAD = 0.35;
+
+/**
+ * The marks behind the plan's own dimension texts of the walls `indices` (at the screen's paper
+ * scale `ps`), as screen polygons: a box around each text, turned with it. With the plan's
+ * dimensions shown they tell which length belongs to the selected or hovered wall.
+ */
+export function wallDimMarks(room: Pick<Room, "points" | "wallThickness">, vp: Viewport, indices: readonly number[], ps: number): { index: number; pts: Vec2[] }[] {
+  const ws = walls(room);
+  const out: { index: number; pts: Vec2[] }[] = [];
+  for (const i of new Set(indices)) {
+    const w = ws[i];
+    if (!w) continue;
+    const { text } = expandDim(wallDim(room, w, ps), ps);
+    const em = text.size * ps;
+    // The text's own axes (its angle in degrees, y down), its middle half an x-height above the
+    // baseline point; as wide as `mm` digits are (0.6 em each).
+    const r = ((text.angle ?? 0) * Math.PI) / 180;
+    const along = { x: Math.cos(r), y: Math.sin(r) };
+    const up = { x: along.y, y: -along.x };
+    const c = add(text.p, scale(up, 0.36 * em));
+    const hw = (text.text.length * 0.6 * em) / 2 + DIM_MARK_PAD * em;
+    const hh = 0.5 * em + DIM_MARK_PAD * em;
+    const corner = (sa: number, su: number) => toScreen(vp, add(c, add(scale(along, sa * hw), scale(up, su * hh))));
+    out.push({ index: i, pts: [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)] });
+  }
+  return out;
 }
 
 /** The length of the segment being drawn, beside its middle. */

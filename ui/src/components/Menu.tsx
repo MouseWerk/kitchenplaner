@@ -6,7 +6,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
-export type MenuEntry = { label: string; onSelect: () => void; hint?: string; checked?: boolean; disabled?: boolean } | "sep";
+/**
+ * One entry, or a separator. `checked` makes it a check item; with `radio` as well it is one
+ * choice of several (the current one checked), as a list of options in a pane header.
+ */
+export type MenuEntry = { label: string; onSelect: () => void; hint?: string; checked?: boolean; radio?: boolean; disabled?: boolean } | "sep";
 
 /** Gap between the button and the popup, and the least distance to the window's edges (px). */
 const GAP = 4;
@@ -36,7 +40,8 @@ export function menuPosition(button: Rect, size: { width: number; height: number
   return { left, top: button.bottom + GAP, maxHeight: Math.max(0, below) };
 }
 
-export function Menu(props: { label: ReactNode; title: string; entries: MenuEntry[]; align?: "start" | "end" }) {
+/** `className` replaces the button's class ("tb-btn", a toolbar button), e.g. for a pane header. */
+export function Menu(props: { label: ReactNode; title: string; entries: MenuEntry[]; align?: "start" | "end"; className?: string }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -63,7 +68,8 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
 
   useEffect(() => {
     if (!open) return;
-    const first = list.current?.querySelector<HTMLButtonElement>("[role^=menuitem]:not(:disabled)");
+    // A list of choices opens on the current one, as a select does.
+    const first = list.current?.querySelector<HTMLButtonElement>("[role=menuitemradio][aria-checked=true]:not(:disabled)") ?? list.current?.querySelector<HTMLButtonElement>("[role^=menuitem]:not(:disabled)");
     first?.focus();
     const onDown = (e: PointerEvent) => {
       if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
@@ -103,7 +109,7 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
       <button
         ref={btn}
         type="button"
-        className={open ? "tb-btn is-open" : "tb-btn"}
+        className={`${props.className ?? "tb-btn"}${open ? " is-open" : ""}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
@@ -128,7 +134,7 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
               <button
                 key={i}
                 type="button"
-                role={e.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+                role={e.checked === undefined ? "menuitem" : e.radio ? "menuitemradio" : "menuitemcheckbox"}
                 aria-checked={e.checked}
                 className="menu-item"
                 disabled={e.disabled}

@@ -4,8 +4,8 @@
 import { add, bounds, clampOpening, dot, EPS, footprint, pointInPolygon, scale, sub, toPlan, walls, type Wall } from "./geometry";
 import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, partitionBand, partitionLength } from "./partitions";
 import { positions } from "./project";
-import type { Item, Opening, Project, Vec2 } from "./types";
-import { mm, TEXT, type Drawing, type Fill, type Pen, type Shape } from "../render/drawing";
+import type { Item, Opening, Project, Room, Vec2 } from "./types";
+import { mm, TEXT, type DimShape, type Drawing, type Fill, type Pen, type Shape } from "../render/drawing";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "../render/svg";
 import { PlanSketch } from "../kinds/parts/plan";
 import { kindDef, kindOf, placementOf, type KindDef, type Placement } from "../kinds/registry";
@@ -361,17 +361,23 @@ function drawItem(it: Item, shapes: Shape[]) {
 
 // ---- Dimensions ----
 
+/**
+ * The dimension of one wall as the plan draws it: its length outside the room, the first row
+ * `DIM_GAP` beyond the outer face. The room editor marks the selected wall's dimension with it.
+ */
+export function wallDim(room: Pick<Room, "wallThickness">, w: Wall, ps: number): DimShape {
+  const first = room.wallThickness / ps + DIM_GAP;
+  // The dimension line lies to the left of a→b; put it outside, away from the room.
+  const left = { x: w.dir.y, y: -w.dir.x };
+  const outside = dot(left, w.inward) < 0 ? 1 : -1;
+  return { t: "dim", pen: "dim", a: w.a, b: w.b, offset: outside * first, text: mm(w.length) };
+}
+
 function drawDims(project: Project, ps: number, shapes: Shape[]) {
   const { room } = project;
-  const t = room.wallThickness;
-  const first = t / ps + DIM_GAP;
+  const first = room.wallThickness / ps + DIM_GAP;
   const ws = walls(room);
-  for (const w of ws) {
-    // The dimension line lies to the left of a→b; put it outside, away from the room.
-    const left = { x: w.dir.y, y: -w.dir.x };
-    const outside = dot(left, w.inward) < 0 ? 1 : -1;
-    shapes.push({ t: "dim", pen: "dim", a: w.a, b: w.b, offset: outside * first, text: mm(w.length) });
-  }
+  for (const w of ws) shapes.push(wallDim(room, w, ps));
   const box = bounds(room.points);
   const second = first + DIM_ROW;
   // Overall width above the north side (left of west→east), overall depth left of the west side;
