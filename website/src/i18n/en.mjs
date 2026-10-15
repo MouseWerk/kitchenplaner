@@ -268,9 +268,9 @@ export const en = {
       downloadsTitle: 'Downloads',
       downloads: 'The download buttons lead to the releases on GitHub. There you download the files directly from GitHub, and GitHub’s privacy statement applies.',
       appTitle: 'The app',
-      app: 'Kitchenplaner runs on your computer and keeps your projects as files with you. The app needs no account.',
+      app: 'Kitchenplaner runs on your computer and keeps your projects as files with you. The app needs no account and sends no project data. Only when “Check for updates automatically” is on (the default) does it ask GitHub at start and every few hours whether a new version exists, and it downloads an update only after you confirm. GitHub then receives technically necessary data such as your IP address, the date and time and the app version. The legal basis is our legitimate interest in offering you bug fixes and security updates (Art. 6(1)(f) GDPR); you can switch the check off in the “View” menu.',
       rightsTitle: 'Your rights',
-      rights: 'You have the right of access, rectification, erasure and restriction of processing of your data, to data portability and to object to the processing (Art. 15 to 21 GDPR). You can also lodge a complaint with a data protection supervisory authority.',
+      rights: 'You have the right of access, rectification, erasure and restriction of processing of your data, to data portability and to object to the processing (Art. 15 to 21 GDPR). You can also lodge a complaint with a data protection supervisory authority, for example the one responsible for us: the Hessian Commissioner for Data Protection and Freedom of Information, Postfach 3163, 65021 Wiesbaden, Germany.',
     },
   },
   notFound: {

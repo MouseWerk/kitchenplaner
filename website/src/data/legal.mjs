@@ -4,33 +4,32 @@
  * visible draft notice and are kept out of search engines, and the deploy workflow does not publish
  * the site (scripts/legal-ready.mjs). Optional fields stay null when they do not apply.
  *
- * TODO(owner): fill in the MouseWerk details below, set `updated` to the day of the change, review
- * the privacy text in src/i18n/de.mjs and en.mjs (legal.privacy) and, once the app checks for
- * updates itself, add a paragraph on that (which address it contacts, what it sends).
+ * The details are the same as on the Arcalo website (MouseWerk/annaloweb, src/data/company.ts):
+ * both apps are published by MouseWerk (owner's decision, 2026-10-15). Change them in both places.
  */
 export const LEGAL = {
   /** Name of the provider (company with legal form, or the person). Required. */
-  name: null,
+  name: "Mousewerk, Inhaber Maurice Kleindienst (Einzelunternehmen)",
   /** Street and number. Required. */
-  street: null,
+  street: "Oberzwehrener Str. 62b",
   /** Postcode and town. Required. */
-  city: null,
+  city: "34132 Kassel",
   /** Country. Required. */
-  country: null,
+  country: "Deutschland",
   /** Email address for contact. Required. */
-  email: null,
+  email: "support@mousewerk.de",
   /** Phone number, or null. */
-  phone: null,
+  phone: "+49 151 04053172",
   /** Who represents the company (managing director), or null for a person. */
   represented: null,
-  /** Register court and number, or null. */
+  /** Register court and number, or null (a sole proprietorship has none). */
   register: null,
   /** VAT ID, or null. */
-  vat: null,
+  vat: "DE463851440",
   /** Responsible for the content according to § 18 (2) MStV: name and address. Required. */
-  responsible: null,
+  responsible: "Maurice Kleindienst, Oberzwehrener Str. 62b, 34132 Kassel",
   /** Date of the last change of the legal pages, YYYY-MM-DD. Required. */
-  updated: null,
+  updated: "2026-10-15",
 };
 
 export const REQUIRED = /** @type {const} */ (['name', 'street', 'city', 'country', 'email', 'responsible', 'updated']);

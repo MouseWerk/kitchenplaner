@@ -268,9 +268,9 @@ export const de = {
       downloadsTitle: 'Downloads',
       downloads: 'Die Download-Schaltflächen führen zu den Releases auf GitHub. Dort lädst du die Dateien direkt von GitHub; dabei gilt die Datenschutzerklärung von GitHub.',
       appTitle: 'Die App',
-      app: 'Kitchenplaner läuft auf deinem Computer und speichert deine Projekte als Dateien bei dir. Die App braucht kein Konto.',
+      app: 'Kitchenplaner läuft auf deinem Computer und speichert deine Projekte als Dateien bei dir. Die App braucht kein Konto und sendet keine Projektdaten. Nur wenn „Automatisch nach Updates suchen“ eingeschaltet ist (Voreinstellung), fragt sie beim Start und alle paar Stunden bei GitHub nach, ob es eine neue Version gibt, und lädt ein Update erst, wenn du es bestätigst. Dabei erhält GitHub technisch notwendige Daten wie deine IP-Adresse, Datum und Uhrzeit sowie die Programmversion. Rechtsgrundlage ist unser berechtigtes Interesse, dir Fehlerbehebungen und Sicherheitsupdates anzubieten (Art. 6 Abs. 1 lit. f DSGVO); du kannst die Suche im Menü „Darstellung“ ausschalten.',
       rightsTitle: 'Deine Rechte',
-      rights: 'Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung deiner Daten, auf Datenübertragbarkeit und auf Widerspruch gegen die Verarbeitung (Art. 15 bis 21 DSGVO). Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren.',
+      rights: 'Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung deiner Daten, auf Datenübertragbarkeit und auf Widerspruch gegen die Verarbeitung (Art. 15 bis 21 DSGVO). Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren, zum Beispiel bei der für uns zuständigen: Der Hessische Beauftragte für Datenschutz und Informationsfreiheit, Postfach 3163, 65021 Wiesbaden.',
     },
   },
   notFound: {
