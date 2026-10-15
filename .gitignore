@@ -8,3 +8,9 @@ node_modules/
 
 # Local tool settings
 .claude/
+
+# Local environment and build output of the release workflow
+.env
+.env.*
+/dist
+*.tsbuildinfo

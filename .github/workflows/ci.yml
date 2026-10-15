@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+# Nothing here needs a secret or write access: pull requests from forks run the same jobs.
+permissions:
+  contents: read
+
 # A newer push to the same branch stops the run it supersedes.
 concurrency:
   group: ci-${{ github.ref }}
@@ -13,6 +17,19 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  versions:
+    name: Versions and release scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Cargo.toml, tauri.conf.json, the npm manifests and the lockfiles carry the same version.
+      - run: node scripts/version.mjs
+      # The automatic release's choice of version (auto-release.yml) and the version check.
+      - run: node --test "scripts/*.test.mjs"
+
   ui:
     name: UI (typecheck, tests, build)
     runs-on: ubuntu-latest
@@ -58,11 +75,17 @@ jobs:
 
   e2e:
     name: End-to-end tests (Linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Pinned so the cached binary below matches what is installed.
+      TAURI_DRIVER_VERSION: 2.1.0
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.94.1
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -74,7 +97,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev webkit2gtk-driver xvfb x11-utils
-      - run: cargo install tauri-driver --locked
+      - name: Cache tauri-driver
+        id: tauri-driver
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/tauri-driver
+          key: tauri-driver-${{ runner.os }}-${{ env.TAURI_DRIVER_VERSION }}
+      - name: Install tauri-driver
+        if: steps.tauri-driver.outputs.cache-hit != 'true'
+        run: cargo install tauri-driver --version "$TAURI_DRIVER_VERSION" --locked --force
+      - run: command -v tauri-driver
       - run: npm ci --prefix ui
       - run: npm ci --prefix e2e
       # Builds the UI and the debug app with the UI embedded (the test hooks exist only in debug
@@ -90,7 +122,7 @@ jobs:
 
   bundle:
     name: Bundle (${{ matrix.name }})
-    needs: [ui, core, e2e]
+    needs: [versions, ui, core, e2e]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

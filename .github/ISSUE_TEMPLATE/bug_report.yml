@@ -1,0 +1,54 @@
+name: Bug report / Fehler melden
+description: Something in Kitchenplaner does not work as it should. / Etwas funktioniert nicht wie erwartet.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Du kannst gern auf Deutsch schreiben.
+        Security issues please not here, see SECURITY.md. / Sicherheitslücken bitte nicht hier melden, siehe SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / Was ist passiert?
+      description: A short description of the problem. Screenshots help. / Kurze Beschreibung, Screenshots helfen.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / Schritte zum Nachstellen
+      placeholder: |
+        1. Open ... / Öffne ...
+        2. Click ... / Klicke ...
+        3. See ... / Sieh ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect? / Was hast du erwartet?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kitchenplaner version / Version
+      description: The version in the installer's file name, or in Windows under Settings → Apps. / Steht im Dateinamen des Installers.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system / Betriebssystem
+      placeholder: "Windows 11 24H2, macOS 15, Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: file
+    attributes:
+      label: Project file (optional) / Projektdatei (optional)
+      description: |
+        If the problem shows with a particular plan, attach the .kplan file (zipped). Remove anything private first.
+        Wenn es an einem bestimmten Plan liegt, hänge die .kplan-Datei (gezippt) an. Entferne vorher alles Private.

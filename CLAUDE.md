@@ -16,7 +16,8 @@ CLAUDE.md first); this file wins where it is more specific.
 - No pull requests unless asked. No force push, branch deletion or history rewrite without an
   explicit request.
 - No paid code signing. macOS builds are ad-hoc signed (`signingIdentity: "-"`), Windows builds are
-  unsigned. No updater, tray, store build or keyring.
+  unsigned. Open, not decided by the owner yet: Microsoft Store/winget builds and an in-app updater
+  (Arcalo has both); ask before adding either.
 - UI language German with "du" (default) and English; „Computer“, not „Rechner“; ellipsis directly
   after the word („Speichern…“). Glossary: `docs/i18n.md`.
 - Editing works in modes like Blender (2026-10-12): Tab switches „Einrichten“ (arrange equipment,
@@ -61,6 +62,8 @@ cargo test --workspace
 npm --prefix ui run typecheck
 npm --prefix ui test
 npm --prefix ui run build
+node scripts/version.mjs            # one version in every manifest
+node --test "scripts/*.test.mjs"    # release scripts
 npm run build            # installers in target/release/bundle
 e2e/run.sh               # end-to-end tests, Linux (builds UI + debug app, Xvfb, tauri-driver)
 e2e/run.sh tests/05-files.test.js   # one file while working
@@ -76,7 +79,12 @@ skip or weaken a test.
 
 ## Release
 
-Push to main and wait for CI green (UI, Rust on all three systems, bundles). Write
-`docs/releases/v<version>.md`, then run the Release workflow (Actions -> Release -> Run workflow)
-with the version. It builds Windows, Linux and macOS and creates a draft release
-"Kitchenplaner v<version>"; check the assets and publish the draft by hand.
+Releases are automatic (`docs/release/automatic.md`). The version lives in `[workspace.package]` of
+`Cargo.toml`; `src-tauri/tauri.conf.json`, both `package.json`, both `package-lock.json` and
+`Cargo.lock` must match (`node scripts/version.mjs`, checked in CI). To release: raise the version
+everywhere, write `docs/releases/v<version>.md`, push to main. When CI is green on main's head,
+„Auto release“ tags `v<version>` and runs `release.yml`: Windows, Linux and macOS builds, a draft
+"Kitchenplaner v<version>" with every file, a check of the expected files, then it publishes. The
+repository variable `AUTO_RELEASE=false` switches it off; Actions -> Release -> Run workflow
+releases by hand or rebuilds a failed release. Never push notes for a version before it is meant to
+go out. After the release, run the notes' Windows checklist.

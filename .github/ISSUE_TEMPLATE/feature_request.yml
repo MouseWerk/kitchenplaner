@@ -1,0 +1,25 @@
+name: Idea or wish / Idee oder Wunsch
+description: Something Kitchenplaner should do, or feedback on what it does. / Was Kitchenplaner können sollte, oder Rückmeldung.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time! Du kannst gern auf Deutsch schreiben.
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea / Deine Idee
+      description: What should Kitchenplaner do, and in which situation would it help? / Was soll Kitchenplaner tun, und wobei hilft es dir?
+    validations:
+      required: true
+  - type: textarea
+    id: usage
+    attributes:
+      label: What do you plan with Kitchenplaner? / Wofür nutzt du Kitchenplaner?
+      description: Optional. A sentence or two helps to weigh the idea (restaurant, canteen, bakery, ...). / Optional, hilft beim Abwägen.
+  - type: input
+    id: version
+    attributes:
+      label: Kitchenplaner version / Version
+      placeholder: "0.1.0"

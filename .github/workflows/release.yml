@@ -1,118 +1,314 @@
 name: Release
 
-# "Run workflow" (Actions -> Release) with a version builds Windows (NSIS, per user), Linux (.deb,
-# .AppImage) and macOS (universal .dmg, ad-hoc signed, not notarized) and attaches them to a DRAFT
-# release "Kitchenplaner v<version>" (tag v<version> on the selected commit, created when the draft
-# is published). The body comes from docs/releases/v<version>.md if that file exists. Nothing is
-# signed with a paid certificate, so no secrets are needed; publishing the draft is a manual step.
+# Builds and publishes the GitHub release "Kitchenplaner v<version>":
+#   - Windows: NSIS installer (per user, no admin rights), unsigned
+#   - macOS: one universal app (Apple Silicon and Intel) as .dmg and .app.tar.gz, ad-hoc signed
+#     (signingIdentity "-"), not notarized
+#   - Linux: .deb and .AppImage
+#   - the two example kitchens (examples/*.kplan) and SHA256SUMS.txt over every file
+# The body is docs/releases/v<version>.md (required). Nothing is signed with a paid certificate, so
+# the workflow needs no secrets, only the job token.
+#
+# Started two ways (docs/release/automatic.md):
+#   - by auto-release.yml after a green CI on main (workflow_call with the version and the commit
+#     CI tested): the annotated tag v<version> is created on that commit; an existing tag is refused.
+#   - by hand, Actions -> Release -> Run workflow with the version: tags the head of the selected
+#     branch, or builds the existing tag again (to repair a failed release; a published release is
+#     never replaced).
+# The version must be the one in Cargo.toml and every other manifest (scripts/version.mjs): the
+# workflow does not rewrite versions, it refuses a mismatch.
+#
+# Order: tag -> build on three systems -> one job creates a draft release, uploads every file,
+# checks that the release holds exactly the expected files with the right sizes, and only then
+# publishes it. A failure anywhere leaves at most a draft, which the next run reuses.
 
 on:
   workflow_dispatch:
     inputs:
       version:
+        description: "Version without v, e.g. 0.2.0 (must match Cargo.toml)"
+        required: true
+  workflow_call:
+    inputs:
+      version:
         description: "Version without v, e.g. 0.2.0"
         required: true
+        type: string
+      ref:
+        description: "The commit to tag (the one CI tested)"
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
-# One run per version; a second run for the same version waits instead of racing the first.
+# One run per version: a manual run and the automatic one never build the same release at once
+# (the second waits). Different from auto-release's own group, so the call cannot deadlock.
 concurrency:
-  group: release-${{ inputs.version }}
+  group: release-${{ startsWith(inputs.version, 'v') && inputs.version || format('v{0}', inputs.version) }}
   cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  draft:
-    name: Draft release
+  tag:
+    name: Tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      release_id: ${{ steps.draft.outputs.release_id }}
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - id: version
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: tag
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_REF: ${{ inputs.ref }}
         run: |
+          set -euo pipefail
           VERSION="${INPUT_VERSION#v}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::Version $INPUT_VERSION is not MAJOR.MINOR.PATCH"
             exit 1
           fi
+          TAG="v$VERSION"
+          NEW=1
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            if [ -n "$INPUT_REF" ]; then
+              echo "::error::Tag $TAG exists: the automatic release never releases a version twice."
+              exit 1
+            fi
+            # Re-run of a release: build the existing tag (the workflow itself comes from the branch).
+            echo "::notice::Tag $TAG exists, building it again."
+            git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+            git checkout --quiet "refs/tags/$TAG"
+            NEW=0
+          fi
+          # A published release is never replaced; a draft (from a failed run) is reused.
+          DRAFT="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | .draft")"
+          if echo "$DRAFT" | grep -qx false; then
+            echo "::error::The release $TAG is published already."
+            exit 1
+          fi
+          # The version comes from the manifests, not from the input.
+          node scripts/version.mjs --expect "$VERSION"
+          NOTES="docs/releases/$TAG.md"
+          if [ ! -s "$NOTES" ]; then
+            echo "::error::$NOTES is missing: write the release notes first."
+            exit 1
+          fi
+          if [ "$NEW" = 1 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            # --cleanup=verbatim keeps the "## Improved" headings (# would be a comment otherwise).
+            git tag -a --cleanup=verbatim "$TAG" -F "$NOTES"
+            # Pushed with the job token: this starts no other workflow.
+            git push origin "refs/tags/$TAG"
+            echo "::notice::Tagged $(git rev-parse HEAD) as $TAG."
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      # Created once here: three build jobs creating it themselves would race into duplicates.
-      - id: draft
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          NOTES="docs/releases/v$VERSION.md"
-          [ -f "$NOTES" ] || { echo "Kitchenplaner $VERSION" > "$RUNNER_TEMP/notes.md"; NOTES="$RUNNER_TEMP/notes.md"; }
-          gh release create "v$VERSION" --draft --title "Kitchenplaner v$VERSION" --notes-file "$NOTES" --target "$GITHUB_SHA"
-          ID=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq ".[] | select(.draft and .tag_name == \"v$VERSION\") | .id" | head -n1)
-          [ -n "$ID" ] || { echo "::error::Draft release v$VERSION not found after creating it"; exit 1; }
-          echo "release_id=$ID" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build (${{ matrix.name }})
-    needs: draft
+    needs: tag
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Windows
             os: windows-latest
-            args: ""
+            args: --bundles nsis
           - name: Linux
             os: ubuntu-22.04
-            args: ""
+            args: --bundles deb,appimage
+          # One app for Apple Silicon and Intel; ad-hoc signed (signingIdentity "-").
           - name: macOS
             os: macos-latest
-            args: --target universal-apple-darwin
+            args: --target universal-apple-darwin --bundles app,dmg
     env:
-      VERSION: ${{ needs.draft.outputs.version }}
+      TAG: ${{ needs.tag.outputs.tag }}
+      VERSION: ${{ needs.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      # The input is the version: written into tauri.conf.json and the workspace Cargo.toml so the
-      # installers carry it.
-      - name: Set version
-        shell: bash
-        run: |
-          node -e '
-            const fs = require("fs");
-            const p = "src-tauri/tauri.conf.json";
-            const c = JSON.parse(fs.readFileSync(p, "utf8"));
-            c.version = process.env.VERSION;
-            fs.writeFileSync(p, JSON.stringify(c, null, 2));
-            const t = "Cargo.toml";
-            fs.writeFileSync(t, fs.readFileSync(t, "utf8").replace(/^version = "[^"]*"/m, `version = "${process.env.VERSION}"`));
-          '
-
-      - uses: dtolnay/rust-toolchain@1.94.1
         with:
-          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - uses: Swatinem/rust-cache@v2
+          ref: refs/tags/${{ needs.tag.outputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: node scripts/version.mjs --expect "${{ needs.tag.outputs.version }}"
+      - uses: dtolnay/rust-toolchain@1.94.1
+        with:
+          targets: ${{ matrix.name == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.name }}
       - name: System packages (WebKitGTK, AppImage tooling)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf libfuse2 xdg-utils
       - run: npm ci
       - run: npm ci --prefix ui
-
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Installers of an earlier version from the cache would make the file names ambiguous.
+          rm -rf target/release/bundle target/universal-apple-darwin/release/bundle
+          # linuxdeploy is an AppImage itself: extract instead of mounting (no FUSE on the runners).
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          npx tauri build ${{ matrix.args }}
+      - name: Collect files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          P="Kitchenplaner_${VERSION}"
+          # Exactly one non-empty file per pattern, copied under its release name.
+          one() {
+            local m=( $1 )
+            if [ "${#m[@]}" -ne 1 ] || [ ! -s "${m[0]}" ]; then
+              echo "::error::Expected one file for $1, found: ${m[*]}"
+              exit 1
+            fi
+            cp "${m[0]}" "dist/$2"
+          }
+          case "$RUNNER_OS" in
+            Windows)
+              one "target/release/bundle/nsis/*.exe" "${P}_x64-setup.exe"
+              ;;
+            Linux)
+              one "target/release/bundle/deb/*.deb" "${P}_amd64.deb"
+              one "target/release/bundle/appimage/*.AppImage" "${P}_amd64.AppImage"
+              ;;
+            macOS)
+              B=target/universal-apple-darwin/release/bundle
+              one "$B/dmg/*.dmg" "${P}_universal.dmg"
+              APP=( "$B"/macos/*.app )
+              if [ "${#APP[@]}" -ne 1 ] || [ ! -d "${APP[0]}" ]; then
+                echo "::error::Expected one app in $B/macos, found: ${APP[*]}"
+                exit 1
+              fi
+              tar -czf "dist/${P}_universal.app.tar.gz" -C "$B/macos" "$(basename "${APP[0]}")"
+              ;;
+          esac
+          ls -la dist
+      - uses: actions/upload-artifact@v4
         with:
-          releaseId: ${{ needs.draft.outputs.release_id }}
-          args: ${{ matrix.args }}
+          name: release-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.tag.outputs.tag }}
+      VERSION: ${{ needs.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.tag.outputs.tag }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Expected files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp examples/Beispielkueche-Restaurant.kplan examples/Example-Kitchen-Restaurant.kplan dist/
+          P="Kitchenplaner_${VERSION}"
+          printf '%s\n' \
+            "${P}_x64-setup.exe" \
+            "${P}_universal.dmg" \
+            "${P}_universal.app.tar.gz" \
+            "${P}_amd64.deb" \
+            "${P}_amd64.AppImage" \
+            Beispielkueche-Restaurant.kplan \
+            Example-Kitchen-Restaurant.kplan > "$RUNNER_TEMP/files.txt"
+          while read -r f; do
+            [ -s "dist/$f" ] || { echo "::error::dist/$f is missing or empty"; ls -la dist; exit 1; }
+          done < "$RUNNER_TEMP/files.txt"
+          (cd dist && xargs -d '\n' sha256sum -- < "$RUNNER_TEMP/files.txt" > SHA256SUMS.txt)
+          echo SHA256SUMS.txt >> "$RUNNER_TEMP/files.txt"
+          cat dist/SHA256SUMS.txt
+          # name<TAB>size of every file, the reference for the check after the upload.
+          while read -r f; do printf '%s\t%s\n' "$f" "$(stat -c %s "dist/$f")"; done < "$RUNNER_TEMP/files.txt" \
+            | sort > "$RUNNER_TEMP/expected.tsv"
+
+      - name: Draft release with every file
+        id: draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          API="repos/$GITHUB_REPOSITORY/releases"
+          ID="$(gh api --paginate "$API?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -n1)"
+          if [ -z "$ID" ]; then
+            ID="$(gh api -X POST "$API" -f tag_name="$TAG" -f name="Kitchenplaner $TAG" \
+              -F draft=true -F body=@"docs/releases/$TAG.md" --jq .id)"
+            echo "::notice::Created the draft release $ID."
+          else
+            gh api -X PATCH "$API/$ID" -f name="Kitchenplaner $TAG" -F body=@"docs/releases/$TAG.md" --silent
+            echo "::notice::Reusing the draft release $ID."
+          fi
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          # Files of an earlier, failed attempt are replaced.
+          gh api --paginate "$API/$ID/assets?per_page=100" --jq '.[] | "\(.id)\t\(.name)"' > "$RUNNER_TEMP/old.tsv"
+          while IFS=$'\t' read -r AID ANAME; do
+            echo "Replacing $ANAME"
+            gh api -X DELETE "$API/assets/$AID" --silent < /dev/null
+          done < "$RUNNER_TEMP/old.tsv"
+          while read -r f; do
+            echo "Uploading $f"
+            curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"dist/$f" \
+              "https://uploads.github.com/$API/$ID/assets?name=$f" > /dev/null
+          done < "$RUNNER_TEMP/files.txt"
+
+      - name: Verify the release files
+        shell: bash
+        env:
+          ID: ${{ steps.draft.outputs.id }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$ID/assets?per_page=100" \
+            --jq '.[] | select(.state == "uploaded") | "\(.name)\t\(.size)"' | sort > "$RUNNER_TEMP/actual.tsv"
+          if ! diff -u "$RUNNER_TEMP/expected.tsv" "$RUNNER_TEMP/actual.tsv"; then
+            echo "::error::The release does not hold exactly the expected files (- expected, + on the release). It stays a draft."
+            exit 1
+          fi
+          echo "All $(wc -l < "$RUNNER_TEMP/expected.tsv") files are on the draft release."
+
+      - name: Publish
+        shell: bash
+        env:
+          ID: ${{ steps.draft.outputs.id }}
+        run: |
+          set -euo pipefail
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$ID" -F draft=false -f make_latest=true --silent
+          DRAFT="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .draft)"
+          [ "$DRAFT" = "false" ] || { echo "::error::The release $TAG is still a draft."; exit 1; }
+          echo "::notice::Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
