@@ -195,7 +195,7 @@ export const en: Record<keyof typeof de, Msg> = {
   "cat.lineHeatedCabinet900": "Heated base cabinet, 900 line",
   "catDesc.range": "Range with hotplates (electric) or open burners (gas) and an oven below.",
   "catDesc.rangeOpen": "Range with 2, 4 or 6 cooking zones by width, an open base below.",
-  "catDesc.solidTop": "One cast plate, hottest in the middle: pots can be moved freely.",
+  "catDesc.solidTop": "One cast plate, pots can be moved freely: hottest in the middle with gas, heated in zones when electric.",
   "catDesc.induction": "Induction zones under glass ceramic, quick to control with little waste heat.",
   "catDesc.wok": "Wok station with a gas ring burner or an induction bowl, swivel tap and gutter.",
   "catDesc.pastaCooker": "Water basin with portion baskets for pasta and vegetables, with inlet and drain.",

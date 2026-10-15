@@ -49,7 +49,7 @@ export const beverageCounter: KindDef = {
       const hw = (DISPENSER.w / 2) * scale;
       f.box("detail", x - hw, x + hw, top, top + DISPENSER.base, "item-dark");
       f.box("detail", x - hw * 0.9, x + hw * 0.9, top + DISPENSER.base, top + DISPENSER_RISE - 30, "glass");
-      f.box("detail", x - hw, x + hw, top + DISPENSER_RISE - 30, top + DISPENSER_RISE);
+      f.box("detail", x - hw * 0.92, x + hw * 0.92, top + DISPENSER_RISE - 30, top + DISPENSER_RISE, "item-dark");
     }
     const gx = l + (GLASSES / 2) * scale;
     f.box("detail", gx - GLASS_R * 1000, gx + GLASS_R * 1000, top, top + GLASS_STACK * 1000);
@@ -65,10 +65,10 @@ export const beverageCounter: KindDef = {
     for (const xm of dispenserXs(item.width)) {
       const x = xm / 1000;
       p.box("steelDark", x - dw, x + dw, s.h, s.h + base, z0, z1);
-      // Glass tank with the drink in it, and the lid.
+      // Glass tank with the drink in it, and the lid sitting on the tank.
       p.box("glass", x - dw * 0.9, x + dw * 0.9, s.h + base, s.h + rise - 0.03, z0 + 0.03, z1 - 0.06);
       p.box("oil", x - dw * 0.8, x + dw * 0.8, s.h + base + 0.01, s.h + base + (rise - base) * 0.6, z0 + 0.05, z1 - 0.08);
-      p.box("steel", x - dw, x + dw, s.h + rise - 0.03, s.h + rise, z0 + 0.02, z1 - 0.05);
+      p.box("panelDark", x - dw * 0.92, x + dw * 0.92, s.h + rise - 0.03, s.h + rise, z0 + 0.025, z1 - 0.055);
       // Tap lever in front of the base, drip tray under it.
       p.box("handle", x - 0.012, x + 0.012, s.h + base * 0.45, s.h + base * 0.85, z1, z1 + 0.025);
       p.box("panelDark", x - dw * 0.7, x + dw * 0.7, s.h, s.h + 0.02, z1, Math.min(z1 + 0.12, s.d / 2 - 0.02));

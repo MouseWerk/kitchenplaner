@@ -60,10 +60,10 @@ export function makeSink(spec: SinkSpec): KindDef {
         s.rect("detail", b.x0, cy - bd / 2, b.x1, cy + bd / 2);
         s.circle("detail", mid(b), cy, INSET / 2);
       }
-      // One tap circle centred over the bowls; the drainer's grooves beside them.
+      // A tap behind each bowl, as in 3D and the elevation; the drainer's grooves beside them.
+      for (const b of spans) s.circle("detail", mid(b), B + UPSTAND / 2 + INSET / 2, INSET / 2);
       const x0 = Math.min(...spans.map((b) => b.x0));
       const x1 = Math.max(...spans.map((b) => b.x1));
-      s.circle("detail", (x0 + x1) / 2, B + UPSTAND / 2 + INSET / 2, INSET / 2);
       if (at === "right") drainerPlan(s, s.L + INSET, x0 - INSET, cy - bd / 2, cy + bd / 2);
       else drainerPlan(s, x1 + INSET, s.R - INSET, cy - bd / 2, cy + bd / 2);
       upstandLine(s);

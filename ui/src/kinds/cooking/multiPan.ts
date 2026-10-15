@@ -15,6 +15,9 @@ const RIM = 0.9;
 const LID = 0.05;
 /** Depth of the pan (m). */
 const PAN = 0.2;
+/** Height of the dark control panel at the top of the tower, and of the dial below its top (m). */
+const CONTROL_PANEL = 0.4;
+const DIAL = 0.3;
 
 export const multiPan: KindDef = {
   kind: "multiPan",
@@ -36,8 +39,10 @@ export const multiPan: KindDef = {
     f.box("detail", l + INSET / 2, tx - INSET / 2, rim, rim + LID * 1000);
     f.line("detail", [l + INSET * 3, rim + LID * 500], [tx - INSET * 3, rim + LID * 500]);
     f.box("detail", tx, r, z0, top);
-    f.box("detail", tx + INSET / 2, r - INSET / 2, top - PANEL * 2.5, top - INSET / 2, "item-dark");
-    f.circle("detail", (tx + r) / 2, top - PANEL * 2.5 - INSET * 2, Math.min(PANEL / 4, tower / 6));
+    // The control panel with the touch display and the dial under it, as in 3D.
+    f.box("detail", tx + INSET / 2, r - INSET / 2, top - CONTROL_PANEL * 1000, top - INSET / 2, "item-dark");
+    f.box("detail", tx + INSET, r - INSET, top - 220, top - 30);
+    f.circle("detail", (tx + r) / 2, top - DIAL * 1000, Math.min(PANEL / 4, tower / 6));
   },
   mesh(p, s) {
     const zf = s.d / 2;
@@ -64,11 +69,11 @@ export const multiPan: KindDef = {
     // The control tower with the touch display and a dial.
     p.box("steel", tx, s.w / 2, PLINTH, s.h, -s.d / 2, zf - DOOR);
     const zFace = zf - DOOR / 2;
-    p.box("panelDark", tx + GAP, s.w / 2 - GAP, s.h - 0.4, s.h - GAP * 2, zf - DOOR, zFace);
+    p.box("panelDark", tx + GAP, s.w / 2 - GAP, s.h - CONTROL_PANEL, s.h - GAP * 2, zf - DOOR, zFace);
     const px = (tx + s.w / 2) / 2;
     const pw = tower - 0.05;
     p.box("glassDark", px - pw / 2, px + pw / 2, s.h - 0.22, s.h - 0.03, zFace, zFace + 0.003);
-    p.knob(px, s.h - 0.3, zFace, zf, Math.min(0.03, pw / 4));
-    p.box("steel", tx + GAP, s.w / 2 - GAP, PLINTH + GAP, s.h - 0.4 - GAP, zf - DOOR, zf - DOOR / 2);
+    p.knob(px, s.h - DIAL, zFace, zf, Math.min(0.03, pw / 4));
+    p.box("steel", tx + GAP, s.w / 2 - GAP, PLINTH + GAP, s.h - CONTROL_PANEL - GAP, zf - DOOR, zf - DOOR / 2);
   },
 };

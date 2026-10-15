@@ -1,13 +1,14 @@
 // Cold room and freezer room (Kühlzelle, Tiefkühlzelle): walls and roof of insulated sandwich
 // panels with visible joints, a hinged door near the left corner of the front wall with its
-// threshold, kick plate, lever handle and the temperature display beside it. The plan, the
+// threshold, kick plate, lever handle and the temperature display beside it. The freezer room has
+// thicker panels, a pressure relief valve and the freezer's frost strip on its door. The plan, the
 // elevation and 3D place the door with `doorSpan`, so the views agree.
 
 import type { Front } from "../parts/elevation";
 import type { Parts, Size } from "../parts/mesh";
 import type { PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
-import { m } from "./common";
+import { FROST_STRIP, frostFront, frostMark, frostPlan, m } from "./common";
 
 /** Panel thickness of a cold room and of a freezer room (mm, common PU sandwich panels). */
 export const COLD_PANEL_MM = 100;
@@ -29,6 +30,10 @@ export const DOOR_ZONE_MM = 70;
 const LEAF = 0.05;
 const KICK = 0.3;
 const HANDLE_Z_MM = 1050;
+/** Height of a freezer room door's frost strip above the floor (mm). */
+const FROST_Z_MM = 1650;
+/** Radius of the snowflake in a freezer room's plan (mm). */
+const FROST_PLAN_MM = 250;
 /** Height of the temperature display beside the door (mm). */
 const DISPLAY_Z_MM = 1600;
 /** Width of the joint groove between two panels (m), and how deep it is set back. */
@@ -135,6 +140,10 @@ export function walkInFront(p: Parts, s: Size, panelMm: number, wall: FrontWall,
   p.rod("handle", "x", hx - 0.06, hy, zFront - 0.008, 0.14, 0.008);
   p.box("handle", hx - 0.012, hx + 0.012, hy - 0.012, hy + 0.012, zLeaf, zFront - 0.008);
   p.cyl("knob", hx, zLeaf + 0.006, hy - 0.07, hy - 0.05, 0.008);
+  if (freezer) {
+    const fy = Math.min(m(FROST_Z_MM), dh - FROST_STRIP * 2);
+    frostMark(p, x0 - lap, x1 + lap, fy, fy + FROST_STRIP, zLeaf);
+  }
   // Temperature display beside the door; a freezer room also has its pressure relief valve.
   const side = displayAt(span, s.w * 1000, panelMm);
   if (side !== undefined) {
@@ -145,7 +154,7 @@ export function walkInFront(p: Parts, s: Size, panelMm: number, wall: FrontWall,
 }
 
 /** The door in the elevation: leaf over the opening, kick plate, handle and the display. */
-export function walkInFrontElevation(f: Front, panelMm: number): void {
+export function walkInFrontElevation(f: Front, panelMm: number, freezer = false): void {
   const { z0 } = f;
   const c = (f.l + f.r) / 2;
   const span = doorSpan(f.w, panelMm);
@@ -155,6 +164,10 @@ export function walkInFrontElevation(f: Front, panelMm: number): void {
   f.box("detail", a, b, z0 + 15, z0 + dh);
   f.line("detail", [a + 10, z0 + KICK * 1000], [b - 10, z0 + KICK * 1000]);
   f.line("detail", [b - 140, z0 + HANDLE_Z_MM], [b - 20, z0 + HANDLE_Z_MM]);
+  if (freezer) {
+    const fz = Math.min(FROST_Z_MM, dh - OVERLAP_MM - FROST_STRIP * 2000);
+    frostFront(f, a, b, z0 + fz, z0 + fz + FROST_STRIP * 1000);
+  }
   const side = displayAt(span, f.w, panelMm);
   if (side !== undefined) f.box("detail", c + side, c + side + DISPLAY_W_MM, z0 + DISPLAY_Z_MM, z0 + DISPLAY_Z_MM + 80, "item-dark");
   // Panel joints in the front wall beside the door, as in 3D.
@@ -168,11 +181,12 @@ function room(kind: string, panelMm: number, freezer: boolean): KindDef {
     kind,
     plan(s) {
       planRoom(s, panelMm);
+      if (freezer) frostPlan(s, 0, (s.B + s.F - DOOR_ZONE_MM) / 2, FROST_PLAN_MM);
     },
     elevation(f) {
       // The roof panel's lower edge, then the front with the door.
       f.line("detail", [f.l, f.top - panelMm], [f.r, f.top - panelMm]);
-      walkInFrontElevation(f, panelMm);
+      walkInFrontElevation(f, panelMm, freezer);
     },
     mesh(p, s) {
       const t = Math.min(m(panelMm), s.w / 4, s.d / 4);

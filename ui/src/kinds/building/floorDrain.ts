@@ -1,14 +1,23 @@
 // Floor drain (Bodenablauf): a square gully flush with the floor, a stainless frame and a slotted
-// grate over the dark trap. Placed in front of tilting pans, kettles and in wash areas.
+// grate over the dark trap. Placed in front of tilting pans, kettles and in wash areas. The plan
+// draws the same grate bars as 3D and the round body of the gully below it hidden.
 
 import type { KindDef } from "../types";
 
 // Sizes (m).
 /** Width of the frame around the grate. */
 const FRAME = 0.025;
-/** Width and pitch of the grate bars. */
-const BAR = 0.006;
-const BAR_PITCH = 0.016;
+/** Width and largest pitch of the grate bars. */
+const BAR = 0.01;
+const BAR_PITCH = 0.03;
+
+/** Centres of the grate bars across the depth (m, from the back -d/2 to the front). */
+function bars(d: number): number[] {
+  const inner = d - 2 * FRAME;
+  const n = Math.max(2, Math.floor(inner / BAR_PITCH));
+  const pitch = inner / n;
+  return Array.from({ length: n }, (_, i) => -d / 2 + FRAME + pitch * (i + 0.5));
+}
 
 export const floorDrain: KindDef = {
   kind: "floorDrain",
@@ -16,13 +25,9 @@ export const floorDrain: KindDef = {
   plan(s) {
     const f = FRAME * 1000;
     s.rect("detail", s.L + f, s.B + f, s.R - f, s.F - f);
-    // A few of the grate's slots and the outlet below it.
-    const n = 5;
-    for (let i = 1; i <= n; i++) {
-      const y = s.B + f + ((s.d - 2 * f) * i) / (n + 1);
-      s.line("detail", [s.L + f * 2, y], [s.R - f * 2, y]);
-    }
-    s.circle("detail", 0, 0, Math.min(s.w, s.d) / 2 - f * 2);
+    // The grate bars, and the gully's round body below the grate.
+    for (const z of bars(s.d / 1000)) s.line("detail", [s.L + f, z * 1000], [s.R - f, z * 1000]);
+    s.circle("hidden", 0, 0, Math.min(s.w, s.d) / 2 - f * 2);
   },
   elevation() {},
   mesh(p, s) {
@@ -33,12 +38,6 @@ export const floorDrain: KindDef = {
     p.box("steel", -W, -W + FRAME, 0, s.h, -D + FRAME, D - FRAME);
     p.box("steel", W - FRAME, W, 0, s.h, -D + FRAME, D - FRAME);
     p.box("plate", -W + FRAME, W - FRAME, 0, s.h * 0.3, -D + FRAME, D - FRAME);
-    const inner = s.d - 2 * FRAME;
-    const n = Math.max(2, Math.floor(inner / BAR_PITCH));
-    const pitch = inner / n;
-    for (let i = 0; i < n; i++) {
-      const z = -D + FRAME + pitch * (i + 0.5);
-      p.box("steel", -W + FRAME, W - FRAME, s.h * 0.6, s.h, z - BAR / 2, z + BAR / 2);
-    }
+    for (const z of bars(s.d)) p.box("steel", -W + FRAME, W - FRAME, s.h * 0.6, s.h, z - BAR / 2, z + BAR / 2);
   },
 };

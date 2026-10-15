@@ -32,7 +32,11 @@ export const hatchWarmer: KindDef = {
     const I = FRONT_INSET;
     const n = leaves(f.item.width);
     const zh = top - HEATER * 1000;
-    f.box("detail", l, r, zh, top, "item-dark");
+    // The heater band with its display in the middle and the thermostat knob at the right.
+    f.box("detail", l, r, zh, top);
+    const cx = (l + r) / 2;
+    f.box("detail", cx - 60, cx + 60, zh + 25, top - 25, "item-dark");
+    f.circle("detail", r - 80, (zh + top) / 2, 18);
     const dw = (f.w - I) / n;
     for (let i = 0; i < n; i++) {
       const a = l + I / 2 + i * dw;

@@ -2,12 +2,14 @@
 // thickness lever, a conveyor belt table to each side with its end roller, guards over the
 // rollers, flour trays under the belts; the stand on castors.
 
-import { SHELF_PITCH, type Size } from "../parts/mesh";
+import { type Size, WIRE_FRAME } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { CASTOR, mBox, mCircle, metres, pRect, tableCastor } from "./common";
 
-/** Width of the roller guard beside the housing (m). */
+/** Width, height and wire pitch of the roller guard beside the housing (m). */
 const GUARD = 0.12;
+const GUARD_H = 0.12;
+const GUARD_PITCH = 0.04;
 
 function layout({ w, d, h }: Size) {
   const tower = Math.min(0.28, w * 0.12);
@@ -63,9 +65,14 @@ export const doughSheeter: KindDef = {
       p.box("steel", x0, x1, belt.y0, belt.y1, -belt.z, belt.z);
       p.box("panel", x0 + 0.01, x1 - 0.01, belt.y1, belt.y1 + 0.008, -belt.z + 0.02, belt.z - 0.02);
       p.rod("steelDark", "z", sx * (w / 2 - 0.025), belt.y1 - 0.01, 0, belt.z * 2, 0.025);
-      // Guard over the rollers beside the housing.
+      // Guard over the rollers beside the housing: a wire grid on four posts (a full cage of
+      // wires would cost a hundred parts for no difference at viewing distance).
       const [g0, g1] = span(sx * tower, sx * (tower + GUARD));
-      p.wireBox(g0, g1, belt.y1, belt.y1 + 0.12, -belt.z, belt.z, SHELF_PITCH, { bottom: false, top: true });
+      const gy = belt.y1 + GUARD_H;
+      p.grid(g0, g1, gy - 2 * WIRE_FRAME, gy, -belt.z, belt.z, GUARD_PITCH, "x");
+      for (const x of [g0 + WIRE_FRAME, g1 - WIRE_FRAME]) {
+        for (const z of [-belt.z + WIRE_FRAME, belt.z - WIRE_FRAME]) p.rod("wire", "y", x, (belt.y1 + gy) / 2, z, GUARD_H, WIRE_FRAME);
+      }
       // Flour tray under the belt.
       const [t0, t1] = span(sx * (tower + 0.05), sx * (w / 2 - 0.15));
       p.tub("steelDark", t0, t1, belt.y0 - 0.06, belt.y0 - 0.02, -belt.z + 0.03, belt.z - 0.03);

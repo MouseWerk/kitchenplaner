@@ -12,6 +12,8 @@ const GUARD = 0.06;
 const BED = 0.08;
 /** Pitch of the grate bars (m). */
 const BAR_PITCH = 0.035;
+/** How far the front edge stands over the grates (m). */
+const FRONT_LIP = 0.02;
 
 export const chargrill: KindDef = {
   kind: "chargrill",
@@ -42,7 +44,9 @@ export const chargrill: KindDef = {
     const z1 = s.d / 2 - CONTROLS;
     // The fire box: walls up to the grates, the lava stones (or the heating elements) inside.
     p.tub("steel", -s.w / 2, s.w / 2, bedTop - SHEET, grate, -s.d / 2, z1 + m, SHEET);
-    p.box("steel", -s.w / 2, s.w / 2, bedTop - SHEET, grate, z1 + m, s.d / 2);
+    // The front edge (with the grease trough) stands over the grates, so from the front only
+    // the splash guards show above it, not the ends of the bars.
+    p.box("steel", -s.w / 2, s.w / 2, bedTop - SHEET, grate + FRONT_LIP, z1 + m, s.d / 2);
     if (item.energy === "gas") p.box("rubber", -s.w / 2 + SHEET, s.w / 2 - SHEET, bedTop, bedTop + 0.03, -s.d / 2 + SHEET, z1 + m - SHEET);
     else {
       p.box("steelDark", -s.w / 2 + SHEET, s.w / 2 - SHEET, bedTop, bedTop + SHEET, -s.d / 2 + SHEET, z1 + m - SHEET);

@@ -1,5 +1,5 @@
 // Mobile salad bar (Salatbar, fahrbar): a cooled well with two rows of GN 1/2 pans, served from
-// both long sides under a glass roof on central posts; panelled body on castors.
+// both long sides under a glass roof on a post at either end; panelled body on castors.
 
 import { INSET as FRONT_INSET, TOP as FRONT_TOP } from "../parts/elevation";
 import { LEG, SHEET, TOP } from "../parts/mesh";
@@ -34,9 +34,20 @@ export const saladBar: KindDef = {
     castorsFront(f);
     f.worktop();
     f.box("detail", l + I, r - I, f.z0 + CASTOR.h * 1000 + I, top - FRONT_TOP - I, "item-dark");
-    f.line("detail", [(l + r) / 2, top], [(l + r) / 2, top + ROOF_RISE]);
+    // The glass roof on a post at either end.
+    for (const x of [l + LEG * 1000, r - LEG * 1000]) f.box("detail", x - 15, x + 15, top, top + ROOF_RISE - 35);
     f.line("detail", [l + I, top + ROOF_RISE - 10], [r - I, top + ROOF_RISE - 10]);
     f.box("detail", l + I, r - I, top + ROOF_RISE - 40, top + ROOF_RISE, "glass");
+  },
+  elevationSide(f) {
+    // Seen from the end: the post in the middle of the depth and the roof across it.
+    const { l, r, top } = f;
+    const c = (l + r) / 2;
+    const rd = (f.w * ROOF_SHARE) / 2;
+    castorsFront(f);
+    f.worktop();
+    f.box("detail", c - 15, c + 15, top, top + ROOF_RISE - 35);
+    f.box("detail", c - rd, c + rd, top + ROOF_RISE - 10, top + ROOF_RISE, "glass");
   },
   mesh(p, s, item) {
     const holes = holesOf(wells(item.width, item.depth));
@@ -52,7 +63,7 @@ export const saladBar: KindDef = {
     // The web between the two rows, which the cut-out top leaves open.
     p.box("steel", -s.w / 2, s.w / 2, s.h - TOP, s.h, -ROW_GAP / 2000, ROW_GAP / 2000);
     wellPans(p, holes, s.h, ["panel", "zone", "oil", "panel", "plate"]);
-    // Glass roof on two central posts.
+    // Glass roof on a post at either end, in the middle of the depth.
     const rise = ROOF_RISE / 1000;
     const rd = (s.d * ROOF_SHARE) / 2;
     for (const x of [-s.w / 2 + LEG, s.w / 2 - LEG]) {

@@ -26,6 +26,9 @@ export const exhaustDuct: KindDef = {
     const fl = FLANGE * 1000;
     f.line("detail", [l, z0 + fl], [r, z0 + fl]);
     f.line("detail", [l, top - fl], [r, top - fl]);
+    // The stiffening band low on the duct.
+    const zb = z0 + Math.min(f.item.height * 0.25, f.item.height - fl - 50);
+    f.box("detail", l, r, zb, zb + 20);
     const cx = (l + r) / 2;
     const dw = (f.w * DOOR_SHARE) / 2;
     const zc = (z0 + top) / 2;

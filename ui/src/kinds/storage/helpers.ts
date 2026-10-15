@@ -8,10 +8,14 @@ import type { MaterialId, Parts } from "../parts/mesh";
 export const LIP = 0.03;
 /** Sheet thickness of a shelf (m). */
 const DECK = 0.006;
-/** Pitch of the slot rows of a perforated shelf and the slats of a slatted one (m). */
+/** Pitch of the slats of a slatted shelf (m). */
 const PITCH = 0.06;
+/** Perforated shelf: distance of the slot rows and of the slots in a row, slot width (m). */
+const HOLE_ROW = 0.2;
+const HOLE_COL = 0.35;
+const HOLE = 0.02;
 
-/** What a shelf is made of: solid sheet, perforated sheet or open slats. */
+/** What a shelf is made of: solid sheet, perforated sheet (slotted) or open slats. */
 export type Deck = "solid" | "perforated" | "slatted";
 
 /**
@@ -38,14 +42,32 @@ export function shelf(p: Parts, deck: Deck, x0: number, x1: number, z0: number, 
     p.box("steel", x0 + DECK, x1 - DECK, top - DECK, top, inner0, inner1);
     return;
   }
-  // Rows of slots (perforated) or open slats along the shelf; a perforated shelf has a dark
-  // underside showing through the slots.
-  if (deck === "perforated") p.box("steelDark", x0 + DECK, x1 - DECK, top - DECK * 2.5, top - DECK * 1.5, inner0, inner1);
+  if (deck === "perforated") {
+    // A closed sheet punched with staggered rows of short slots: dark marks set into the top
+    // (the `flue` material lies over the face it shares), so it reads as a perforated sheet and
+    // never as the open slats of an aluminium shelf.
+    p.box("steel", x0 + DECK, x1 - DECK, top - DECK, top, inner0, inner1);
+    const rows = Math.max(2, Math.round((inner1 - inner0) / HOLE_ROW));
+    const rowPitch = (inner1 - inner0) / rows;
+    const cols = Math.max(2, Math.round((x1 - x0) / HOLE_COL));
+    const colPitch = (x1 - x0 - 2 * DECK) / cols;
+    for (let r = 0; r < rows; r++) {
+      const zc = inner0 + rowPitch * (r + 0.5);
+      // Every other row is shifted by half a slot pitch and has one slot less.
+      const shift = r % 2 === 1 ? colPitch / 2 : 0;
+      const n = r % 2 === 1 ? cols - 1 : cols;
+      for (let c = 0; c < n; c++) {
+        const xc = x0 + DECK + colPitch * (c + 0.5) + shift;
+        p.box("flue", xc - colPitch * 0.3, xc + colPitch * 0.3, top - DECK, top, zc - HOLE / 2, zc + HOLE / 2);
+      }
+    }
+    return;
+  }
+  // Open slats along the shelf with gaps between them.
   const n = Math.max(2, Math.round((inner1 - inner0) / PITCH));
   const pitch = (inner1 - inner0) / n;
-  const bar = deck === "perforated" ? pitch * 0.62 : pitch * 0.5;
   for (let i = 0; i < n; i++) {
     const zc = inner0 + pitch * (i + 0.5);
-    p.box("steel", x0 + DECK, x1 - DECK, top - DECK, top, zc - bar / 2, zc + bar / 2);
+    p.box("steel", x0 + DECK, x1 - DECK, top - DECK, top, zc - pitch / 4, zc + pitch / 4);
   }
 }

@@ -20,8 +20,8 @@ const PAN_MM = 185;
 /** How far the toppings sit below the rail's top, and the frame bars between the pans (m). */
 const FILL_DROP = 0.03;
 const BAR = 0.01;
-/** Toppings in the pans, in turn (cheese, tomato sauce, olives, ham...). */
-const TOPPINGS: readonly MaterialId[] = ["panel", "oil", "zone", "panel", "oil", "knob"];
+/** Toppings in the pans, in turn (cheese, mushrooms, olives, onions, ham, black olives). */
+const TOPPINGS: readonly MaterialId[] = ["panel", "concrete", "zone", "panel", "concrete", "knob"];
 
 const railDepth = (depth: number) => Math.min(RAIL_D_MM, depth * 0.5);
 const panCount = (width: number) => Math.max(1, Math.floor((width - 2 * INSET) / PAN_MM));

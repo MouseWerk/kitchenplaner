@@ -1,6 +1,7 @@
 // Upright refrigerator or freezer for GN 2/1 (Kühlschrank, Tiefkühlschrank): one door column per
 // 700 mm of width, full-height or half doors, solid or glass, a fascia with the machine grille and
-// the display on top. A single door is hinged on the left, a pair opens from the middle.
+// the display on top. A single door is hinged on the left, a pair opens from the middle. A freezer
+// carries the frost strip with the snowflake on every door, and the snowflake in the plan.
 
 import { GAP, PLINTH, type Parts, type Size } from "../parts/mesh";
 import type { KindDef } from "../types";
@@ -14,11 +15,16 @@ import {
   FASCIA_MM,
   fasciaFront,
   FRONT,
+  FROST_STRIP,
+  frostFront,
+  frostMark,
+  frostPlan,
   GLASS_FRAME_MM,
   GRIP_HEIGHT_MM,
   hingeLeft,
   LEAF_GAP_MM,
   m,
+  STANDOFF,
   uprightCarcass,
   uprightColumns,
   wireShelves,
@@ -33,13 +39,16 @@ const SHELF_PITCH = 0.4;
 const CONTAINER_H = 0.1;
 /** Distance of a half door's handle from the joint between the two doors (mm). */
 const HALF_GRIP_MM = 250;
+/** Distance of a freezer's frost strip below the top of its door (m). */
+const FROST_DROP = 0.08;
 
-function upright(kind: string, style: DoorStyle): KindDef {
+function upright(kind: string, style: DoorStyle, freezer = false): KindDef {
   return {
     kind,
     plan(s) {
       // Closed doors at the front with their swings; half doors swing like the full one.
       doorSwings(s, uprightColumns(s.w));
+      if (freezer) frostPlan(s, 0, 0);
     },
     elevation(f) {
       const { l, z0, top } = f;
@@ -59,6 +68,7 @@ function upright(kind: string, style: DoorStyle): KindDef {
           const zt = zb + rh - LEAF_GAP_MM;
           doorFront(f, a, b, zb, zt, hingeLeft(c, cols), style === "glass");
         }
+        if (freezer) frostFront(f, a, b, y1 - (FROST_DROP + FROST_STRIP) * 1000, y1 - FROST_DROP * 1000);
         if (style === "glass") {
           // Shelves seen through the pane.
           const inner = y1 - y0 - 2 * GLASS_FRAME_MM;
@@ -88,6 +98,7 @@ function upright(kind: string, style: DoorStyle): KindDef {
         } else {
           coolDoor(p, { x0, x1: x0 + cw, y0, y1, zBody, zFront: s.d / 2, hinge, handle: "vertical", gripY: m(GRIP_HEIGHT_MM), glass: style === "glass" });
         }
+        if (freezer) frostMark(p, x0, x0 + cw, y1 - FROST_DROP - FROST_STRIP, y1 - FROST_DROP, s.d / 2 - STANDOFF);
       }
     },
   };
@@ -122,5 +133,6 @@ function glassInterior(p: Parts, s: Size, zBody: number, cols: number): void {
 }
 
 export const fridge = upright("fridge", "full");
+export const freezer = upright("freezer", "full", true);
 export const fridgeHalf = upright("fridgeHalf", "half");
 export const fridgeGlass = upright("fridgeGlass", "glass");

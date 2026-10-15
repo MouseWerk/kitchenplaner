@@ -28,7 +28,8 @@ describe("equipmentCsv", () => {
     expect(csv.startsWith(BOM + "Pos.;Bezeichnung;B × T × H (mm);Elektro (kW);")).toBe(true);
     const lines = csv.slice(1).split("\r\n");
     expect(lines[1]).toBe('1;"Herd; 6 Platten";1200 × 900 × 900;22,4;400;;;;;');
-    expect(lines[2]).toBe('2;"Kessel ""groß""";800 × 900 × 900;18;400;;KW, WW;Bodenablauf;;');
+    // The 150 l kettle is 1000 wide: its 800 mm vessel does not fit an 800 module.
+    expect(lines[2]).toBe('2;"Kessel ""groß""";1000 × 900 × 900;18;400;;KW, WW;Bodenablauf;;');
     // A line break inside a field stays inside its quotes.
     expect(csv).toContain(';2600;"Zeile 1\nZeile 2"\r\n');
     // The comma needs no quotes with a semicolon separator.

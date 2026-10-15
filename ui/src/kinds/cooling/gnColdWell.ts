@@ -3,10 +3,10 @@
 // lie across the well (800 mm = 2, 1200 mm = 3, 1600 mm = 4).
 
 import { TOP as FRONT_TOP } from "../parts/elevation";
-import { TOP, type MaterialId } from "../parts/mesh";
+import { SHEET, TOP, type MaterialId } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { m } from "./common";
+import { FRONT, m } from "./common";
 import { counterBase, counterFrontElevation, counterPlan } from "./counterFridge";
 
 /** Width of a GN 1/1 container lying across (325 mm) with its share of the frame (mm). */
@@ -16,14 +16,14 @@ const GN_LENGTH_MM = 530;
 const WELL_DEPTH_MM = 200;
 /** Margin of the well from the ends of the worktop (mm). */
 const MARGIN_MM = 60;
-/**
- * How far the food stands below the top, and the bars between the containers (m). The base's
- * body fills the well up to the worktop's underside, so the food shows above that.
- */
-const FILL_DROP = 0.025;
+/** Depth of a GN 1/1 container (m, 150 mm), its wall, and how far the food stands below the top. */
+const PAN_DEPTH = 0.15;
+const PAN_WALL = 0.004;
+const FILL_DROP = 0.045;
+/** Bars between the containers that carry their rims (m). */
 const BAR = 0.012;
-/** Food in the containers, in turn. */
-const FOOD: readonly MaterialId[] = ["oil", "panel", "zone"];
+/** Food in the containers, in turn (potato salad, yoghurt dressing, olives). */
+const FOOD: readonly MaterialId[] = ["concrete", "panel", "zone"];
 
 const gnCount = (width: number) => Math.max(1, Math.floor((width - 2 * MARGIN_MM) / GN_MM));
 
@@ -54,21 +54,30 @@ export const gnColdWell: KindDef = {
   },
   mesh(p, s) {
     const top = s.h - TOP;
-    counterBase(p, s, "doors", top);
     const o = well(s.w * 1000, s.d * 1000);
     const x0 = m(o.x0);
     const x1 = m(o.x1);
     const z0 = m(o.y0);
     const z1 = m(o.y1);
+    const floor = s.h - m(WELL_DEPTH_MM);
+    // The base's body stops under the well; the insulation around the well fills up to the top.
+    counterBase(p, s, "doors", top, false, floor);
+    const zBody = s.d / 2 - FRONT;
+    p.box("steel", -s.w / 2, x0, floor, top, -s.d / 2, zBody);
+    p.box("steel", x1, s.w / 2, floor, top, -s.d / 2, zBody);
+    p.box("steel", x0, x1, floor, top, -s.d / 2, z0);
+    p.box("steel", x0, x1, floor, top, z1, zBody);
     p.topWithHoles("steel", s.w, s.d, top, s.h, [{ x0, x1, z0, z1 }]);
-    // Only the top of the well shows above the base's body.
-    p.tub("steel", x0, x1, top - 0.01, s.h, z0, z1);
-    // The containers: food in each, bars between them carrying the rims.
+    p.tub("steelDark", x0, x1, floor, s.h, z0, z1);
+    // The containers hang in the well by their rims, on bars between them; food in each.
     const cw = (x1 - x0) / o.n;
     for (let i = 0; i < o.n; i++) {
       const a = x0 + i * cw;
-      if (i > 0) p.box("steel", a - BAR / 2, a + BAR / 2, s.h - BAR, s.h - 0.002, z0, z1);
-      p.box(FOOD[i % FOOD.length], a + BAR, a + cw - BAR, top - 0.01, s.h - FILL_DROP, z0 + 0.02, z1 - 0.02);
+      if (i > 0) p.box("steel", a - BAR / 2, a + BAR / 2, s.h - BAR, s.h - 0.001, z0, z1);
+      const ca = a + (i > 0 ? BAR / 2 : SHEET) + 0.001;
+      const cb = a + cw - (i < o.n - 1 ? BAR / 2 : SHEET) - 0.001;
+      p.tub("steel", ca, cb, s.h - PAN_DEPTH, s.h, z0 + SHEET + 0.001, z1 - SHEET - 0.001, PAN_WALL);
+      p.box(FOOD[i % FOOD.length], ca + PAN_WALL, cb - PAN_WALL, s.h - PAN_DEPTH + PAN_WALL, s.h - FILL_DROP, z0 + SHEET + PAN_WALL + 0.001, z1 - SHEET - PAN_WALL - 0.001);
     }
   },
 };

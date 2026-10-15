@@ -16,6 +16,8 @@ const UNLOAD = { share: 0.27, max: 1600 };
 /** Shares of pre-wash, wash, rinse and drying zone in the tunnel. */
 const ZONE_SHARES = [0.2, 0.35, 0.2, 0.25];
 const PANEL_ZONE = 1;
+/** The drying zone, the last one. */
+const DRY_ZONE = ZONE_SHARES.length - 1;
 /** Distance between two rows of fingers on the belt (m). */
 const FINGER_PITCH = 0.25;
 /** Height of the side guards above the belt (m). */
@@ -77,7 +79,7 @@ export const flightDishwasher: KindDef = {
   elevation(f) {
     const c = (f.l + f.r) / 2;
     const { load, unload, tunnel, zones } = sections(f.w);
-    tunnelFront(f, c + tunnel.x0, c + tunnel.x1, zones, PANEL_ZONE);
+    tunnelFront(f, c + tunnel.x0, c + tunnel.x1, zones, PANEL_ZONE, DRY_ZONE);
     const belt = f.z0 + CONVEYOR * 1000;
     for (const sec of [load, unload]) {
       const a = c + sec.x0;
@@ -90,6 +92,6 @@ export const flightDishwasher: KindDef = {
     const { load, unload, tunnel, zones } = sections(s.w, 1 / 1000);
     beltSection(p, s, load, load.x0 + 0.06);
     beltSection(p, s, unload, unload.x1 - 0.06);
-    tunnelHousing(p, s, tunnel.x0, tunnel.x1, zones, PANEL_ZONE);
+    tunnelHousing(p, s, tunnel.x0, tunnel.x1, zones, PANEL_ZONE, DRY_ZONE);
   },
 };

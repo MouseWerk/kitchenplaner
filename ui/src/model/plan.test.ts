@@ -170,9 +170,9 @@ describe("planDrawing items", () => {
     };
     expect(circles("range-4")).toBe(4);
     expect(circles("range-6")).toBe(6);
-    // A sink: one drain circle per bowl plus the tap.
+    // A sink: one drain circle and one tap per bowl, as in 3D and the elevation.
     expect(circles("sink-1", 1200)).toBe(2);
-    expect(circles("sink-1", 1600)).toBe(3);
+    expect(circles("sink-1", 1600)).toBe(4);
   });
 
   it("turns symbols with the item: a table at 270 degrees has its back and upstand along the west wall", () => {

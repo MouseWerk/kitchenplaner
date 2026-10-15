@@ -2,7 +2,7 @@
 // under each board and a strut under the top board).
 
 import type { Front } from "../parts/elevation";
-import { cross, INSET, type PlanSketch } from "../parts/plan";
+import type { PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
 import { LIP, shelf, strut } from "./helpers";
 
@@ -27,11 +27,15 @@ function consoles(w: number): number[] {
   return Array.from({ length: n }, (_, i) => -span / 2 + (span * i) / (n - 1));
 }
 
-/** Plan: the usual diagonal of an overhead shelf, the front edge and the consoles. */
+/**
+ * Plan: the board's folded front edge, its back edge at the wall rails and the rails of the
+ * consoles (no diagonal: together with the consoles it read as a crossed-out shelf).
+ */
 function planShelf(s: PlanSketch) {
-  cross(s, "overhead", false);
-  s.line("overhead", [s.L, s.F - INSET / 2], [s.R, s.F - INSET / 2]);
-  for (const x of consoles(s.w / 1000)) s.line("overhead", [x * 1000, s.B], [x * 1000, s.B + s.d * 0.7]);
+  s.line("overhead", [s.L, s.F - LIP * 1000], [s.R, s.F - LIP * 1000]);
+  s.line("overhead", [s.L, s.B + RAIL * 1000], [s.R, s.B + RAIL * 1000]);
+  const t = (CONSOLE * 1000) / 2;
+  for (const x of consoles(s.w / 1000)) s.rect("overhead", x * 1000 - t, s.B, x * 1000 + t, s.B + RAIL * 1000);
 }
 
 /** Elevation: the boards' edges and the consoles below them. */

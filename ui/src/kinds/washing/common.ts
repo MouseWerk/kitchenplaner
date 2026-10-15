@@ -3,7 +3,7 @@
 // helpers work in millimetres, mesh helpers in metres (see kinds/README.md).
 
 import { FEET, INSET as FRONT_INSET, type Front } from "../parts/elevation";
-import { CONTROLS, DOOR, GAP, LEG, PLINTH, SHEET, UNDERSHELF, type Hole, type Parts, type Size } from "../parts/mesh";
+import { DOOR, GAP, LEG, PLINTH, SHEET, UNDERSHELF, type Hole, type Parts, type Size } from "../parts/mesh";
 import { INSET, type PlanSketch } from "../parts/plan";
 
 /** The end of a unit along its width, as seen from the front. */
@@ -238,13 +238,22 @@ export function preRinsePlan(s: PlanSketch, x: number): void {
 export const SHOWER_RISE = 1000;
 
 // ---------------------------------------------------------------------------------------------
-// Conveyor dishwashers: a tunnel housing over the conveyor, cut into zones (pre-wash, wash,
-// rinse, drying), each with a lift-up inspection door, tanks with service doors below.
+// Conveyor dishwashers: the tank cabinet set back under the tunnel, the tunnel over the conveyor
+// cut into zones (pre-wash, wash, rinse, drying), each with a lift-up inspection door, the upper
+// housing set back above the tunnel with the control panel, and the tunnel openings with their
+// curtains at both ends.
 
 /** Height of the conveyor (the racks' or belt's level) above the floor (m). */
 export const CONVEYOR = 0.86;
 /** Height of the top cap above the housing that carries the exhaust stub (m). */
 const STUB = 0.12;
+/** Height of the tunnel with its inspection doors above the conveyor (m), at most. */
+const TUNNEL = 0.68;
+/** Least height of the upper housing over the tunnel (m). */
+const UPPER = 0.2;
+/** How far the upper housing and the tank cabinet stand back from the front of the doors (m). */
+const SETBACK = 0.15;
+const TANK_SETBACK = 0.04;
 
 /** Radius of an adjustable foot and the height of its pad (m), as `plinth` in parts/mesh.ts. */
 const FOOT = 0.022;
@@ -253,8 +262,13 @@ const FOOT_PAD = 0.012;
 const FOOT_PITCH = 1.2;
 /** Height of the tunnel opening above the conveyor at the machine's ends (m). */
 const OPENING = 0.5;
-/** Thickness of the frame around the tunnel opening (m). */
-const END_FRAME = 0.04;
+/** Depth of the recess at each end in front of the curtains, and the jambs beside it (m). */
+const END_RECESS = 0.12;
+const JAMB = 0.08;
+/** Strips of a curtain across the opening. */
+const CURTAIN_STRIPS = 5;
+/** Slats of the vent grille in a drying zone's door. */
+const DRYER_SLATS = 4;
 
 /** Kick plate and adjustable feet under a long machine over [x0, x1] (m). */
 export function longPlinth(p: Parts, x0: number, x1: number, d: number): void {
@@ -270,47 +284,78 @@ export function longPlinth(p: Parts, x0: number, x1: number, d: number): void {
   }
 }
 
+/** Heights of a conveyor machine of height `h` (m): the doors' top and the housing's top. */
+function tunnelHeights(h: number): { doorTop: number; housingTop: number } {
+  const housingTop = h - STUB;
+  return { doorTop: Math.min(housingTop - UPPER, CONVEYOR + TUNNEL), housingTop };
+}
+
 /**
- * The housing of a conveyor dishwasher over [x0, x1] (m): the tank cabinet with service doors,
- * the tunnel with one lift-up inspection door per zone (`zones` are their lengths from the
- * left), the control panel over the zone `panelZone`, the tunnel openings with their curtains
- * at both ends and the exhaust stub on top of the first zone.
+ * The housing of a conveyor dishwasher over [x0, x1] (m): the tank cabinet set back under the
+ * doors, the tunnel with one lift-up inspection door per zone (`zones` are their lengths from
+ * the left; the zone `dryZone` is a drying zone with a vent grille), the upper housing set back
+ * above it with the control panel over the zone `panelZone`, the tunnel openings with rack rails
+ * and curtains at both ends and the exhaust stub on top of the first zone.
  */
-export function tunnelHousing(p: Parts, s: Size, x0: number, x1: number, zones: readonly number[], panelZone: number): void {
+export function tunnelHousing(p: Parts, s: Size, x0: number, x1: number, zones: readonly number[], panelZone: number, dryZone = -1): void {
   const zb = -s.d / 2;
   const zf = s.d / 2 - DOOR;
-  const housingTop = s.h - STUB;
-  const opening = CONVEYOR + OPENING;
+  const zr = zf - SETBACK;
+  const { doorTop, housingTop } = tunnelHeights(s.h);
+  const opening = Math.min(CONVEYOR + OPENING, doorTop - 0.05);
   longPlinth(p, x0, x1, s.d);
-  p.box("steel", x0, x1, PLINTH, CONVEYOR, zb, zf);
-  // The tunnel: closed between the end frames, open at both ends below the frames' lintels.
-  p.box("steel", x0 + END_FRAME, x1 - END_FRAME, CONVEYOR, housingTop, zb, zf);
-  for (const [a, b] of [
-    [x0, x0 + END_FRAME],
-    [x1 - END_FRAME, x1],
+  // The tank cabinet stands back under the doors: one plain front with a joint at each zone and
+  // a drip rail under the doors.
+  p.box("steel", x0, x1, PLINTH, CONVEYOR, zb, zf - TANK_SETBACK);
+  p.box("steelDark", x0, x1, CONVEYOR - 0.025, CONVEYOR, zf - TANK_SETBACK, zf + DOOR / 2);
+  // The tunnel: closed between the end recesses, where the racks enter and leave below a lintel.
+  p.box("steel", x0 + END_RECESS, x1 - END_RECESS, CONVEYOR, doorTop, zb, zf);
+  for (const [a, b, face] of [
+    [x0, x0 + END_RECESS, x0 + END_RECESS - 0.004],
+    [x1 - END_RECESS, x1, x1 - END_RECESS],
   ]) {
-    p.box("steel", a, b, opening, housingTop, zb, zf);
-    p.box("steel", a, b, CONVEYOR, opening, zb, zb + 0.08);
-    p.box("steel", a, b, CONVEYOR, opening, zf - 0.08, zf);
+    p.box("steel", a, b, opening, doorTop, zb, zf);
+    p.box("steel", a, b, CONVEYOR, opening, zb, zb + JAMB);
+    p.box("steel", a, b, CONVEYOR, opening, zf - JAMB, zf);
+    rackRails(p, a, b, CONVEYOR, 0);
+    // The curtain of rubber strips hangs at the tunnel's face, a little gap between the strips.
+    const cw = (s.d - DOOR - 2 * JAMB) / CURTAIN_STRIPS;
+    for (let i = 0; i < CURTAIN_STRIPS; i++) {
+      const z = zb + JAMB + i * cw;
+      p.box("rubber", face, face + 0.004, CONVEYOR + 0.04, opening, z + 0.003, z + cw - 0.003);
+    }
   }
-  for (const xc of [x0 + END_FRAME, x1 - END_FRAME - 0.006]) p.box("rubber", xc, xc + 0.006, CONVEYOR + 0.02, opening, zb + 0.08, zf - 0.08);
-  p.box("steelDark", x0, x1, housingTop, housingTop + 0.01, zb, zf);
+  // The upper housing, set back above the tunnel, with a dark ledge on the tunnel's top.
+  p.box("steel", x0, x1, doorTop, housingTop, zb, zr);
+  p.box("steelDark", x0, x1, doorTop, doorTop + 0.008, zr, zf + DOOR / 2);
+  p.box("steelDark", x0, x1, housingTop, housingTop + 0.01, zb, zr);
   let x = x0;
   zones.forEach((len, i) => {
     const a = x + GAP;
     const b = x + len - GAP;
-    const hl = Math.min(0.15, len * 0.3);
     const c = (a + b) / 2;
-    // Service door of the tank below and the lift-up inspection door above the conveyor.
-    p.box("steel", a, b, PLINTH + GAP, CONVEYOR - GAP, zf, zf + DOOR / 2);
-    p.barHandle("x", c - hl, c + hl, CONVEYOR - 0.08, zf + DOOR / 2, s.d / 2);
-    const doorTop = i === panelZone ? housingTop - CONTROLS - GAP : housingTop - GAP;
-    p.box("steel", a, b, CONVEYOR + GAP, doorTop, zf, zf + DOOR / 2);
-    p.barHandle("x", c - hl, c + hl, CONVEYOR + 0.06, zf + DOOR / 2, s.d / 2);
+    if (i > 0) p.box("steelDark", x - 0.002, x + 0.002, PLINTH, CONVEYOR - 0.025, zf - TANK_SETBACK, zf - TANK_SETBACK + 0.002);
+    // The inspection door lifts up: its grip runs along its lower edge.
+    p.box("steel", a, b, CONVEYOR + GAP, doorTop - GAP, zf, zf + DOOR / 2);
+    const hl = Math.min(0.25, len * 0.35);
+    p.barHandle("x", c - hl, c + hl, CONVEYOR + 0.05, zf + DOOR / 2, s.d / 2);
+    if (i === dryZone) {
+      // The drying zone's door has a vent grille in its upper part.
+      const g0 = doorTop - 0.24;
+      const g1 = doorTop - 0.06;
+      p.box("panelDark", a + 0.05, b - 0.05, g0, g1, zf + DOOR / 2, zf + DOOR / 2 + 0.002);
+      for (let k = 1; k <= DRYER_SLATS; k++) {
+        const y = g0 + ((g1 - g0) * k) / (DRYER_SLATS + 1);
+        p.box("steel", a + 0.05, b - 0.05, y - 0.006, y + 0.006, zf + DOOR / 2, zf + DOOR / 2 + 0.006);
+      }
+    }
     if (i === panelZone) {
-      p.box("panelDark", a, b, housingTop - CONTROLS, housingTop - GAP, zf, zf + DOOR / 2);
-      p.box("glassDark", a + 0.03, Math.min(b - 0.12, a + 0.2), housingTop - CONTROLS + 0.03, housingTop - 0.03, zf + DOOR / 2, zf + DOOR / 2 + 0.003);
-      for (let k = 0; k < 2; k++) p.rod("knob", "z", b - 0.04 - k * 0.05, housingTop - CONTROLS / 2, zf + DOOR / 2 + 0.004, 0.008, 0.015);
+      // The control panel on the upper housing's front: display and two buttons.
+      const y0 = doorTop + 0.04;
+      const y1 = housingTop - 0.04;
+      p.box("panelDark", a + 0.02, b - 0.02, y0, y1, zr, zr + 0.012);
+      p.box("glassDark", a + 0.05, Math.min(b - 0.14, a + 0.25), y0 + 0.03, y1 - 0.03, zr + 0.012, zr + 0.015);
+      for (let k = 0; k < 2; k++) p.rod("knob", "z", b - 0.06 - k * 0.05, (y0 + y1) / 2, zr + 0.016, 0.008, 0.015);
     }
     x += len;
   });
@@ -321,39 +366,48 @@ export function tunnelHousing(p: Parts, s: Size, x0: number, x1: number, zones: 
 }
 
 /** The housing of a conveyor dishwasher in the elevation over [a, b] (mm, left to right). */
-export function tunnelFront(f: Front, a: number, b: number, zones: readonly number[], panelZone: number): void {
+export function tunnelFront(f: Front, a: number, b: number, zones: readonly number[], panelZone: number, dryZone = -1): void {
   const z0 = f.z0;
   const conveyor = z0 + CONVEYOR * 1000;
-  const housingTop = f.top - STUB * 1000;
+  const h = tunnelHeights(f.item.height / 1000);
+  const doorTop = z0 + h.doorTop * 1000;
+  const housingTop = z0 + h.housingTop * 1000;
+  const I = FRONT_INSET / 4;
   f.box("detail", a, b, z0 + FEET, housingTop);
   f.line("detail", [a, conveyor], [b, conveyor]);
+  f.line("detail", [a, doorTop], [b, doorTop]);
   let x = a;
   zones.forEach((len, i) => {
-    const xa = x + FRONT_INSET / 4;
-    const xb = x + len - FRONT_INSET / 4;
-    f.box("detail", xa, xb, z0 + FEET + FRONT_INSET / 4, conveyor - FRONT_INSET / 2);
-    const doorTop = i === panelZone ? housingTop - CONTROLS * 1000 : housingTop - FRONT_INSET / 4;
-    f.box("detail", xa, xb, conveyor + FRONT_INSET / 4, doorTop);
+    const xa = x + I;
+    const xb = x + len - I;
+    if (i > 0) f.line("detail", [x, z0 + FEET], [x, conveyor]);
+    f.box("detail", xa, xb, conveyor + I, doorTop - I);
     const c = (xa + xb) / 2;
-    const hl = Math.min(150, len * 0.3);
-    f.line("detail", [c - hl, conveyor + 60], [c + hl, conveyor + 60]);
-    f.line("detail", [c - hl, conveyor - 80], [c + hl, conveyor - 80]);
+    const hl = Math.min(250, len * 0.35);
+    f.line("detail", [c - hl, conveyor + 50], [c + hl, conveyor + 50]);
+    if (i === dryZone) {
+      for (let k = 1; k <= DRYER_SLATS; k++) {
+        const z = doorTop - 240 + (180 * k) / (DRYER_SLATS + 1);
+        f.line("detail", [xa + 50, z], [xb - 50, z]);
+      }
+    }
     if (i === panelZone) {
-      f.box("detail", xa, xb, housingTop - CONTROLS * 1000, housingTop - FRONT_INSET / 4);
-      f.box("detail", xa + 30, Math.min(xb - 30, xa + 200), housingTop - CONTROLS * 1000 + 30, housingTop - 30);
+      f.box("detail", xa + 20, xb - 20, doorTop + 40, housingTop - 40, "item-dark");
+      f.box("detail", xa + 50, Math.min(xb - 140, xa + 250), doorTop + 70, housingTop - 70);
     }
     x += len;
   });
 }
 
-/** Zone lines across a conveyor dishwasher's housing in the plan (mm). */
+/** Zone lines across a conveyor dishwasher's housing in the plan, the upper housing's edge (mm). */
 export function tunnelPlan(s: PlanSketch, a: number, zones: readonly number[]): void {
   let x = a;
-  s.rect("detail", a, s.B + INSET / 2, a + zones.reduce((t, z) => t + z, 0), s.F - INSET / 2);
-  for (const len of zones.slice(0, -1)) {
-    x += len;
+  const len = zones.reduce((t, z) => t + z, 0);
+  s.rect("detail", a, s.B + INSET / 2, a + len, s.F - INSET / 2);
+  s.line("detail", [a, s.F - (DOOR + SETBACK) * 1000], [a + len, s.F - (DOOR + SETBACK) * 1000]);
+  for (const zl of zones.slice(0, -1)) {
+    x += zl;
     s.line("detail", [x, s.B + INSET / 2], [x, s.F - INSET / 2]);
   }
   s.circle("detail", a + (zones[0] ?? 0) / 2, -s.d / 4, 80);
 }
-

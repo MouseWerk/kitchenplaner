@@ -24,6 +24,11 @@ const LINE_DOOR = 0.5;
 const TABLE_FEET = 0.04;
 /** Pitch of the tray runners of a stand (m, GN trays). */
 const RUNNER_PITCH = 0.07;
+/** Gap round an oven door (m): wider than a cabinet door's, the door is heavy and insulated. */
+const OVEN_GAP = 0.008;
+/** Thickness of the dark sheet behind the doors, and how far its edges stay in (m). */
+const RECESS = 0.002;
+const RECESS_EDGE = 0.002;
 
 /** Columns of cooking zones on a top of the given width (mm or m with `per` in the same unit). */
 export function columns(width: number, per = ZONE_COLUMN_WIDTH * 1000): number {
@@ -179,13 +184,21 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
     p.box("steel", -w / 2 + SHEET, w / 2 - SHEET, solidTo, o.underTop, -d / 2, -d / 2 + SHEET);
     p.box("steel", -w / 2 + SHEET, w / 2 - SHEET, solidTo, o.underTop, zBody - SHEET, zBody);
   }
+  if (o.base !== "open") {
+    // A dark sheet behind the doors, so the gaps round them read as gaps and not as one front.
+    p.box("top", -w / 2 + RECESS_EDGE, w / 2 - RECESS_EDGE, PLINTH + RECESS_EDGE, yc + GAP, zBody, zBody + RECESS);
+  }
   if (o.base === "oven") {
-    p.box("steel", -w / 2 + GAP, w / 2 - GAP, PLINTH + GAP, yc - GAP, zBody, d / 2 - DOOR / 2);
-    ovenWindow(p, -w / 2, w / 2, PLINTH, yc - 0.08, d / 2 - DOOR / 2);
+    const zFace = d / 2 - DOOR / 2;
+    const y0 = PLINTH + OVEN_GAP;
+    const y1 = yc - OVEN_GAP;
+    p.box("steel", -w / 2 + OVEN_GAP, w / 2 - OVEN_GAP, y0, y1, zBody, zFace);
+    ovenWindow(p, -w / 2 + OVEN_GAP, w / 2 - OVEN_GAP, y0, y1 - 0.06, zFace);
+    // The handle bar across the top of the door, on stand-offs, ending at the front.
     const len = Math.min(0.5, w * 0.6);
-    p.barHandle("x", -len / 2, len / 2, yc - 0.05, d / 2 - DOOR / 2, d / 2);
+    p.barHandle("x", -len / 2, len / 2, y1 - 0.04, zFace, d / 2);
   } else if (o.base === "doors" || o.base === "heated") {
-    doors(p, -w / 2, w / 2, PLINTH, yc, d, lineDoors(w), "vertical");
+    doors(p, -w / 2 + GAP, w / 2 - GAP, PLINTH + GAP, yc, d, lineDoors(w), "vertical");
     if (o.base === "heated") {
       // Vent slots at the top of the cabinet front.
       for (let i = 0; i < 3; i++) {

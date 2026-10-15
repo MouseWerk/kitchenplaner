@@ -7,8 +7,14 @@ import type { KindDef } from "../types";
 
 /** Width of the control panel at the right (mm). */
 const PANEL_W = 120;
-/** Depth of the wall bracket behind the housing (m). */
-const BRACKET = 0.04;
+/** Depth of the wall bracket behind the housing, and the half width of its side arms (m). */
+const BRACKET = 0.05;
+const BRACKET_ARM = 0.02;
+/** Dark lining of the cavity sides (m). */
+const LINING = 0.002;
+/** Vent slots in the top: width and pitch (m). */
+const VENT_SLOT = 0.01;
+const VENT_PITCH = 0.03;
 
 export const salamander: KindDef = {
   kind: "salamander",
@@ -35,13 +41,29 @@ export const salamander: KindDef = {
     const zb = -s.d / 2 + BRACKET;
     const zf = s.d / 2;
     const cavity = s.h * 0.6;
-    // Wall bracket and housing.
-    p.box("steelDark", -s.w / 2 + 0.05, s.w / 2 - 0.05, s.h * 0.3, s.h - 0.02, -s.d / 2, zb);
+    // The wall bracket: a plate on the wall and an arm at each side carrying the housing, so
+    // from the side the unit reads as hung on the wall.
+    p.box("steelDark", -s.w / 2 + BRACKET_ARM, s.w / 2 - BRACKET_ARM, s.h * 0.15, s.h - 0.02, -s.d / 2, -s.d / 2 + SHEET);
+    for (const sx of [-1, 1]) {
+      const x = sx * (s.w / 2 - BRACKET_ARM);
+      p.box("steelDark", x - BRACKET_ARM, x + BRACKET_ARM, s.h * 0.15, s.h - 0.02, -s.d / 2 + SHEET, zb);
+    }
     p.box("steel", -s.w / 2, s.w / 2, cavity, s.h, zb, zf);
     p.box("steel", -s.w / 2, -s.w / 2 + SHEET, 0, cavity, zb, zf);
     p.box("steel", s.w / 2 - panelW - SHEET, s.w / 2, 0, cavity, zb, zf - 0.015);
     p.box("steel", -s.w / 2, s.w / 2, 0, SHEET, zb, zf);
-    p.box("steelDark", -s.w / 2 + SHEET, s.w / 2 - panelW - SHEET, SHEET, cavity, zb, zb + SHEET);
+    // The cavity is dark inside (back wall and side linings), so the opening reads from afar.
+    const c0 = -s.w / 2 + SHEET;
+    const c1 = s.w / 2 - panelW - SHEET;
+    p.box("top", c0, c1, SHEET, cavity, zb, zb + SHEET);
+    p.box("top", c0, c0 + LINING, SHEET, cavity, zb + SHEET, zf - 0.005);
+    p.box("top", c1 - LINING, c1, SHEET, cavity, zb + SHEET, zf - 0.005);
+    // Vent slots at the back of the top, where the heat leaves the housing.
+    const slots = Math.max(3, Math.floor((s.w - panelW) / VENT_PITCH));
+    for (let i = 0; i < slots; i++) {
+      const x = -s.w / 2 + VENT_PITCH * (i + 0.5);
+      p.box("flue", x - VENT_SLOT / 2, x + VENT_SLOT / 2, s.h - 0.004, s.h, zb + 0.03, zb + 0.09);
+    }
     // The heater under the top of the cavity.
     p.box("zone", -s.w / 2 + SHEET * 2, s.w / 2 - panelW - SHEET * 2, cavity - 0.015, cavity - 0.002, zb + SHEET, zf - 0.03);
     // Drip tray and the grid shelf with its handle.

@@ -13,6 +13,9 @@ const GUARD = 0.08;
 const PLATE = 0.03;
 /** Pitch of the ribs of a ribbed plate (m). */
 const RIB_PITCH = 0.03;
+/** Dark frame round the polished field of a chrome plate, and its step under the field (m). */
+const CHROME_FRAME = 0.03;
+const CHROME_STEP = 0.002;
 
 type Surface = "smooth" | "ribbed" | "chrome";
 
@@ -24,6 +27,11 @@ function makeGriddle(kind: string, surface: Surface): KindDef {
       const y0 = s.B + INSET;
       const y1 = s.F - CONTROL_STRIP;
       s.rect("detail", s.L + INSET, y0, s.R - INSET, y1);
+      if (surface === "chrome") {
+        // The polished field inside its frame.
+        const f = CHROME_FRAME * 1000;
+        s.rect("detail", s.L + INSET + f, y0 + f, s.R - INSET - f, y1 - INSET - f);
+      }
       if (surface === "ribbed") {
         // Ribs in the right half.
         const n = Math.max(2, Math.floor((s.R - INSET) / (RIB_PITCH * 1000 * 2)));
@@ -41,7 +49,13 @@ function makeGriddle(kind: string, surface: Surface): KindDef {
     mesh(p, s) {
       const plateTop = s.h - GUARD;
       lineModule(p, s, { base: "doors", knobs: columns(s.w, 0.4), underTop: plateTop - PLATE });
-      p.box(mat, -s.w / 2, s.w / 2, plateTop - PLATE, plateTop, -s.d / 2, s.d / 2);
+      const gz0 = s.d / 2 - CONTROLS - 0.03;
+      if (surface === "chrome") {
+        // The mirror-polished field in a dark frame: without the frame the chrome reads as more
+        // of the steel body.
+        p.box("top", -s.w / 2, s.w / 2, plateTop - PLATE, plateTop - CHROME_STEP, -s.d / 2, s.d / 2);
+        p.box(mat, -s.w / 2 + CHROME_FRAME, s.w / 2 - CHROME_FRAME, plateTop - PLATE, plateTop, -s.d / 2 + SHEET + CHROME_FRAME, gz0 - CHROME_FRAME);
+      } else p.box(mat, -s.w / 2, s.w / 2, plateTop - PLATE, plateTop, -s.d / 2, s.d / 2);
       if (surface === "ribbed") {
         const x0 = 0.01;
         const x1 = s.w / 2 - 0.04;
@@ -56,7 +70,6 @@ function makeGriddle(kind: string, surface: Surface): KindDef {
       p.box("steel", -s.w / 2, -s.w / 2 + SHEET, plateTop, s.h, -s.d / 2, 0);
       p.box("steel", s.w / 2 - SHEET, s.w / 2, plateTop, s.h, -s.d / 2, 0);
       // Grease gutter at the front of the plate with its outlet at the right.
-      const gz0 = s.d / 2 - CONTROLS - 0.03;
       p.box("steelDark", -s.w / 2 + 0.05, s.w / 2 - 0.05, plateTop - 0.01, plateTop + 0.002, gz0, gz0 + 0.03);
       p.cyl("knob", s.w / 2 - 0.08, gz0 + 0.015, plateTop - 0.012, plateTop + 0.003, 0.01);
       // The grease drawer under the outlet, in the control strip at the right.

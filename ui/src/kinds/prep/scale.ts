@@ -1,5 +1,5 @@
-// Scales: a bench scale (Tischwaage) with the weighing platform over a flat body and the display
-// console at the front, standing on a work table (`tableTop`); and a platform
+// Scales: a bench scale (Tischwaage), a flat body with the weighing platform resting just above
+// it and the display console at the front, standing on a work table (`tableTop`); and a platform
 // scale (Plattformwaage) on the floor with the display on a column at the back.
 
 import type { KindDef } from "../types";
@@ -7,12 +7,21 @@ import { machineFeet, MACHINE_FOOT, mBox, metres, pRect } from "./common";
 
 /** Depth of the display console of the bench scale, as a share of the depth. */
 const CONSOLE = 0.2;
+/** Thickness of the bench scale's platform and its gap over the body (m). */
+const PAN = 0.02;
+const PAN_GAP = 0.004;
 /** Height of the platform scale's frame and plate (m). */
 const PLATFORM = 0.08;
 const PLATE = 0.015;
 /** Display head of the platform scale (m). */
 const HEAD_H = 0.15;
 const HEAD_D = 0.1;
+
+/** Heights of the bench scale (m): body top, platform underside; the platform's top is `h`. */
+function benchLevels(h: number) {
+  const pan0 = h - PAN;
+  return { body: pan0 - PAN_GAP, pan0 };
+}
 
 export const benchScale: KindDef = {
   kind: "benchScale",
@@ -24,22 +33,29 @@ export const benchScale: KindDef = {
   },
   elevation(f) {
     const { w, h } = metres(f.item);
-    mBox(f, "detail", -w * 0.4, w * 0.4, h * 0.55, h * 0.75, "item-dark");
-    mBox(f, "detail", -w / 2 + 0.01, w / 2 - 0.01, h * 0.85, h);
+    const { body, pan0 } = benchLevels(h);
+    // The console's display face on the body's front, the platform above it.
+    mBox(f, "detail", -w * 0.4, w * 0.4, MACHINE_FOOT + 0.01, body - 0.01, "item-dark");
+    mBox(f, "detail", -w / 2 + 0.01, w / 2 - 0.01, pan0, h);
   },
   mesh(p, s) {
     const { w, d, h } = s;
+    const { body, pan0 } = benchLevels(h);
     machineFeet(p, -w / 2, w / 2, -d / 2, d / 2);
-    p.box("panel", -w / 2, w / 2, MACHINE_FOOT, h * 0.55, -d / 2, d / 2);
-    // Console with the display and keys on its top, facing the user.
+    // The body stops short of the front for the console's face plate (no faces in one plane).
+    const zb = d / 2 - 0.004;
+    p.box("panel", -w / 2, w / 2, MACHINE_FOOT, body, -d / 2, zb);
+    // The console at the front: a dark face with the display and two keys, facing the user, and
+    // its dark top in front of the platform.
     const c0 = d / 2 - d * CONSOLE;
-    p.box("panelDark", -w * 0.4, w * 0.4, h * 0.55, h * 0.75, c0, d / 2);
-    p.box("glassDark", -w * 0.3, w * 0.05, h * 0.75, h * 0.75 + 0.002, c0 + 0.01, d / 2 - 0.01);
-    for (const x of [w * 0.15, w * 0.27]) p.box("knob", x - 0.015, x + 0.015, h * 0.75, h * 0.75 + 0.003, c0 + 0.02, d / 2 - 0.02);
-    // The platform on its load cell.
-    const pz = (-d / 2 + c0) / 2;
-    p.cyl("steelDark", 0, pz, h * 0.55, h * 0.85, 0.02);
-    p.box("steel", -w / 2 + 0.01, w / 2 - 0.01, h * 0.85, h, -d / 2 + 0.01, c0 - d * 0.02);
+    const y0 = MACHINE_FOOT + 0.01;
+    const y1 = body - 0.01;
+    p.box("panelDark", -w * 0.4, w * 0.4, y0, y1, zb, zb + 0.002);
+    p.box("panelDark", -w * 0.4, w * 0.4, body, body + 0.002, c0, zb);
+    p.box("glassDark", -w * 0.34, w * 0.05, y0 + 0.012, y1 - 0.012, zb + 0.002, d / 2);
+    for (const x of [w * 0.15, w * 0.27]) p.box("knob", x - 0.015, x + 0.015, y0 + 0.015, y1 - 0.015, zb + 0.002, d / 2);
+    // The platform resting on the load cell, a few millimetres over the body.
+    p.box("steel", -w / 2 + 0.01, w / 2 - 0.01, pan0, h, -d / 2 + 0.01, c0 - d * 0.02);
   },
 };
 

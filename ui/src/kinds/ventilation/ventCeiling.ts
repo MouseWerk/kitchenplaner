@@ -13,6 +13,10 @@ const LAYER = 0.03;
 const PROFILE = 0.02;
 /** Baffles across an extraction cassette. */
 const BAFFLES = 3;
+/** Edge frame round the cassettes: its height above the lower edge and how far the plenum above
+ * stands back from it, so the module shows its profile from the side (m). */
+const FRAME = 0.06;
+const SETBACK = 0.015;
 
 function grid(w: number, d: number): { cols: number; rows: number } {
   return { cols: Math.max(1, Math.round(w / CELL_W)), rows: Math.max(1, Math.round(d / CELL_D)) };
@@ -42,18 +46,34 @@ export const ventCeiling: KindDef = {
     if (cols * rows === 1) cross(s, "overhead", false);
   },
   elevation(f) {
-    f.line("detail", [f.l, f.z0 + LAYER * 1000], [f.r, f.z0 + LAYER * 1000]);
+    ceilingFront(f, Math.max(1, Math.round(f.w / (CELL_W * 1000))));
   },
   elevationSide(f) {
-    f.line("detail", [f.l, f.z0 + LAYER * 1000], [f.r, f.z0 + LAYER * 1000]);
+    ceilingFront(f, Math.max(1, Math.round(f.w / (CELL_D * 1000))));
   },
   mesh(p, s) {
     const { w, d, h } = s;
-    // The plenum box above the cassettes.
-    p.box("steel", -w / 2, w / 2, LAYER, h, -d / 2, d / 2);
     const { cols, rows } = grid(w, d);
     const cw = w / cols;
     const cd = d / rows;
+    // The plenum box above the cassettes, set back from the edge frame, with the joints of its
+    // panels over the grid showing on the top and the sides.
+    const o = SETBACK;
+    p.box("steel", -w / 2 + o, w / 2 - o, FRAME, h - 0.002, -d / 2 + o, d / 2 - o);
+    for (const x of [-w / 2, w / 2 - o]) p.box("steelDark", x, x + o, FRAME, FRAME + 0.004, -d / 2, d / 2);
+    for (const z of [-d / 2, d / 2 - o]) p.box("steelDark", -w / 2 + o, w / 2 - o, FRAME, FRAME + 0.004, z, z + o);
+    for (let i = 1; i < cols; i++) {
+      const x = -w / 2 + i * cw;
+      p.box("steelDark", x - 0.003, x + 0.003, h - 0.003, h, -d / 2 + o, d / 2 - o);
+      for (const z of [-d / 2 + o - 0.001, d / 2 - o - 0.002]) p.box("steelDark", x - 0.003, x + 0.003, FRAME, h - 0.002, z, z + 0.003);
+    }
+    for (let j = 1; j < rows; j++) {
+      const z = -d / 2 + j * cd;
+      p.box("steelDark", -w / 2 + o, w / 2 - o, h - 0.003, h, z - 0.003, z + 0.003);
+    }
+    // Edge frame round the cassette layer.
+    for (const x of [-w / 2, w / 2 - PROFILE]) p.box("steel", x, x + PROFILE, LAYER, FRAME, -d / 2, d / 2);
+    for (const z of [-d / 2, d / 2 - PROFILE]) p.box("steel", -w / 2 + PROFILE, w / 2 - PROFILE, LAYER, FRAME, z, z + PROFILE);
     for (let i = 0; i < cols; i++) {
       for (let j = 0; j < rows; j++) {
         const x0 = -w / 2 + i * cw + PROFILE / 2;
@@ -86,3 +106,17 @@ export const ventCeiling: KindDef = {
     }
   },
 };
+
+/** The front of a module: the cassette layer, the edge frame, the plenum set back above it with the joints of its panels. */
+function ceilingFront(f: Parameters<KindDef["elevation"]>[0], cells: number): void {
+  const { l, r, z0, top } = f;
+  const o = SETBACK * 1000;
+  f.line("detail", [l, z0 + LAYER * 1000], [r, z0 + LAYER * 1000]);
+  f.line("detail", [l, z0 + FRAME * 1000], [r, z0 + FRAME * 1000]);
+  f.line("detail", [l + o, z0 + FRAME * 1000], [l + o, top]);
+  f.line("detail", [r - o, z0 + FRAME * 1000], [r - o, top]);
+  for (let i = 1; i < cells; i++) {
+    const x = l + (f.w * i) / cells;
+    f.line("detail", [x, z0 + FRAME * 1000], [x, top]);
+  }
+}

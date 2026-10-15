@@ -7,11 +7,11 @@ import type { KindDef } from "../types";
 // Sizes (m).
 /** Width of one socket place. */
 const PLACE = 0.09;
-/** Depth of the housing from the wall. */
-const HOUSING = 0.05;
+/** How far the sockets stand out of the housing's face (the rest of the depth is housing). */
+const PROUD = 0.022;
 /** Size of a 230 V socket's lid and radius of the 400 V socket. */
-const LID = 0.065;
-const CEE = 0.035;
+const LID = 0.056;
+const CEE = 0.03;
 
 /** Socket places along the width (m), centred, and whether the last one is the 400 V socket. */
 function places(w: number): { xs: number[]; cee: boolean } {
@@ -23,9 +23,15 @@ export const socketPanel: KindDef = {
   kind: "socketPanel",
   placement: "overhead",
   plan(s) {
-    s.line("overhead", [s.L, s.B + HOUSING * 1000], [s.R, s.B + HOUSING * 1000]);
-    const r = Math.min(LID * 500, (s.d - HOUSING * 1000) / 2 + 10, s.d / 2);
-    for (const x of places(s.w / 1000).xs) s.circle("overhead", x * 1000, s.F - r, r);
+    // The housing's face and the sockets in front of it, as 3D shows them from above (the round
+    // 400 V socket points to the front, so from above it is a rectangle too).
+    const face = s.F - PROUD * 1000;
+    s.line("overhead", [s.L, face], [s.R, face]);
+    const { xs, cee } = places(s.w / 1000);
+    xs.forEach((x, i) => {
+      const half = (cee && i === xs.length - 1 ? CEE : LID / 2) * 1000;
+      s.rect("overhead", x * 1000 - half, face, x * 1000 + half, s.F);
+    });
   },
   elevation(f) {
     const c = (f.l + f.r) / 2;
@@ -45,7 +51,7 @@ export const socketPanel: KindDef = {
   },
   mesh(p, s) {
     const B = -s.d / 2;
-    const zf = B + Math.min(HOUSING, s.d * 0.6);
+    const zf = s.d / 2 - PROUD;
     p.box("panel", -s.w / 2, s.w / 2, 0, s.h, B, zf);
     const yc = s.h / 2;
     const { xs, cee } = places(s.w);
@@ -55,9 +61,11 @@ export const socketPanel: KindDef = {
         p.rod("panelDark", "z", x, yc, (zf + s.d / 2) / 2, s.d / 2 - zf, CEE);
         p.box("knob", x - CEE * 0.6, x + CEE * 0.6, yc + CEE * 0.6, yc + CEE, zf, s.d / 2);
       } else {
-        // 230 V socket with a flip lid and its hinge at the top.
-        p.box("panelDark", x - LID / 2, x + LID / 2, yc - LID / 2, yc + LID / 2, zf, s.d / 2);
-        p.rod("knob", "x", x, yc + LID / 2 - 0.006, s.d / 2 - 0.006, LID * 0.8, 0.006);
+        // 230 V socket: a flat base, the flip lid with its round cap, hinged at the top.
+        p.box("panelDark", x - LID / 2, x + LID / 2, yc - LID / 2, yc + LID / 2, zf, zf + PROUD * 0.4);
+        p.box("panelDark", x - LID * 0.42, x + LID * 0.42, yc - LID * 0.42, yc + LID * 0.42, zf + PROUD * 0.4, s.d / 2 - 0.004);
+        p.rod("knob", "z", x, yc, s.d / 2 - 0.002, 0.004, LID * 0.25);
+        p.rod("knob", "x", x, yc + LID * 0.42, zf + PROUD * 0.55, LID * 0.7, 0.004);
       }
     });
     // A small indicator light under the sockets.

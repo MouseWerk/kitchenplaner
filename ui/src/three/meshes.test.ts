@@ -58,7 +58,8 @@ describe("buildItemObject", () => {
     const hood = item("hood-wall", { elevation: 2100 });
     const b = boxOf(buildItemObject(hood));
     expect(b.min.y).toBeCloseTo(2.1, 4);
-    expect(b.max.y).toBeCloseTo(2.1 + hood.height / 1000, 4);
+    // The exhaust collars rise above the canopy by the kind's declared rise.
+    expect(b.max.y).toBeCloseTo(2.1 + (hood.height + (kindDef("hood").rise ?? 0)) / 1000, 4);
     const shelf = boxOf(buildItemObject(item("wall-shelf")));
     expect(shelf.min.y).toBeCloseTo(1.5, 4);
   });

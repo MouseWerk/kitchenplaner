@@ -203,7 +203,7 @@ export const de = {
   "cat.lineHeatedCabinet900": "Wärmeschrank-Unterbau, 900er Linie",
   "catDesc.range": "Standherd mit Kochplatten (Elektro) oder offenen Brennern (Gas) und Backofen darunter.",
   "catDesc.rangeOpen": "Herd mit 2, 4 oder 6 Kochstellen je nach Breite, darunter ein offener Unterbau.",
-  "catDesc.solidTop": "Durchgehende Gussplatte, in der Mitte am heißesten: Töpfe lassen sich frei verschieben.",
+  "catDesc.solidTop": "Durchgehende Gussplatte, Töpfe lassen sich frei verschieben: mit Gas in der Mitte am heißesten, elektrisch in Heizzonen.",
   "catDesc.induction": "Induktionsfelder unter Glaskeramik, schnell regelbar und mit wenig Abwärme.",
   "catDesc.wok": "Wokstelle mit Gas-Ringbrenner oder Induktionsmulde, Schwenkhahn und Spülrinne.",
   "catDesc.pastaCooker": "Kochbecken mit Portionskörben für Nudeln und Gemüse, mit Zu- und Ablauf.",

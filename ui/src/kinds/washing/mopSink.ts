@@ -1,8 +1,9 @@
-// Cleaning sink (Ausgussbecken): a low, deep basin on the floor for filling and emptying buckets,
-// with a folding grate to stand the bucket on and a wall tap on the back plate above it.
+// Cleaning sink (Ausgussbecken): a low, deep basin on a body with a kick plate, for filling and
+// emptying buckets, with a folding grate to stand the bucket on and a wall tap on the back plate
+// above it.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { SHEET, tap } from "../parts/mesh";
+import { PLINTH, SHEET, tap } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { bowlDrain } from "./common";
@@ -38,6 +39,7 @@ export const mopSink: KindDef = {
     const rim = z0 + rimOf(f.item.height / 1000) * 1000;
     const c = (l + r) / 2;
     f.line("detail", [l, rim], [r, rim]);
+    f.line("detail", [l, z0 + Math.min(PLINTH * 1000, (rim - z0 - DEPTH * 1000) / 2)], [r, z0 + Math.min(PLINTH * 1000, (rim - z0 - DEPTH * 1000) / 2)]);
     f.box("hidden", l + I, r - I, rim - DEPTH * 1000, rim - I / 2);
     f.box("detail", l, r, rim, top);
     const tz = rim + (top - rim) * 0.6;
@@ -48,9 +50,11 @@ export const mopSink: KindDef = {
     const zf = s.d / 2;
     const rim = rimOf(s.h);
     const floor = rim - DEPTH;
-    // Pedestal with a kick plate, the basin on it, the back plate up to the top.
-    p.box("steelDark", -s.w / 2 + 0.05, s.w / 2 - 0.05, 0, floor, zb + PLATE, zf - 0.06);
-    p.box("steel", -s.w / 2 + 0.02, s.w / 2 - 0.02, floor * 0.5, floor, zb + PLATE, zf - 0.02);
+    // The body under the basin as wide as the basin, its front a little back from the rim, on a
+    // kick plate set back further; the back plate up to the top.
+    const kick = Math.min(PLINTH, floor / 2);
+    p.box("steelDark", -s.w / 2 + 0.03, s.w / 2 - 0.03, 0, kick, zb + PLATE, zf - 0.07);
+    p.box("steel", -s.w / 2, s.w / 2, kick, floor, zb + PLATE, zf - 0.02);
     p.tub("steel", -s.w / 2, s.w / 2, floor, rim, zb + PLATE, zf, SHEET * 1.5);
     p.rod("steel", "x", 0, rim - 0.012, zf - 0.012, s.w, 0.012);
     bowlDrain(p, 0, 0, floor, zb, false);

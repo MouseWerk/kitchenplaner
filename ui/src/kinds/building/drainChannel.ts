@@ -1,5 +1,6 @@
 // Drainage channel (Entwässerungsrinne): a stainless box channel flush with the floor, a grate
-// of bars along the channel held by cross ties, the outlet at the right end.
+// of bars along the channel held by cross ties, the outlet at the right end. The plan draws the
+// cross ties where 3D has them and the outlet below the grate hidden.
 
 import type { KindDef } from "../types";
 
@@ -14,15 +15,22 @@ const TIE_PITCH = 0.25;
 /** Radius of the outlet below the grate. */
 const OUTLET = 0.05;
 
+/** Positions of the grate's cross ties along the channel (m, centred). */
+function ties(w: number): number[] {
+  const len = w - 2 * RIM;
+  const n = Math.max(1, Math.ceil(len / TIE_PITCH) - 1);
+  return Array.from({ length: n }, (_, i) => -w / 2 + RIM + (len * (i + 1)) / (n + 1));
+}
+
 export const drainChannel: KindDef = {
   kind: "drainChannel",
   placement: "flat",
   plan(s) {
     const r = RIM * 1000;
     s.rect("detail", s.L + r, s.B + r, s.R - r, s.F - r);
-    s.line("detail", [s.L + r, 0], [s.R - r, 0]);
+    for (const x of ties(s.w / 1000)) s.line("detail", [x * 1000, s.B + r], [x * 1000, s.F - r]);
     const o = Math.min(OUTLET * 1000, s.d / 2 - r);
-    s.circle("detail", s.R - r - o - 20, 0, o);
+    s.circle("hidden", s.R - r - o - 20, 0, o);
   },
   elevation() {},
   mesh(p, s) {
@@ -43,11 +51,6 @@ export const drainChannel: KindDef = {
       const z = -D + RIM + pitch * (i + 0.5);
       p.box("steel", -W + RIM, W - RIM, s.h * 0.7, s.h, z - BAR / 2, z + BAR / 2);
     }
-    const len = s.w - 2 * RIM;
-    const ties = Math.max(1, Math.ceil(len / TIE_PITCH) - 1);
-    for (let i = 1; i <= ties; i++) {
-      const x = -W + RIM + (len * i) / (ties + 1);
-      p.box("steelDark", x - BAR / 2, x + BAR / 2, s.h * 0.5, s.h * 0.7, -D + RIM, D - RIM);
-    }
+    for (const x of ties(s.w)) p.box("steelDark", x - BAR / 2, x + BAR / 2, s.h * 0.5, s.h * 0.7, -D + RIM, D - RIM);
   },
 };

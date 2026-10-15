@@ -27,7 +27,7 @@ function makeRackConveyor(kind: string, dryer: boolean): KindDef {
       flowArrow(s, s.L + s.w * 0.2, s.R - s.w * 0.2, s.d / 4, "right");
     },
     elevation(f) {
-      tunnelFront(f, f.l, f.r, zones(f.w, dryer), PANEL_ZONE);
+      tunnelFront(f, f.l, f.r, zones(f.w, dryer), PANEL_ZONE, dryer ? ZONE_SHARES.length : -1);
     },
     mesh(p, s) {
       tunnelHousing(
@@ -37,6 +37,7 @@ function makeRackConveyor(kind: string, dryer: boolean): KindDef {
         s.w / 2,
         zones(s.w * 1000, dryer).map((z) => z / 1000),
         PANEL_ZONE,
+        dryer ? ZONE_SHARES.length : -1,
       );
     },
   };
