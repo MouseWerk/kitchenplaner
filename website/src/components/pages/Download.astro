@@ -1,8 +1,8 @@
 ---
 import Base from '../../layouts/Base.astro';
 import { dicts, fill, type Lang } from '../../i18n';
-import { getDownloads, button, formatSize, formatDate } from '../../data/release.mjs';
-import { ROUTES, RELEASES_URL, absolute } from '../../data/site.mjs';
+import { getDownloads, button, formatSize, formatDate, available } from '../../data/release.mjs';
+import { ROUTES, RELEASES_URL } from '../../data/site.mjs';
 
 interface Props { lang: Lang }
 const { lang } = Astro.props;
@@ -18,16 +18,10 @@ const platforms = [
   { id: 'linux', text: dl.linux, primary: button(d, 'linux-appimage'), secondary: button(d, 'linux-deb') },
 ] as const;
 const sums = button(d, 'checksums');
-const crumbs = {
-  '@type': 'BreadcrumbList',
-  itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Kitchenplaner', item: absolute(ROUTES.home[lang]) },
-    { '@type': 'ListItem', position: 2, name: dl.title, item: absolute(ROUTES.download[lang]) },
-  ],
-};
-const meta = (b: { file: string | null; size: number | null }) => [b.file, formatSize(b.size, lang)].filter(Boolean).join(', ');
+// The button names the variant and size ("x64-setup.exe, 1,9 MB"); the whole file name is the title.
+const meta = (b: { file: string | null; size: number | null }) => [b.file?.replace(/^Kitchenplaner_[\d.]+_/, ''), formatSize(b.size, lang)].filter(Boolean).join(', ');
 ---
-<Base lang={lang} page="download" title={t.meta.download.title} description={t.meta.download.description} schema={[crumbs]}>
+<Base lang={lang} page="download" title={t.meta.download.title} description={t.meta.download.description}>
   <div class="wrap page-head">
     <h1>{dl.title}</h1>
     <p class="lead">
@@ -47,12 +41,12 @@ const meta = (b: { file: string | null; size: number | null }) => [b.file, forma
           <section class="platform" id={p.id} aria-labelledby={`${p.id}-titel`}>
             <h2 id={`${p.id}-titel`}>{p.text.title}</h2>
             <p class="muted">{p.text.req}</p>
-            <a class="btn btn-primary" href={p.primary.href} rel="noopener">
+            <a class="btn btn-primary" href={p.primary.href} rel="noopener" title={p.primary.file ?? undefined}>
               <span>{p.text.primary}</span>
               {p.primary.file && <small class="file">{meta(p.primary)}</small>}
             </a>
             {p.secondary && 'secondary' in p.text && (
-              <a class="btn btn-secondary" href={p.secondary.href} rel="noopener">
+              <a class="btn btn-secondary" href={p.secondary.href} rel="noopener" title={p.secondary.file ?? undefined}>
                 <span>{p.text.secondary}</span>
                 {p.secondary.file && <small class="file">{meta(p.secondary)}</small>}
               </a>
@@ -61,7 +55,7 @@ const meta = (b: { file: string | null; size: number | null }) => [b.file, forma
               {p.text.steps.map((s) => (
                 <li>
                   {s.text}
-                  {'cmd' in s && s.cmd && <code class="cmd">{fill(s.cmd, vars)}</code>}
+                  {'cmd' in s && s.cmd && <code class="cmd" tabindex="0">{fill(s.cmd, vars)}</code>}
                 </li>
               ))}
             </ol>
@@ -69,13 +63,19 @@ const meta = (b: { file: string | null; size: number | null }) => [b.file, forma
         ))}
       </div>
 
-      <div class="split">
+      <div class="tiles">
         <section class="block" id="pruefsummen" aria-labelledby="pruefsummen-titel">
           <h2 id="pruefsummen-titel">{dl.checksums.title}</h2>
           <p class="muted">{dl.checksums.text}</p>
-          <code class="cmd">{dl.checksums.cmd}</code>
+          <code class="cmd" tabindex="0">{dl.checksums.cmd}</code>
           <p><a href={sums.href} rel="noopener">{dl.checksums.file}</a></p>
         </section>
+        {available(d, dl.updates.since) && (
+          <section class="block" id="updates" aria-labelledby="updates-titel">
+            <h2 id="updates-titel">{dl.updates.title}</h2>
+            <p class="muted">{dl.updates.text}</p>
+          </section>
+        )}
         <section class="block" aria-labelledby="beispiel-titel">
           <h2 id="beispiel-titel">{dl.example.title}</h2>
           <p class="muted">{dl.example.text}</p>

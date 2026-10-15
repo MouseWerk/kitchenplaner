@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseNotes, inline } from '../src/data/notes.mjs';
-import { toDownloads, compareVersions } from '../src/data/release.mjs';
+import { toDownloads, compareVersions, available } from '../src/data/release.mjs';
+import { CROPS } from '../src/data/crops.mjs';
 import { checkCatalogs } from './check-i18n.mjs';
 import { checkSheet, checkContrast } from './check-design.mjs';
 import { de } from '../src/i18n/de.mjs';
@@ -89,4 +90,26 @@ test('the design guard finds accent frames, left bars, literal colors and remove
   const p = checkSheet('x.css', css).join('\n');
   for (const s of ['colored frame', 'bars on the left', 'literal color', 'outline removed', 'var(--fw-*)']) assert.ok(p.includes(s), s);
   assert.deepEqual(checkContrast(':root { --text: #777777; --bg: #888888; }').filter((x) => x.includes('--text on --bg')).length, 1);
+});
+
+test('update files (.sig, latest.json) are never offered as downloads', () => {
+  const r = rel('v0.2.0');
+  r.assets.push(asset('Kitchenplaner_0.2.0_x64-setup.exe.sig'), asset('latest.json'), asset('Kitchenplaner_0.2.0_amd64.AppImage.sig'));
+  const d = toDownloads([r]);
+  for (const b of d.buttons) assert.ok(!/\.sig$|latest\.json$/.test(b.file ?? ''), b.file);
+  assert.equal(d.buttons.find((b) => b.id === 'win-setup')?.file, 'Kitchenplaner_0.2.0_x64-setup.exe');
+});
+
+test('texts for a version show only once that version is published', () => {
+  assert.equal(available(toDownloads([rel('v0.1.0')]), '0.2.0'), false);
+  assert.equal(available(toDownloads([rel('v0.2.0')]), '0.2.0'), true);
+  assert.equal(available(toDownloads(null), '0.2.0'), false);
+  assert.equal(available(toDownloads(null), undefined), true);
+});
+
+test('phone crops lie inside the 3840 x 2160 screenshots and are wide enough to stay sharp', () => {
+  for (const [name, c] of Object.entries(CROPS)) {
+    assert.ok(c.left >= 0 && c.top >= 0 && c.left + c.width <= 3840 && c.top + c.height <= 2160, name);
+    assert.ok(c.width >= 600, `${name} is only ${c.width} px wide`);
+  }
 });

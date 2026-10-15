@@ -2,9 +2,11 @@
 import Base from '../../layouts/Base.astro';
 import Shot from '../Shot.astro';
 import { dicts, fill, type Lang } from '../../i18n';
-import { getDownloads } from '../../data/release.mjs';
-import { ROUTES, REPO_URL, ISSUES_URL, LICENSE_URL, LATEST_URL, SITE_NAME, absolute } from '../../data/site.mjs';
-import type { ShotName } from '../../data/shots';
+import { getDownloads, available } from '../../data/release.mjs';
+import { ROUTES, REPO_URL, ISSUES_URL, LATEST_URL } from '../../data/site.mjs';
+import { softwareApplication } from '../../data/jsonld';
+import { shot, crop, type ShotName } from '../../data/shots';
+import { variant, DESKTOP_WIDTHS, PHONE_WIDTHS, PHONE, PHONE_SIZES } from '../../data/images';
 
 interface Props { lang: Lang }
 const { lang } = Astro.props;
@@ -14,26 +16,28 @@ const d = await getDownloads();
 
 const FEATURE_SHOTS: ShotName[] = ['02-grundriss', '08-ansichten', '04-3d-uebersicht', '10-katalog-vorschau', '11-operator-verschieben', '12-raum-wand'];
 const FEATURE_SIZES = '(min-width: 1244px) 680px, (min-width: 960px) 56vw, calc(100vw - 32px)';
+const more = h.features.more.filter((m) => available(d, 'since' in m ? m.since : undefined));
 
-const app = {
-  '@type': 'SoftwareApplication',
-  name: SITE_NAME,
+// The hero is the largest paint: preload the one variant the browser will show (same files as Shot).
+const HERO_SIZES = '(min-width: 1244px) 1180px, calc(100vw - 32px)';
+const [heroDark, heroLight, heroPhone] = await Promise.all([
+  variant(shot('01-alle-ansichten'), DESKTOP_WIDTHS, 1200),
+  variant(shot('14-hell-alle-ansichten'), DESKTOP_WIDTHS, 1200),
+  variant(crop('05-3d-kochinsel')!, PHONE_WIDTHS, 720),
+]);
+const preload = [
+  { media: PHONE, srcset: heroPhone.avif, sizes: PHONE_SIZES },
+  { media: '(min-width: 960px) and (prefers-color-scheme: dark)', srcset: heroDark.avif, sizes: HERO_SIZES },
+  { media: '(min-width: 960px) and (prefers-color-scheme: light)', srcset: heroLight.avif, sizes: HERO_SIZES },
+];
+
+const app = await softwareApplication(lang, d, {
   description: t.meta.home.description,
-  url: absolute(ROUTES.home[lang]),
-  applicationCategory: 'DesignApplication',
-  operatingSystem: 'Windows 10, Windows 11, macOS 11+, Linux',
-  inLanguage: ['de', 'en'],
-  isAccessibleForFree: true,
-  license: LICENSE_URL,
-  offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
-  downloadUrl: absolute(ROUTES.download[lang]),
-  codeRepository: REPO_URL,
-  image: absolute('/og.jpg'),
-  author: { '@type': 'Person', name: 'Maurice Kleindienst' },
-  ...(d.latest ? { softwareVersion: d.latest.version } : {}),
-};
+  features: [...h.features.items.map((f) => f.title), ...more.map((m) => m.title)],
+  shots: [['01-alle-ansichten', h.heroAlt], ...FEATURE_SHOTS.map((s, i): [ShotName, string] => [s, h.features.items[i].alt])],
+});
 ---
-<Base lang={lang} page="home" title={t.meta.home.title} description={t.meta.home.description} schema={[app]}>
+<Base lang={lang} page="home" title={t.meta.home.title} description={t.meta.home.description} schema={[app]} preload={preload}>
   <section class="hero" aria-labelledby="titel">
     <div class="wrap">
       <div class="hero-text">
@@ -44,14 +48,14 @@ const app = {
           <a class="btn btn-primary" href={ROUTES.download[lang]}>{h.download}</a>
           <a class="btn btn-secondary" href={ROUTES.example[lang]}>{h.example}</a>
         </div>
-        <ul class="facts">
+        <p class="facts">
           {d.latest
-            ? <li><a href={ROUTES.changelog[lang]}>{fill(h.version, { v: d.latest.version })}</a></li>
-            : <li><a href={LATEST_URL} rel="noopener">GitHub</a></li>}
-          {h.facts.map((f) => <li>{f}</li>)}
-        </ul>
+            ? <a href={ROUTES.changelog[lang]}>{fill(h.version, { v: d.latest.version })}</a>
+            : <a href={LATEST_URL} rel="noopener">GitHub</a>}
+          {h.facts.map((f) => <><span class="sep" aria-hidden="true">·</span><span>{f}</span></>)}
+        </p>
       </div>
-      <Shot name="01-alle-ansichten" light="14-hell-alle-ansichten" alt={h.heroAlt} sizes="(min-width: 1244px) 1180px, calc(100vw - 32px)" eager />
+      <Shot name="01-alle-ansichten" light="14-hell-alle-ansichten" phone="05-3d-kochinsel" alt={h.heroAlt} sizes={HERO_SIZES} eager />
     </div>
   </section>
 
@@ -84,13 +88,16 @@ const app = {
               <h3><span class="pos" aria-hidden="true">{i + 1}</span>{f.title}</h3>
               <p>{f.text}</p>
             </div>
-            <Shot name={FEATURE_SHOTS[i]} light={FEATURE_SHOTS[i] === '04-3d-uebersicht' ? '15-hell-3d' : undefined} alt={f.alt} sizes={FEATURE_SIZES} />
+            <figure>
+              <Shot name={FEATURE_SHOTS[i]} light={FEATURE_SHOTS[i] === '04-3d-uebersicht' ? '15-hell-3d' : undefined} alt={f.alt} sizes={FEATURE_SIZES} />
+              <figcaption class="phone-only">{f.caption}</figcaption>
+            </figure>
           </div>
         ))}
       </div>
       <h3 class="more-title">{h.features.moreTitle}</h3>
       <ul class="more">
-        {h.features.more.map((m) => (
+        {more.map((m) => (
           <li>
             <h4>{m.title}</h4>
             <p>{m.text}</p>
@@ -111,7 +118,7 @@ const app = {
         </div>
       </div>
       <div>
-        <h2>{h.cta.title}</h2>
+        <h2 id="ausprobieren-titel">{h.cta.title}</h2>
         <p class="lead">{h.cta.text}</p>
         <div class="buttons">
           <a class="btn btn-primary" href={ROUTES.download[lang]}>{h.cta.button}</a>

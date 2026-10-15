@@ -44,6 +44,7 @@
   --r-pill: 999px;
 
   --focus-ring: 2px solid var(--border-focus);
+  --z-menu: 50;
   --dur: 160ms;
 
   color-scheme: dark;

@@ -133,3 +133,11 @@ export function formatDate(iso, lang) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Berlin' });
 }
+
+/**
+ * Whether a feature described on the site is in the release people download: texts for a version
+ * that is not published yet stay hidden until it is (the site is built again after every release).
+ * @param {Downloads} d
+ * @param {string | undefined} since
+ */
+export const available = (d, since) => !since || (!!d.latest && compareVersions(d.latest.version, since) >= 0);

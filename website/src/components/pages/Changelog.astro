@@ -3,7 +3,7 @@ import Base from '../../layouts/Base.astro';
 import { dicts, fill, type Lang } from '../../i18n';
 import { getDownloads, formatDate } from '../../data/release.mjs';
 import { readNotes } from '../../data/notes.mjs';
-import { ROUTES, absolute } from '../../data/site.mjs';
+
 
 interface Props { lang: Lang }
 const { lang } = Astro.props;
@@ -12,15 +12,8 @@ const c = t.changelog;
 const d = await getDownloads();
 const notes = await readNotes();
 const sectionTitle = (s: string) => (c.sections as Record<string, string>)[s] ?? s;
-const crumbs = {
-  '@type': 'BreadcrumbList',
-  itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Kitchenplaner', item: absolute(ROUTES.home[lang]) },
-    { '@type': 'ListItem', position: 2, name: c.title, item: absolute(ROUTES.changelog[lang]) },
-  ],
-};
 ---
-<Base lang={lang} page="changelog" title={t.meta.changelog.title} description={t.meta.changelog.description} schema={[crumbs]}>
+<Base lang={lang} page="changelog" title={t.meta.changelog.title} description={t.meta.changelog.description}>
   <div class="wrap page-head">
     <h1>{c.title}</h1>
     <p class="lead">{c.lead}</p>

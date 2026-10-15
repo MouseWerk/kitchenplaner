@@ -3,7 +3,7 @@ import Base from '../../layouts/Base.astro';
 import Shot from '../Shot.astro';
 import { dicts, type Lang } from '../../i18n';
 import { getDownloads, button, formatSize } from '../../data/release.mjs';
-import { ROUTES, absolute } from '../../data/site.mjs';
+import { ROUTES } from '../../data/site.mjs';
 import { EXPORTS } from '../../data/exports.mjs';
 import type { ShotName } from '../../data/shots';
 
@@ -21,15 +21,8 @@ const GALLERY: ShotName[] = [
 ];
 const SIZES = '(min-width: 1244px) 574px, (min-width: 860px) calc(50vw - 44px), calc(100vw - 32px)';
 const plan = EXPORTS.find((x) => x.name === 'grundriss.svg')!;
-const crumbs = {
-  '@type': 'BreadcrumbList',
-  itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Kitchenplaner', item: absolute(ROUTES.home[lang]) },
-    { '@type': 'ListItem', position: 2, name: e.title, item: absolute(ROUTES.example[lang]) },
-  ],
-};
 ---
-<Base lang={lang} page="example" title={t.meta.example.title} description={t.meta.example.description} schema={[crumbs]}>
+<Base lang={lang} page="example" title={t.meta.example.title} description={t.meta.example.description}>
   <div class="wrap page-head">
     <h1>{e.title}</h1>
     <p class="lead">{e.lead}</p>

@@ -2,13 +2,16 @@
 // weights. Fails (exit 1) with a list of problems when
 // - an internal link, image or stylesheet points to a missing file, or a #fragment to a missing id;
 // - a page loads anything from another origin, has an inline script (JSON-LD excepted), an inline
-//   style or a style attribute, or lacks the Content-Security-Policy;
+//   style or a style attribute, or lacks the Content-Security-Policy (script files of this site are
+//   fine: script-src 'self');
 // - a title (15 to 60 characters) or description (110 to 160) is missing or used twice;
 // - a page has not exactly one h1, skips a heading level, or lacks lang;
 // - an <img> lacks alt, width, height or loading;
 // - an indexable page lacks its canonical or reciprocal hreflang (de, en, x-default), or the
 //   sitemap does not list exactly the indexable pages;
-// - CNAME, robots.txt, og.jpg or 404.html are missing;
+// - og:image is not a 1200 x 630 JPEG of this site, the Twitter card tags are missing, or the
+//   JSON-LD lacks WebSite and Organization (SoftwareApplication on the start pages) or has ratings;
+// - CNAME, robots.txt, the preview image, menu.js or 404.html are missing;
 // - a page is heavier than its budget (see BUDGET).
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
@@ -26,6 +29,8 @@ const ORIGIN = new URL(SITE_URL).origin;
 const BUDGET = { first: 350 * 1024, full: 2600 * 1024 };
 const VIEWPORTS = [
   { name: 'phone 360 @2x', width: 360, dpr: 2 },
+  { name: 'phone 430 @3x', width: 430, dpr: 3 },
+  { name: 'tablet 768 @2x', width: 768, dpr: 2 },
   { name: 'desktop 1440 @1x', width: 1440, dpr: 1 },
   { name: 'desktop 1440 @2x', width: 1440, dpr: 2 },
 ];
@@ -60,6 +65,18 @@ async function resolve(pathname) {
   const s = await exists(file);
   if (s?.isFile()) return file;
   if (s?.isDirectory()) return (await exists(join(file, 'index.html'))) ? join(file, 'index.html') : null;
+  return null;
+}
+
+/** Width and height of a JPEG, or null. */
+function jpegSize(buf) {
+  if (buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+  let i = 2;
+  while (i < buf.length && buf[i] === 0xff) {
+    const marker = buf[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
   return null;
 }
 
@@ -111,8 +128,8 @@ for (const file of pages) {
   const [head, body = ''] = html.split(/<\/head>/i);
 
   // Links and resources
-  for (const m of html.matchAll(/\s(href|src|srcset)="([^"]*)"/g)) {
-    const values = m[1] === 'srcset' ? decode(m[2]).split(',').map((c) => c.trim().split(/\s+/)[0]) : [decode(m[2])];
+  for (const m of html.matchAll(/\s(href|src|srcset|imagesrcset)="([^"]*)"/g)) {
+    const values = m[1].endsWith('srcset') ?decode(m[2]).split(',').map((c) => c.trim().split(/\s+/)[0]) : [decode(m[2])];
     for (const v of values) {
       links++;
       if (/^(mailto|tel):/.test(v)) continue;
@@ -145,12 +162,21 @@ for (const file of pages) {
   }
 
   // Content-Security-Policy: nothing inline that it would block.
-  if (!/<meta http-equiv="Content-Security-Policy" content="default-src 'none';/.test(head)) fail(path, 'no Content-Security-Policy meta tag');
+  if (!/<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self';/.test(head)) fail(path, 'no Content-Security-Policy meta tag');
   for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
-    if (!/type="application\/ld\+json"/.test(m[1])) fail(path, 'script other than JSON-LD (the CSP forbids scripts)');
+    const src = m[1].match(/\ssrc="([^"]+)"/)?.[1];
+    if (src) {
+      // Script files of this site are allowed (script-src 'self'); inline code is not.
+      if (m[2].trim()) fail(path, `script with src and inline code: ${src}`);
+      if (new URL(src, pageUrl).origin !== ORIGIN) fail(path, `script from another origin: ${src}`);
+    } else if (!/type="application\/ld\+json"/.test(m[1])) fail(path, 'inline script other than JSON-LD (the CSP forbids it)');
     else {
       try {
-        JSON.parse(m[2]);
+        const doc = JSON.parse(m[2]);
+        const types = (doc['@graph'] ?? []).map((n) => n['@type']);
+        for (const need of ['WebSite', 'Organization']) if (!types.includes(need)) fail(path, `JSON-LD without ${need}`);
+        if (/^\/(en\/)?$/.test(path) && !types.includes('SoftwareApplication')) fail(path, 'start page without SoftwareApplication in the JSON-LD');
+        if (JSON.stringify(doc).includes('aggregateRating') || JSON.stringify(doc).includes('"review"')) fail(path, 'JSON-LD with ratings or reviews');
       } catch (e) {
         fail(path, `JSON-LD does not parse: ${e.message}`);
       }
@@ -172,6 +198,19 @@ for (const file of pages) {
   titles.set(title, path);
   descs.set(desc, path);
   for (const p of ['og:title', 'og:description', 'og:image', 'og:image:alt']) if (!head.includes(`property="${p}"`)) fail(path, `missing ${p}`);
+  for (const p of ['twitter:card', 'twitter:title', 'twitter:description', 'twitter:image', 'twitter:image:alt']) if (!head.includes(`name="${p}"`)) fail(path, `missing ${p}`);
+  const meta = (k) => decode(head.match(new RegExp(`<meta (?:property|name)="${k}" content="([^"]*)"`))?.[1] ?? '');
+  if (meta('twitter:image') !== meta('og:image')) fail(path, 'twitter:image differs from og:image');
+  if (meta('og:title') !== title || meta('twitter:title') !== title) fail(path, 'og:title or twitter:title differs from the title');
+  const og = meta('og:image');
+  if (og) {
+    const f = og.startsWith(ORIGIN) ? await resolve(new URL(og).pathname) : null;
+    if (!f) fail(path, `og:image is not a file of this site: ${og}`);
+    else {
+      const size = jpegSize(await readFile(f));
+      if (!size || size.w !== 1200 || size.h !== 630) fail(path, `og:image is not a 1200 x 630 JPEG: ${og}`);
+    }
+  }
 
   // Headings and images
   const levels = [...body.matchAll(/<h([1-6])\b/g)].map((x) => Number(x[1]));
@@ -202,18 +241,21 @@ for (const file of pages) {
   // Weight
   const css = [...head.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((x) => x[1]);
   const fonts = [...head.matchAll(/<link rel="preload" href="([^"]+)" as="font"/g)].map((x) => x[1]);
+  const scripts = [...html.matchAll(/<script\b[^>]*\ssrc="([^"]+)"/g)].map((x) => x[1]);
   let base = Buffer.byteLength(html);
-  for (const u of [...css, ...fonts]) base += await sizeOf(new URL(u, pageUrl).pathname);
+  for (const u of [...css, ...fonts, ...scripts]) base += await sizeOf(new URL(u, pageUrl).pathname);
   const row = { path };
   for (const vp of VIEWPORTS) {
     let first = base;
     let full = base;
-    // One <picture> or <img> at a time: the AVIF <source> without a media query (the dark design,
-    // the default) or the <img> itself.
+    // One <picture> or <img> at a time: the crop's AVIF <source> where its max-width applies, otherwise the
+    // one without a media query (the dark design, the default), or the <img> itself.
     for (const m of body.matchAll(/<picture\b[^>]*>([\s\S]*?)<\/picture>|<img\b[^>]*>/g)) {
       const block = m[0];
       const img = attrs(block.match(/<img\b[^>]*>/)[0]);
-      const source = [...block.matchAll(/<source\b[^>]*>/g)].map((s) => attrs(s[0])).find((s) => !s.media && s.type === 'image/avif');
+      const sources = [...block.matchAll(/<source\b[^>]*>/g)].map((s) => attrs(s[0])).filter((s) => s.type === 'image/avif');
+      const narrow = sources.find((s) => Number(s.media?.match(/max-width: (\d+)px/)?.[1] ?? 0) >= vp.width);
+      const source = narrow || sources.find((s) => !s.media);
       const srcset = source?.srcset ?? img.srcset;
       const sizes = source?.sizes ?? img.sizes;
       const url = srcset ? pick(srcset, slotWidth(sizes ?? '100vw', vp.width) * vp.dpr) : img.src;
@@ -248,7 +290,7 @@ const cname = (await readFile(join(DIST, 'CNAME'), 'utf8').catch(() => '')).trim
 if (cname !== new URL(SITE_URL).host && !process.env.SITE_URL) fail('/CNAME', `is "${cname}", not ${new URL(SITE_URL).host}`);
 const robots = await readFile(join(DIST, 'robots.txt'), 'utf8').catch(() => '');
 if (!robots.includes(`Sitemap: ${ORIGIN}/sitemap.xml`)) fail('/robots.txt', 'does not point to the sitemap');
-for (const f of ['404.html', 'og.jpg']) if (!(await exists(join(DIST, f)))) fail(`/${f}`, 'missing');
+for (const f of ['404.html', 'og/home.jpg', 'menu.js']) if (!(await exists(join(DIST, f)))) fail(`/${f}`, 'missing');
 
 const kb = (n) => `${Math.round(n / 1024)} KB`.padStart(8);
 console.log('[site] page weights (first view / whole page):');

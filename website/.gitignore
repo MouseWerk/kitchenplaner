@@ -1,3 +1,5 @@
 /dist
 /.astro
 node_modules/
+# Phone crops of the screenshots, made by scripts/crops.mjs before every build.
+/src/assets/crops/

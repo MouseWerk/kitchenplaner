@@ -1,8 +1,9 @@
 ---
 /**
  * Every page: head (title, description, canonical, hreflang, preview tags, CSP, JSON-LD), the
- * header with the navigation and the language switch, the content and the footer. The site sends
- * no JavaScript; the CSP of the built pages forbids scripts, inline styles and other origins.
+ * header with the navigation and the language switch, the content and the footer. The only script
+ * is public/menu.js (Escape and outside clicks close the phone menu); the CSP of the built pages
+ * forbids inline scripts, inline styles and other origins.
  */
 import { getImage } from 'astro:assets';
 import interLatin from '../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
@@ -11,6 +12,7 @@ import '../styles/fonts.css';
 import '../styles/tokens.css';
 import '../styles/site.css';
 import { dicts, type Lang } from '../i18n';
+import { website, organization, breadcrumbs, graph } from '../data/jsonld';
 import { ROUTES, SITE_NAME, REPO_URL, RELEASES_URL, ISSUES_URL, LICENSE_URL, absolute } from '../data/site.mjs';
 
 type PageKey = keyof typeof ROUTES;
@@ -22,35 +24,36 @@ interface Props {
   title: string;
   description: string;
   noindex?: boolean;
-  /** Page-specific schema.org nodes; WebSite is added here. */
+  /** Page-specific schema.org nodes; WebSite, Organization and the breadcrumbs are added here. */
   schema?: Record<string, unknown>[];
+  /** Responsive preloads of the largest image (the start page's hero), one per media query. */
+  preload?: { media: string; srcset: string; sizes: string }[];
   /** The navigation entry to mark as current (defaults to the page). */
   current?: PageKey;
 }
 
-const { lang, page, title, description, noindex = false, schema = [], current = page } = Astro.props;
+const { lang, page, title, description, noindex = false, schema = [], preload = [], current = page } = Astro.props;
 const t = dicts[lang];
 const other: Lang = lang === 'de' ? 'en' : 'de';
 const path = page ? ROUTES[page][lang] : null;
 const canonical = path ? absolute(path) : null;
-const ogImage = absolute('/og.jpg');
+// Link preview per page (src/pages/og/[page].jpg.ts); the 404 page uses the start page's.
+const ogImage = absolute(`/og/${page ?? 'home'}.jpg`);
 const r = (key: PageKey, l: Lang = lang) => ROUTES[key][l];
 
 const favicon = await getImage({ src: appIcon, format: 'png', width: 64 });
 const touchIcon = await getImage({ src: appIcon, format: 'png', width: 180 });
 const brandIcon = await getImage({ src: appIcon, format: 'png', width: 56 });
 
-const website = {
-  '@type': 'WebSite',
-  '@id': `${absolute('/')}#website`,
-  name: SITE_NAME,
-  url: absolute(ROUTES.home[lang]),
-  inLanguage: lang,
-};
-const jsonLd = noindex ? null : JSON.stringify({ '@context': 'https://schema.org', '@graph': [website, ...schema] }).replace(/</g, '\\u003c');
+// One JSON-LD graph per indexable page: WebSite and Organization everywhere, the page's own
+// nodes (SoftwareApplication on the start page), and a BreadcrumbList below the start page.
+const crumbName: Record<PageKey, string> = { home: '', example: t.nav.example, download: t.nav.download, changelog: t.nav.changelog, imprint: t.footer.imprint, privacy: t.footer.privacy };
+const nodes = [website(lang), await organization(), ...schema, ...(page && page !== 'home' ? [breadcrumbs(lang, page, crumbName[page], SITE_NAME)] : [])];
+const jsonLd = noindex ? null : graph(nodes);
 
 const csp = [
   "default-src 'none'",
+  "script-src 'self'",
   "img-src 'self'",
   "style-src 'self'",
   "font-src 'self'",
@@ -83,6 +86,7 @@ const nav: { key: PageKey; label: string; href: string }[] = [
     <meta name="color-scheme" content="dark light" />
     <link rel="icon" href={favicon.src} type="image/png" sizes="64x64" />
     <link rel="apple-touch-icon" href={touchIcon.src} />
+    {preload.map((p) => <link rel="preload" as="image" type="image/avif" media={p.media} imagesrcset={p.srcset} imagesizes={p.sizes} fetchpriority="high" />)}
     <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE_NAME} />
@@ -96,17 +100,22 @@ const nav: { key: PageKey; label: string; href: string }[] = [
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content={t.meta.ogAlt} />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={t.meta.ogAlt} />
     {jsonLd && <script type="application/ld+json" set:html={jsonLd} />}
+    <script is:inline src="/menu.js" defer></script>
   </head>
   <body>
     <a class="skip" href="#inhalt">{t.skip}</a>
     <header class="site-header">
-      <div class="wrap">
+      <div class="wrap header-row">
         <a class="brand" href={r('home')} aria-label={t.nav.home}>
           <img src={brandIcon.src} width="28" height="28" alt="" loading="eager" />
           <span>{SITE_NAME}</span>
         </a>
-        <nav aria-label={t.nav.label}>
+        <nav class="nav-desktop" aria-label={t.nav.label}>
           <ul class="nav">
             {nav.map((n) => (
               <li>
@@ -114,12 +123,30 @@ const nav: { key: PageKey; label: string; href: string }[] = [
               </li>
             ))}
             {page && (
-              <li class="lang-item">
+              <li>
                 <a class="lang" href={r(page, other)} hreflang={other} lang={other} aria-label={t.nav.switchLabel}>{t.nav.switchTo}</a>
               </li>
             )}
           </ul>
         </nav>
+        <div class="header-phone">
+          {page && <a class="lang-short" href={r(page, other)} hreflang={other} lang={other} aria-label={t.nav.switchLabel}>{t.nav.switchShort}</a>}
+          <details class="menu">
+            <summary>
+              <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path class="bars" d="M3 6h14M3 10h14M3 14h14" /><path class="cross" d="M5 5l10 10M15 5L5 15" /></svg>
+              <span>{t.nav.menu}</span>
+            </summary>
+            <nav class="menu-panel" aria-label={t.nav.label}>
+              <ul>
+                {nav.map((n) => (
+                  <li>
+                    <a href={n.href} aria-current={current === n.key && n.key !== 'home' ? 'page' : undefined}>{n.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </details>
+        </div>
       </div>
     </header>
     <main id="inhalt" tabindex="-1">

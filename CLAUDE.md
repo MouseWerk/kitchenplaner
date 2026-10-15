@@ -68,6 +68,7 @@ npm --prefix ui run build
 node scripts/version.mjs            # one version in every manifest
 node --test "scripts/*.test.mjs"    # release scripts
 npm --prefix website ci && npm --prefix website test && npm --prefix website run build   # website + its checks
+npm --prefix website run check:rendered   # website in Chromium at 360–1920 px (website/README.md)
 npm run build            # installers in target/release/bundle
 e2e/run.sh               # end-to-end tests, Linux (builds UI + debug app, Xvfb, tauri-driver)
 e2e/run.sh tests/05-files.test.js   # one file while working

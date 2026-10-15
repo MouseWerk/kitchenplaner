@@ -6,6 +6,8 @@ import type { ImageMetadata } from 'astro';
  * published.
  */
 const files = import.meta.glob<ImageMetadata>('../../../pitch/*.png', { eager: true, import: 'default' });
+/** Phone crops (src/data/crops.mjs), cut by scripts/crops.mjs before the build. */
+const crops = import.meta.glob<ImageMetadata>('../assets/crops/*.png', { eager: true, import: 'default' });
 
 export type ShotName =
   | '01-alle-ansichten' | '02-grundriss' | '03-grundriss-kochinsel-auswahl' | '04-3d-uebersicht'
@@ -17,4 +19,9 @@ export function shot(name: ShotName): ImageMetadata {
   const hit = Object.entries(files).find(([path]) => path.endsWith(`/${name}.png`));
   if (!hit) throw new Error(`Screenshot pitch/${name}.png is missing`);
   return hit[1];
+}
+
+/** The phone crop of a screenshot, or null when it has none. */
+export function crop(name: ShotName): ImageMetadata | null {
+  return Object.entries(crops).find(([path]) => path.endsWith(`/${name}.png`))?.[1] ?? null;
 }
