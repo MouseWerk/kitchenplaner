@@ -13,7 +13,7 @@ import { testProject } from "../model/testProject";
 import { ENERGIES, type Connections, type Item, type Vec2 } from "../model/types";
 import type { Shape } from "../render/drawing";
 import { buildItemObject } from "../three/meshes";
-import { getShared } from "../three/shared";
+import { getShared, isSharedGeometry } from "../three/shared";
 import { fitOrthoCamera } from "../three/thumbnails";
 import { Front } from "./parts/elevation";
 import { FLUSH_HEIGHT } from "./parts/sizes";
@@ -141,11 +141,11 @@ describe.each(CATALOG.map((e) => [e.id, e] as const))("entry %s", (_, entry) => 
   });
 });
 
-/** What a model looks like, as a sorted list of its parts (material, place and size). */
+/** What a model looks like, as a sorted list of its parts (material, shape, place and size). */
 function looks(item: Item): string[] {
   const r = (v: THREE.Vector3) => v.toArray().map((n) => n.toFixed(4)).join(",");
   return meshesOf(buildItemObject(item))
-    .map((m) => `${(m.material as THREE.Material).name} ${r(m.position)} ${r(m.scale)}`)
+    .map((m) => `${(m.material as THREE.Material).name} ${m.geometry.name} ${r(m.position)} ${r(m.scale)}`)
     .sort();
 }
 
@@ -289,7 +289,10 @@ describe.each(ALL.map((c) => [c.label, c] as const))("variant %s", (_, { def, it
     expect(meshes.length).toBeGreaterThan(0);
     for (const m of meshes) {
       expect(m.userData.itemId).toBe(item.id);
-      expect([shared.box, shared.cylinder]).toContain(m.geometry);
+      // The unit box and cylinders, or a shaped part from the shared cache: never its own.
+      expect(isSharedGeometry(m.geometry), m.geometry.name || m.geometry.type).toBe(true);
+      // Shaped parts carry their real size: scaling one would distort its rounds and its UVs.
+      if (m.geometry.userData.metricUv) expect(m.scale.toArray(), m.geometry.name).toEqual([1, 1, 1]);
       expect(materials.has(m.material as THREE.Material), (m.material as THREE.Material).name).toBe(true);
       // Wire work is made of rods: a wireframe shows the triangles of the unit box.
       expect((m.material as THREE.MeshStandardMaterial).wireframe, (m.material as THREE.Material).name).not.toBe(true);

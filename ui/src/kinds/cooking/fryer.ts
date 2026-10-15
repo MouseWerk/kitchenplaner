@@ -2,7 +2,7 @@
 // doors below (the oil drain container behind them). `fryer` has two tanks from 380 mm width,
 // `fryerSingle` one tank over the whole width with two baskets.
 
-import { BASKET_PITCH, CONTROLS, SHEET } from "../parts/mesh";
+import { BASKET_PITCH, BOWL_RADIUS, CONTROLS, SHEET } from "../parts/mesh";
 import { CONTROL_STRIP, controlStrip, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { lineFront, lineModule } from "./common";
@@ -51,8 +51,10 @@ function makeFryer(kind: string, twin: boolean): KindDef {
       p.topWithHoles("steel", s.w, s.d, s.h - TOP_SHEET, s.h, holes);
       const k = twin ? 1 : 2;
       for (const { x0, x1 } of holes) {
-        p.box("oil", x0, x1, s.h - TANK, s.h - 0.08, z0, z1);
-        p.tub("steelDark", x0, x1, s.h - TANK, s.h, z0, z1, SHEET / 2);
+        // The oil fills the tank up to its level, round in the corners like the tank.
+        const wall = SHEET / 2;
+        p.roundedBox("oil", x0 + wall, x1 - wall, s.h - TANK + wall, s.h - 0.08, z0 + wall, z1 - wall, BOWL_RADIUS - wall, "vertical");
+        p.tub("steelDark", x0, x1, s.h - TANK, s.h, z0, z1, wall);
         // The bar at the back the baskets hang on when they drip off.
         p.rod("handle", "x", (x0 + x1) / 2, s.h - 0.012, z0 + 0.025, x1 - x0 - SHEET, 0.006);
         const inset = 0.02;
@@ -61,10 +63,34 @@ function makeFryer(kind: string, twin: boolean): KindDef {
         for (let j = 0; j < k; j++) {
           const kx = x0 + inset + j * (kw + inset);
           p.wireBox(kx, kx + kw, s.h - 0.15, s.h - 0.03, z0 + 0.05, kz1, BASKET_PITCH);
-          // Handle: a bracket up from the basket's front and a black grip towards the front.
+          // Handle: a bent bracket up from the basket's front and a black grip towards the front.
           const cx = kx + kw / 2;
-          p.box("handle", cx - 0.005, cx + 0.005, s.h - 0.03, s.h - 0.012, kz1 - 0.01, kz1);
-          p.rod("knob", "z", cx, s.h - 0.02, kz1 + 0.03, 0.06, 0.01);
+          const gy = s.h - 0.02;
+          p.tube(
+            "handle",
+            [
+              { x: cx, y: s.h - 0.06, z: kz1 - 0.004 },
+              { x: cx, y: gy, z: kz1 - 0.004 },
+              { x: cx, y: gy, z: kz1 + 0.01 },
+            ],
+            0.004,
+            { bend: 0.01 },
+          );
+          p.lathe(
+            "knob",
+            cx,
+            gy,
+            kz1,
+            [
+              [0, 0],
+              [0.008, 0],
+              [0.01, 0.006],
+              [0.01, 0.052],
+              [0.008, 0.06],
+              [0, 0.06],
+            ],
+            { axis: "z" },
+          );
         }
       }
     },

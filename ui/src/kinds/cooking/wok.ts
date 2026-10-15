@@ -63,7 +63,8 @@ export const wok: KindDef = {
     // The top lies lower than the item height by the wok ring standing on it.
     const topY = s.h - RING_BAR * 2;
     const all = woks(s.w, s.d);
-    const holes = all.map((w) => ({ x0: w.x - w.r, x1: w.x + w.r, z0: w.z - w.r, z1: w.z + w.r }));
+    // Round openings, the pits under them turned to match.
+    const holes = all.map((w) => ({ x0: w.x - w.r, x1: w.x + w.r, z0: w.z - w.r, z1: w.z + w.r, r: w.r }));
     lineModule(p, s, { base: "doors", knobs: n, underTop: topY - TOP_SHEET, solidTo: topY - BOWL - 0.01 });
     p.topWithHoles("steel", s.w, s.d, topY - TOP_SHEET, topY, holes);
     // Raised edges at the back and the sides keep the splashes on the top.
@@ -74,12 +75,11 @@ export const wok: KindDef = {
     p.box("steelDark", -s.w / 2 + 0.03, s.w / 2 - 0.03, topY - 0.002, topY + 0.001, s.d / 2 - CONTROLS - 0.03, s.d / 2 - CONTROLS);
     const gas = item.energy === "gas";
     for (const { x, z, r } of all) {
-      p.roundOpening("steel", x, z, r, topY - TOP_SHEET, topY);
       // The pit under the opening ends under the top, so only the round opening shows.
       const pitTop = topY - TOP_SHEET / 2;
       if (gas) {
         // The ring burner at the bottom of a dark pit, under a cast wok ring with three prongs.
-        p.tub("top", x - r, x + r, topY - BOWL, pitTop, z - r, z + r);
+        p.tub("top", x - r, x + r, topY - BOWL, pitTop, z - r, z + r, SHEET, r);
         p.cyl("steelDark", x, z, topY - BOWL, topY - BOWL + 0.025, r * 0.45);
         p.cyl("knob", x, z, topY - BOWL + 0.025, topY - BOWL + 0.035, r * 0.3);
         p.ring("knob", x, z, topY + RING_BAR, r * RING_AT, RING_BAR);
@@ -95,7 +95,7 @@ export const wok: KindDef = {
       } else {
         // Induction: a black glass bowl set into the top, its zone marked at the bottom, under a
         // bright trim ring.
-        p.tub("ceramic", x - r, x + r, topY - BOWL, pitTop, z - r, z + r);
+        p.tub("ceramic", x - r, x + r, topY - BOWL, pitTop, z - r, z + r, SHEET, r);
         p.cyl("zone", x, z, topY - BOWL, topY - BOWL + 0.012, r * 0.5);
         p.cyl("ceramic", x, z, topY - BOWL, topY - BOWL + 0.014, r * 0.42);
         p.ring("handle", x, z, topY + RING_BAR, r * RING_AT, RING_BAR);

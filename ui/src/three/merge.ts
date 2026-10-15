@@ -9,6 +9,8 @@
 // The shared parts carry the unit box's and cylinder's UVs, 0..1 across every face whatever its
 // size, so a texture would be stretched over a 2.4 m hood as far as over a 40 mm leg. Merging
 // rescales them to metres (`metricUv`): the brushed grain has the same size on every surface.
+// Shaped parts (`shapes.ts`: rounded boxes, lathes, extrusions, tubes) are built at their real
+// size with UVs in metres already and are only moved and turned, so they keep their UVs.
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -23,7 +25,11 @@ export function mergeItemObject(source: THREE.Group): THREE.Group {
   for (const child of source.children) {
     if (!(child instanceof THREE.Mesh)) continue;
     child.updateMatrix();
-    const geo = metricUv((child.geometry as THREE.BufferGeometry).clone().applyMatrix4(child.matrix));
+    const source = child.geometry as THREE.BufferGeometry;
+    const placed = source.clone().applyMatrix4(child.matrix);
+    // A shaped part someone scaled after all loses its metres: measure it like a unit part.
+    const kept = source.userData.metricUv && Math.abs(child.scale.x - 1) + Math.abs(child.scale.y - 1) + Math.abs(child.scale.z - 1) < 1e-9;
+    const geo = kept ? placed : metricUv(placed);
     const mat = child.material as THREE.Material;
     let entry = byMaterial.get(mat);
     if (!entry) {

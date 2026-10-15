@@ -3,7 +3,7 @@
 // and the stand under table-top units (combi ovens, deck ovens).
 
 import { FEET, INSET, LEG as FRONT_LEG, PANEL, TOP, UNDERSHELF as FRONT_UNDERSHELF, type Front } from "../parts/elevation";
-import { CONTROLS, controlKnobs, DOOR, doors, GAP, LEG, ovenWindow, PLINTH, plinth, SHEET, UNDERSHELF, type Parts, type Size } from "../parts/mesh";
+import { BODY_RADIUS, CONTROLS, controlKnobs, DOOR, DOOR_RADIUS, doors, foot, GAP, LEG, LEG_RADIUS, ovenWindow, PLINTH, plinth, SHEET, UNDERSHELF, type Parts, type Size } from "../parts/mesh";
 import { CONTROL_STRIP, INSET as PLAN_INSET, type PlanSketch } from "../parts/plan";
 
 /** Width taken by one column of cooking zones (two zones front to back, m). */
@@ -14,8 +14,9 @@ const ZONE_FILL = 0.32;
 export const PROUD = 0.003;
 /** Height of the cast pan supports over the burner tray of a gas top (m). */
 export const PAN_SUPPORT = 0.03;
-/** Width of a bar of the cast pan supports (m). */
+/** Width of a bar of the cast pan supports (m), and the radius its top edges are cast round to. */
 const SUPPORT_BAR = 0.012;
+const SUPPORT_ROUND = 0.004;
 /** Thickness of the control panel sheet on the front of the body (m); the knobs stand on it. */
 const PANEL_SHEET = 0.002;
 /** Door width of the base cabinets of a cooking line (m): 400 = 1 door, 800 and 1200 = 2. */
@@ -175,7 +176,7 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
     if (top > yc) p.box("steel", -w / 2, w / 2, yc, top, -d / 2, zBody);
     else p.box("steel", -w / 2 + SHEET, w / 2 - SHEET, yc - SHEET, yc, -d / 2 + SHEET, zBody);
   } else {
-    p.box("steel", -w / 2, w / 2, PLINTH, solidTo, -d / 2, zBody);
+    p.roundedBox("steel", -w / 2, w / 2, PLINTH, solidTo, -d / 2, zBody, BODY_RADIUS, "vertical");
   }
   if (solidTo < o.underTop) {
     // Only the outer sheets above the solid part: sides, back and front.
@@ -192,7 +193,7 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
     const zFace = d / 2 - DOOR / 2;
     const y0 = PLINTH + OVEN_GAP;
     const y1 = yc - OVEN_GAP;
-    p.box("steel", -w / 2 + OVEN_GAP, w / 2 - OVEN_GAP, y0, y1, zBody, zFace);
+    p.roundedBox("steel", -w / 2 + OVEN_GAP, w / 2 - OVEN_GAP, y0, y1, zBody, zFace, DOOR_RADIUS, "top", "z");
     ovenWindow(p, -w / 2 + OVEN_GAP, w / 2 - OVEN_GAP, y0, y1 - 0.06, zFace);
     // The handle bar across the top of the door, on stand-offs, ending at the front.
     const len = Math.min(0.5, w * 0.6);
@@ -211,7 +212,7 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
     p.box("steel", -w / 2 + GAP, w / 2 - GAP, yc + GAP, o.underTop - GAP, zBody, zBody + PANEL_SHEET);
     controlKnobs(p, w, (yc + o.underTop) / 2, zBody + PANEL_SHEET, d / 2, o.knobs);
   } else if (strip === "drawer") {
-    p.box("steel", -w / 2 + GAP, w / 2 - GAP, yc + GAP, o.underTop - GAP, zBody, d / 2 - DOOR / 2);
+    p.roundedBox("steel", -w / 2 + GAP, w / 2 - GAP, yc + GAP, o.underTop - GAP, zBody, d / 2 - DOOR / 2, DOOR_RADIUS, "top", "z");
     const len = Math.min(0.3, w * 0.6);
     p.barHandle("x", -len / 2, len / 2, (yc + o.underTop) / 2, d / 2 - DOOR / 2, d / 2);
   }
@@ -220,7 +221,9 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
 
 /**
  * Open gas burners with cast pan supports over a burner tray whose top is at `trayTop`; the pan
- * supports reach up to `top` (m). One burner per cell of `cols` × `rows` behind the control strip.
+ * supports reach up to `top` (m). One burner per cell of `cols` × `rows` behind the control strip:
+ * a turned crown with its enamelled cap, under a grid of enamelled cast iron bars with rounded
+ * tops and four fingers reaching in towards each burner.
  */
 export function gasBurners(p: Parts, s: Size, cols: number, rows: number, trayTop: number, top: number) {
   const m = 0.02;
@@ -234,35 +237,69 @@ export function gasBurners(p: Parts, s: Size, cols: number, rows: number, trayTo
   // The frame of the pan supports: bars along the rows and the columns.
   for (let k = 0; k <= rows; k++) {
     const z = Math.min(z1 - b, Math.max(z0 + b, z0 + rd * k));
-    p.box("knob", x0, x1, trayTop, top, z - b, z + b);
+    p.roundedBox("castIron", x0, x1, trayTop, top, z - b, z + b, SUPPORT_ROUND, "top");
   }
   for (let c = 0; c <= cols; c++) {
     const x = Math.min(x1 - b, Math.max(x0 + b, x0 + cw * c));
-    p.box("knob", x - b, x + b, trayTop, top, z0, z1);
+    p.roundedBox("castIron", x - b, x + b, trayTop, top, z0, z1, SUPPORT_ROUND, "top");
   }
   for (let c = 0; c < cols; c++) {
     for (let k = 0; k < rows; k++) {
       const cx = x0 + cw * (c + 0.5);
       const cz = z0 + rd * (k + 0.5);
       const r = Math.min(cw, rd) * 0.22;
-      // Burner crown and cap.
-      p.cyl("steelDark", cx, cz, trayTop, trayTop + 0.015, r);
-      p.cyl("knob", cx, cz, trayTop + 0.015, trayTop + 0.022, r * 0.7);
+      // Burner crown (its flame ports a darker band under the rim) and the enamelled cap.
+      p.lathe("steelDark", cx, trayTop, cz, [
+        [0, 0],
+        [r * 1.12, 0],
+        [r * 1.12, 0.003],
+        [r * 0.92, 0.006],
+        [r * 0.92, 0.012],
+        [r, 0.015],
+        [0, 0.015],
+      ]);
+      p.lathe("castIron", cx, trayTop + 0.015, cz, [
+        [0, 0],
+        [r * 0.74, 0],
+        [r * 0.74, 0.002],
+        [r * 0.6, 0.006],
+        [0, 0.0075],
+      ]);
       // Four fingers of the pan support from the frame towards the burner.
       const fy = top - 0.01;
-      p.box("knob", cx - cw / 2, cx - r * 1.2, fy, top, cz - b, cz + b);
-      p.box("knob", cx + r * 1.2, cx + cw / 2, fy, top, cz - b, cz + b);
-      p.box("knob", cx - b, cx + b, fy, top, cz - rd / 2, cz - r * 1.2);
-      p.box("knob", cx - b, cx + b, fy, top, cz + r * 1.2, cz + rd / 2);
+      const f = (fx0: number, fx1: number, fz0: number, fz1: number) => p.roundedBox("castIron", fx0, fx1, fy, top, fz0, fz1, SUPPORT_ROUND, "top");
+      f(cx - cw / 2, cx - r * 1.2, cz - b, cz + b);
+      f(cx + r * 1.2, cx + cw / 2, cz - b, cz + b);
+      f(cx - b, cx + b, cz - rd / 2, cz - r * 1.2);
+      f(cx - b, cx + b, cz + r * 1.2, cz + rd / 2);
     }
   }
 }
 
-/** Round cast hotplates with a steel rim on a top whose surface is at `topY`, reaching `top` (m). */
+/**
+ * Round cast hotplates on a top whose surface is at `topY`, reaching `top` (m): a turned steel
+ * spill ring and the plate in it, its edge rounded and an unheated dimple in the middle.
+ */
 export function hotplates(p: Parts, s: Size, cols: number, rows: number, topY: number, top: number) {
+  const h = top - topY;
   for (const z of zones(s, cols, rows)) {
-    p.cyl("steel", z.x, z.z, topY, top - PROUD, z.r * 1.08);
-    p.cyl("plate", z.x, z.z, topY, top, z.r);
+    p.lathe("steel", z.x, topY, z.z, [
+      [z.r * 0.9, 0],
+      [z.r * 1.08, 0],
+      [z.r * 1.08, (h - PROUD) * 0.6],
+      [z.r * 1.03, h - PROUD],
+      [z.r * 0.9, h - PROUD],
+      [z.r * 0.9, 0],
+    ]);
+    p.lathe("plate", z.x, topY, z.z, [
+      [0, 0],
+      [z.r, 0],
+      [z.r, h * 0.7],
+      [z.r * 0.97, h],
+      [z.r * 0.3, h],
+      [z.r * 0.26, h * 0.8],
+      [0, h * 0.8],
+    ]);
   }
 }
 
@@ -276,7 +313,7 @@ export function standMesh(p: Parts, s: Size, elev: number) {
     for (const sz of [-1, 1]) {
       const x = sx * (s.w / 2 - LEG / 2);
       const z = sz * (s.d / 2 - LEG / 2);
-      p.box("steelDark", x - LEG / 2, x + LEG / 2, -elev, 0, z - LEG / 2, z + LEG / 2);
+      p.roundedBox("steelDark", x - LEG / 2, x + LEG / 2, -elev, 0, z - LEG / 2, z + LEG / 2, LEG_RADIUS, "vertical");
     }
   }
   p.box("steel", -s.w / 2 + LEG, s.w / 2 - LEG, -elev, -elev + LEG, -s.d / 2 + LEG / 2, -s.d / 2 + LEG);
@@ -296,10 +333,7 @@ export function unitFeet(p: Parts, s: Size, raised: boolean): number {
   const h = raised ? TABLE_FEET : PLINTH;
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const x = sx * (s.w / 2 - 0.04);
-      const z = sz * (s.d / 2 - DOOR - 0.04);
-      p.cyl("steelDark", x, z, 0.012, h, 0.015);
-      p.cyl("rubber", x, z, 0, 0.012, 0.022);
+      foot(p, sx * (s.w / 2 - 0.04), sz * (s.d / 2 - DOOR - 0.04), h);
     }
   }
   return h;

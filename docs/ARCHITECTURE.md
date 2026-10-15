@@ -74,11 +74,13 @@ materials (`three/shared.ts`); the model's plan, elevations and plan check use t
 - `engine.ts`: renderer, scene, cameras and input of the 3D view. Renders on demand (no loop),
   rebuilds only the items whose object changed, navigation like Blender, editing and walking.
 - `meshes.ts`: places and turns the item models (`buildItemObject`), selection highlight and
-  picking (`itemIdOf`). `shared.ts`: the unit box and cylinder and the fixed materials every
-  model shares, held by each renderer (`retainShared` / `releaseShared`).
+  picking (`itemIdOf`). `shared.ts`: the unit box and cylinders, the shaped parts cached by
+  their parameters, and the fixed materials every model shares, held by each renderer
+  (`retainShared` / `releaseShared`). `shapes.ts`: the shaped parts' geometry (rounded boxes,
+  lathes, rounded-rectangle pans, extrusions, bent tubes) at real size with UVs in metres.
 - `merge.ts`: merges a model into one mesh per material to keep the draw calls low.
 - `look.ts`: room textures (tiled floor, painted walls) and soft contact shadows under the items;
-  `textures.ts` generates the procedural textures (brushed steel, tiles, paint) as pixel data.
+  `textures.ts` generates the procedural textures (brushed steel, granite, wood, tiles, paint) as pixel data.
 - `room.ts`: floor, walls with their openings and the partitions as 3D objects; walls between
   camera and room are hidden (cutaway).
 - `navigation.ts`: camera math and the key mapping (numpad views, framing), free of the DOM.

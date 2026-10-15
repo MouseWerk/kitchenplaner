@@ -3,7 +3,7 @@
 // helpers work in millimetres, mesh helpers in metres (see kinds/README.md).
 
 import { FEET, INSET as FRONT_INSET, type Front } from "../parts/elevation";
-import { DOOR, GAP, LEG, PLINTH, SHEET, UNDERSHELF, type Hole, type Parts, type Size } from "../parts/mesh";
+import { LEG_RADIUS, worktop, DOOR, GAP, LEG, PLINTH, SHEET, UNDERSHELF, type Hole, type Parts, type Size } from "../parts/mesh";
 import { INSET, type PlanSketch } from "../parts/plan";
 
 /** The end of a unit along its width, as seen from the front. */
@@ -57,8 +57,14 @@ export function tableFrame(p: Parts, s: Size, topY: number, shelf: Span = { x0: 
     for (const sz of [-1, 1]) {
       const x = sx * (s.w / 2 - LEG / 2 - SHEET);
       const z = sz * (s.d / 2 - LEG / 2 - SHEET);
-      p.box("steelDark", x - LEG / 2, x + LEG / 2, 0, topY, z - LEG / 2, z + LEG / 2);
-      p.cyl("rubber", x, z, 0, 0.012, LEG * 0.6);
+      p.roundedBox("steelDark", x - LEG / 2, x + LEG / 2, 0.012, topY, z - LEG / 2, z + LEG / 2, LEG_RADIUS, "vertical");
+      p.lathe("rubber", x, 0, z, [
+        [0, 0],
+        [LEG * 0.55, 0],
+        [LEG * 0.6, 0.006],
+        [LEG * 0.6, 0.012],
+        [0, 0.012],
+      ]);
     }
   }
   if (shelf.x1 - shelf.x0 > LEG) {
@@ -75,7 +81,7 @@ export function dishTableTop(p: Parts, s: Size, holes: readonly Hole[], open: re
   const y1 = s.h - RIM;
   const y0 = y1 - SHEET * 2;
   if (holes.length > 0) p.topWithHoles("steel", s.w, s.d, y0, y1, holes);
-  else p.box("steel", -s.w / 2, s.w / 2, y0, y1, -s.d / 2, s.d / 2);
+  else worktop(p, "steel", -s.w / 2, s.w / 2, y0, y1, -s.d / 2, s.d / 2);
   // Apron (Zarge) under the sheet at the front: it stiffens the top and hides the frame's top.
   p.box("steel", -s.w / 2, s.w / 2, y0 - 0.08, y0, s.d / 2 - SHEET, s.d / 2);
   // The rim: a back upstand, a rolled front edge and the closed ends.
@@ -128,18 +134,32 @@ export function dishTableFront(f: Front): void {
  * to the wall (a wall basin hides its trap in its base).
  */
 export function bowlDrain(p: Parts, cx: number, cz: number, yFloor: number, zBack: number, trap = true): void {
-  p.cyl("steelDark", cx, cz, yFloor + SHEET, yFloor + SHEET + 0.003, 0.035);
-  p.cyl("steelDark", cx, cz, yFloor + SHEET + 0.003, yFloor + SHEET + 0.005, 0.012);
+  // The strainer: a turned flange with a domed plug in the middle.
+  p.lathe("satin", cx, yFloor + SHEET, cz, [
+    [0, 0],
+    [0.035, 0],
+    [0.035, 0.001],
+    [0.03, 0.003],
+    [0.014, 0.003],
+    [0.012, 0.004],
+    [0.006, 0.0055],
+    [0, 0.0055],
+  ]);
   if (!trap) return;
+  // The waste pipe down from the bowl, bent towards the wall.
+  const r = 0.02;
   const yTrap = Math.max(0.05, yFloor - 0.16);
-  p.cyl("steelDark", cx, cz, yTrap, yFloor, 0.02);
   const len = cz - zBack;
-  if (len > 0.03) p.rod("steelDark", "z", cx, yTrap + 0.02, zBack + len / 2, len, 0.02);
+  const down = [
+    { x: cx, y: yFloor, z: cz },
+    { x: cx, y: yTrap + r, z: cz },
+  ];
+  p.tube("steelDark", len > 0.03 ? [...down, { x: cx, y: yTrap + r, z: zBack }] : [...down, { x: cx, y: yTrap, z: cz }], r, { bend: 0.04 });
 }
 
 /** Overflow slot in the back wall of a bowl (m), just under the rim. */
 export function overflow(p: Parts, cx: number, zWall: number, yRim: number): void {
-  p.box("slot", cx - 0.03, cx + 0.03, yRim - 0.06, yRim - 0.045, zWall, zWall + 0.002);
+  p.plate("slot", cx - 0.03, cx + 0.03, yRim - 0.06, yRim - 0.045, zWall, zWall + 0.002, 0.0075);
 }
 
 /** Pressed grooves in a drainer that lead the water to the bowls (m), along the width. */

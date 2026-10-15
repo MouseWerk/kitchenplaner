@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
+import { TOP_RADIUS } from "../kinds/parts/mesh";
 import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
 import { buildItemObject } from "./meshes";
@@ -210,10 +211,18 @@ describe("queue", () => {
     expect(new Set(names).size).toBe(names.length);
     const steel = model.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh && c.name === "steel")!;
     const uv = steel.geometry.getAttribute("uv");
-    let maxUv = 0;
-    for (let i = 0; i < uv.count; i++) maxUv = Math.max(maxUv, Math.abs(uv.getX(i)), Math.abs(uv.getY(i)));
-    // The worktop is 1.2 m wide: its grain runs 1.2 UV units (a raw part stretches it over 0..1).
-    expect(maxUv).toBeCloseTo(e.width / 1000, 3);
+    const pos = steel.geometry.getAttribute("position");
+    const nor = steel.geometry.getAttribute("normal");
+    // The worktop's flat top (facing up at the item's height, centred, so its UVs are its plan
+    // position in metres): 1.2 m wide less its rounded edges, so its grain runs that many UV
+    // units (a raw part stretches it over 0..1).
+    const top = e.height / 1000;
+    const us: number[] = [];
+    for (let i = 0; i < uv.count; i++) {
+      const flat = nor.getY(i) > 0.999 && Math.abs(pos.getY(i) - top) < 1e-6;
+      if (flat && Math.abs(uv.getX(i) - pos.getX(i)) < 1e-6 && Math.abs(uv.getY(i) - pos.getZ(i)) < 1e-6) us.push(uv.getX(i));
+    }
+    expect(Math.max(...us) - Math.min(...us)).toBeCloseTo(e.width / 1000 - 2 * TOP_RADIUS, 3);
     disposeMerged(model);
   });
 

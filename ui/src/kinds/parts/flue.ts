@@ -19,6 +19,8 @@ const FLUE_BACK = 0.005;
 const FLUE_HEIGHT = 0.03;
 /** How far the collar round the slots stays under the top. */
 const COLLAR_DROP = 0.002;
+/** Edge radius of the collar (m). */
+const COLLAR_RADIUS = 0.003;
 /** Width and pitch of the slots. */
 const SLOT = 0.008;
 const SLOT_PITCH = 0.016;
@@ -49,7 +51,7 @@ export function flueBox(s: Size): FlueBox {
  * steel block with dark slots.
  */
 export function flueMesh(p: Parts, s: Size, b: FlueBox = flueBox(s)): void {
-  p.box("steel", b.x0, b.x1, b.y0, b.y1 - COLLAR_DROP, b.z0, b.z1).name = "flue";
+  p.roundedBox("steel", b.x0, b.x1, b.y0, b.y1 - COLLAR_DROP, b.z0, b.z1, COLLAR_RADIUS, "top").name = "flue";
   const n = Math.max(1, Math.floor((b.x1 - b.x0) / SLOT_PITCH));
   const pitch = (b.x1 - b.x0) / n;
   for (let i = 0; i < n; i++) {

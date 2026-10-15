@@ -3,7 +3,7 @@
 // metres; the well layout is computed once in millimetres so all three views agree.
 
 import { INSET as FRONT_INSET, type Front } from "../parts/elevation";
-import { castor, DOOR, LEG, PLINTH, plinth, SHEET, TOP, type Hole, type MaterialId, type Parts, type Size } from "../parts/mesh";
+import { BODY_RADIUS, worktop, castor, DOOR, LEG, PLINTH, plinth, SHEET, TOP, type Hole, type MaterialId, type Parts, type Size } from "../parts/mesh";
 import { INSET, type PlanSketch } from "../parts/plan";
 
 /** Gastronorm GN 1/1 pan (mm): 530 × 325, laid crosswise in a counter (the long side to the front). */
@@ -70,8 +70,8 @@ export function counterBody(p: Parts, s: Size, holes: readonly Hole[] = [], topM
   const zf = d / 2 - DOOR;
   plinth(p, w, d);
   if (holes.length === 0) {
-    p.box("steel", -w / 2, w / 2, PLINTH, h - TOP, -d / 2, zf);
-    p.box(topMat, -w / 2, w / 2, h - TOP, h, -d / 2, d / 2);
+    p.roundedBox("steel", -w / 2, w / 2, PLINTH, h - TOP, -d / 2, zf, BODY_RADIUS, "vertical");
+    worktop(p, topMat, -w / 2, w / 2, h - TOP, h, -d / 2, d / 2);
     return;
   }
   const yb = h - WELL_DEPTH - SHEET;

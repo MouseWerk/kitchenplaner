@@ -2,6 +2,7 @@
 // supports; over an oven (`range`) or an open base (`rangeOpen`). Two cooking zones front to
 // back per 400 mm of width.
 
+import { worktop } from "../parts/mesh";
 import { controlStrip, hob } from "../parts/plan";
 import type { KindDef } from "../types";
 import { columns, gasBurners, hotplates, lineFront, lineModule, PAN_SUPPORT, planBurners, PROUD, type LineBase } from "./common";
@@ -29,13 +30,13 @@ function makeRange(kind: string, base: LineBase): KindDef {
       if (item.energy === "gas") {
         const trayTop = s.h - PAN_SUPPORT;
         lineModule(p, s, { base, knobs: cols * 2 + oven, underTop: trayTop - TOP_SHEET });
-        p.box("top", -s.w / 2, s.w / 2, trayTop - TOP_SHEET, trayTop, -s.d / 2, s.d / 2);
+        worktop(p, "top", -s.w / 2, s.w / 2, trayTop - TOP_SHEET, trayTop, -s.d / 2, s.d / 2);
         gasBurners(p, s, cols, 2, trayTop, s.h);
       } else {
         // The top sits a little lower than the item height, so the hotplates stand proud of it.
         const topY = s.h - PROUD * 2;
         lineModule(p, s, { base, knobs: cols * 2 + oven, underTop: topY - TOP_SHEET });
-        p.box("top", -s.w / 2, s.w / 2, topY - TOP_SHEET, topY, -s.d / 2, s.d / 2);
+        worktop(p, "top", -s.w / 2, s.w / 2, topY - TOP_SHEET, topY, -s.d / 2, s.d / 2);
         hotplates(p, s, cols, 2, topY - PROUD, s.h);
       }
     },

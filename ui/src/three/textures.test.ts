@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { BRUSH_LEVEL_ROWS, brushedSteelPixels, floorTilePixels, GROUT, MAX_ANISOTROPY, periodicNoise, random, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels, type Pixels } from "./textures";
+import { BRUSH_LEVEL_ROWS, brushedSteelPixels, floorTilePixels, granitePixels, GROUT, MAX_ANISOTROPY, periodicNoise, random, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels, woodPixels, type Pixels } from "./textures";
 
 const at = (p: Pixels, x: number, y: number, ch = 1) => p.data[(y * p.width + x) * 4 + ch];
 
 describe("procedural textures", () => {
   it("have the requested size, RGBA and full alpha", () => {
-    for (const p of [brushedSteelPixels(64), floorTilePixels(128).color, floorTilePixels(128).rough, wallPaintPixels(32)]) {
+    for (const p of [brushedSteelPixels(64), floorTilePixels(128).color, floorTilePixels(128).rough, wallPaintPixels(32), granitePixels(32), woodPixels(32)]) {
       expect(p.data.length).toBe(p.width * p.height * 4);
       for (let i = 3; i < p.data.length; i += 4) expect(p.data[i]).toBe(255);
     }
@@ -17,6 +17,8 @@ describe("procedural textures", () => {
   it("are deterministic: the same seed gives the same pixels", () => {
     expect(brushedSteelPixels(32, 3).data).toEqual(brushedSteelPixels(32, 3).data);
     expect(brushedSteelPixels(32, 3).data).not.toEqual(brushedSteelPixels(32, 4).data);
+    expect(granitePixels(32, 3).data).toEqual(granitePixels(32, 3).data);
+    expect(woodPixels(32, 3).data).toEqual(woodPixels(32, 3).data);
     const r = random(9);
     const s = random(9);
     expect([r(), r(), r()]).toEqual([s(), s(), s()]);
@@ -111,5 +113,24 @@ describe("procedural textures", () => {
     expect(d.anisotropy).toBe(MAX_ANISOTROPY);
     c.dispose();
     d.dispose();
+  });
+
+  it("granite is a dark ground with light grains; wood runs in staves along the grain", () => {
+    const g = granitePixels(64);
+    const values = Array.from({ length: 64 * 64 }, (_, i) => g.data[i * 4]);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    expect(mean).toBeLessThan(80);
+    expect(Math.max(...values)).toBeGreaterThan(150);
+    // Wood changes less along a row (the grain) than down a column (across the staves).
+    const w = woodPixels(64);
+    let along = 0;
+    let across = 0;
+    for (let y = 0; y < 63; y++) {
+      for (let x = 0; x < 63; x++) {
+        along += Math.abs(at(w, x + 1, y, 0) - at(w, x, y, 0));
+        across += Math.abs(at(w, x, y + 1, 0) - at(w, x, y, 0));
+      }
+    }
+    expect(across).toBeGreaterThan(along * 2);
   });
 });

@@ -6,7 +6,7 @@
 // into the duct. The filters face down, so they show from below in 3D.
 
 import { INSET } from "../parts/elevation";
-import { GAP, SHEET, type Parts, type Size } from "../parts/mesh";
+import { BODY_RADIUS, GAP, SHEET, type Parts, type Point2, type Size } from "../parts/mesh";
 import { cross, INSET as PLAN_INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -26,6 +26,11 @@ const SLOPE_SHARE = 0.4;
 const EDGE = 0.004;
 /** Radius of the rolled lower edge (m). */
 const ROLL = 0.008;
+/** Outer radius of the 45° fold at the top of the skirt (m). */
+const FOLD = 0.02;
+/** Steps of the rolled edge's round and of the fold's bend. */
+const ROLL_STEPS = 10;
+const FOLD_STEPS = 3;
 /** How far seams stand out of the sheet (m). */
 const SEAM = 0.001;
 /** Canopies come in sections of at most this length, joined by a seam (m). */
@@ -34,6 +39,8 @@ const SECTION = 1.2;
 const COLLAR_PITCH = 1.6;
 const COLLAR_R = 0.125;
 const COLLAR_RISE = 100;
+/** Wall of a collar's spigot as drawn (m). */
+const SPIGOT = 0.003;
 /** One light per this much width (m) and the size of a light panel (m). */
 const LIGHT_PITCH = 1.2;
 const LIGHT = { w: 0.32, d: 0.12 };
@@ -85,22 +92,52 @@ function filterBank(p: Parts, s: Size, y: number, z0: number, z1: number): void 
   }
 }
 
-/** The canopy's shell: top, folds, skirts, sides, rolled edge and seams. */
+/**
+ * The profile of a canopy's front (dir 1) or back (dir -1) as (z, y) for `Parts.extrude` along x:
+ * the skirt's sheet standing at `z` from its rolled lower edge, a round bead reaching out to
+ * `zEdge`, up to the 45° fold with its rounded bend and up the slope to the top at `h`, where it
+ * ends level so the top sheet carries on from it.
+ */
+function skirtProfile(z: number, zEdge: number, h: number, sl: number, dir: 1 | -1): Point2[] {
+  const t = SHEET;
+  // Worked out for the front (outside at +z) and mirrored for the back.
+  const at = (dz: number, y: number): Point2 => [z + dir * dz, y];
+  const out: Point2[] = [];
+  // The bead: a round of radius ROLL on the floor line reaching out to `zEdge`, from where it
+  // leaves the inside of the sheet, under it and up to where it meets the outside.
+  const c = dir * (zEdge - z) - ROLL;
+  const start = Math.acos(Math.max(-1, Math.min(1, (-t - c) / ROLL)));
+  const end = Math.PI * 2 + Math.acos(Math.max(-1, Math.min(1, -c / ROLL)));
+  for (let k = 0; k <= ROLL_STEPS; k++) {
+    const a = start + ((end - start) * k) / ROLL_STEPS;
+    out.push(at(c + ROLL * Math.cos(a), ROLL + ROLL * Math.sin(a)));
+  }
+  // Up the outside to the fold, round its bend and up the slope to the top.
+  const tan = FOLD * Math.tan(Math.PI / 8);
+  for (let k = 0; k <= FOLD_STEPS; k++) {
+    const a = (Math.PI / 4) * (k / FOLD_STEPS);
+    out.push(at(-FOLD + FOLD * Math.cos(a), h - sl - tan + FOLD * Math.sin(a)));
+  }
+  out.push(at(-sl, h), at(-sl - t * Math.SQRT2, h));
+  // Down the inside of the slope and the skirt; the bead's first point closes the outline.
+  out.push(at(-t, h - sl - t * (Math.SQRT2 - 1)));
+  return dir === 1 ? out : out.reverse();
+}
+
+/** The canopy's shell: top, folded skirts with their rolled edges, sides and seams. */
 function canopy(p: Parts, { w, d, h }: Size, island: boolean): void {
   const sl = slope(h);
   const zf = d / 2 - EDGE;
   const zb = island ? -zf : -d / 2;
-  const topZ0 = island ? zb + sl : zb;
+  const topZ0 = island ? zb + sl + SHEET * Math.SQRT2 : zb;
   const xs = [-w / 2, w / 2 - SHEET];
-  // Top, the fold and the skirt at the front; on an island hood the same at the back.
-  p.box("steel", -w / 2, w / 2, h - SHEET, h, topZ0, zf - sl);
-  const ends: [number, 1 | -1][] = island ? [[zf, 1], [zb, -1]] : [[zf, 1]];
-  for (const [z, dir] of ends) {
-    p.slope("steel", -w / 2, w / 2, z - dir * sl, h, sl, dir);
-    p.box("steel", -w / 2, w / 2, 0, h - sl, Math.min(z, z - dir * SHEET), Math.max(z, z - dir * SHEET));
-    // The crease of the fold and the rolled lower edge catch the light along the skirt.
-    p.rod("steelDark", "x", 0, h - sl, z - dir * ROLL * 0.3, w, ROLL * 0.6);
-    p.rod("steelDark", "x", 0, ROLL, z + dir * (EDGE - ROLL), w, ROLL);
+  // The top ends where the skirt's profile takes over (no faces on top of each other); the
+  // skirts are one sheet each from the rolled edge over the fold, at the front and on an island
+  // hood also at the back.
+  p.box("steel", -w / 2, w / 2, h - SHEET, h, topZ0, zf - sl - SHEET * Math.SQRT2);
+  const ends: [number, number, 1 | -1][] = island ? [[zf, d / 2, 1], [zb, -d / 2, -1]] : [[zf, d / 2, 1]];
+  for (const [z, zEdge, dir] of ends) {
+    p.extrude("steel", "x", -w / 2, w / 2, skirtProfile(z, zEdge, h, sl, dir));
     for (const x of xs) {
       p.box("steel", x, x + SHEET, 0, h - sl, Math.min(z, z - dir * sl), Math.max(z, z - dir * sl));
       p.chamferCorner("steel", x, x + SHEET, z, h, sl, dir);
@@ -109,13 +146,13 @@ function canopy(p: Parts, { w, d, h }: Size, island: boolean): void {
   if (!island) p.box("steel", -w / 2, w / 2, 0, h, -d / 2, -d / 2 + SHEET);
   for (const x of xs) p.box("steel", x, x + SHEET, 0, h, topZ0, zf - sl);
   // Rolled edge along the sides.
-  for (const x of [-w / 2 + ROLL, w / 2 - ROLL]) p.rod("steelDark", "z", x, ROLL, (zb + zf) / 2, zf - zb, ROLL);
+  for (const x of [-w / 2 + ROLL, w / 2 - ROLL]) p.rod("steel", "z", x, ROLL, (zb + zf) / 2, zf - zb, ROLL);
   // Seams between the sections over the top, down the folds and the skirts, standing out by a
   // millimetre so they do not fight with the sheet's face.
   const sw = 0.003;
   for (const x of seamXs(w)) {
     p.box("steelDark", x - sw, x + sw, h - 0.001, h + SEAM, topZ0, zf - sl);
-    for (const [z, dir] of ends) {
+    for (const [z, , dir] of ends) {
       const m = p.slope("steelDark", x - sw, x + sw, z - dir * sl, h, sl, dir, 0.002);
       m.position.y += Math.SQRT1_2 * SEAM;
       m.position.z += dir * Math.SQRT1_2 * SEAM;
@@ -203,14 +240,31 @@ function makeHood(kind: string, island: boolean): KindDef {
       const rise = COLLAR_RISE / 1000;
       const zc = collarZ(d, island);
       for (const x of collarXs(w)) {
-        p.cyl("steelDark", x, zc, h, h + 0.01, COLLAR_R + 0.02);
-        p.cyl("steel", x, zc, h, h + rise - 0.002, COLLAR_R);
-        p.cyl("slot", x, zc, h + rise - 0.03, h + rise, COLLAR_R - 0.01);
+        // The flange on the top, the spigot with its bead and open mouth, dark inside.
+        p.lathe("steelDark", x, h, zc, [
+          [0, 0],
+          [COLLAR_R + 0.02, 0],
+          [COLLAR_R + 0.02, 0.006],
+          [COLLAR_R + 0.012, 0.01],
+          [0, 0.01],
+        ]);
+        p.lathe("steel", x, h, zc, [
+          [0, 0],
+          [COLLAR_R, 0],
+          [COLLAR_R, rise - 0.03],
+          [COLLAR_R + 0.004, rise - 0.026],
+          [COLLAR_R, rise - 0.022],
+          [COLLAR_R, rise],
+          [COLLAR_R - SPIGOT, rise],
+          [COLLAR_R - SPIGOT, rise - 0.04],
+          [0, rise - 0.04],
+        ]);
+        p.cyl("slot", x, zc, h + rise - 0.04, h + rise - 0.039, COLLAR_R - SPIGOT);
       }
       // Switch panel for the lights and the fan on the front skirt, right.
       const sx1 = w / 2 - SWITCHES.inset;
       const sy0 = (h - sl - SWITCHES.h) / 2;
-      p.box("panelDark", sx1 - SWITCHES.w, sx1, sy0, sy0 + SWITCHES.h, zf - 0.002, d / 2 - 0.002);
+      p.plate("panelDark", sx1 - SWITCHES.w, sx1, sy0, sy0 + SWITCHES.h, zf - 0.002, d / 2 - 0.002, BODY_RADIUS * 3, true);
       for (const k of [0.3, 0.7]) {
         const x = sx1 - SWITCHES.w * k;
         p.box("handle", x - 0.012, x + 0.012, sy0 + SWITCHES.h * 0.3, sy0 + SWITCHES.h * 0.7, d / 2 - 0.002, d / 2);
@@ -225,7 +279,7 @@ function makeHood(kind: string, island: boolean): KindDef {
         for (let i = 0; i < n; i++) {
           const x = -w / 2 + (w / n) * (i + 0.5);
           p.box("steelDark", x - lw / 2 - 0.01, x + lw / 2 + 0.01, h - SHEET - 0.012, h - SHEET, z - ld / 2 - 0.01, z + ld / 2 + 0.01);
-          p.box("panel", x - lw / 2, x + lw / 2, h - SHEET - 0.016, h - SHEET - 0.012, z - ld / 2, z + ld / 2);
+          p.roundedBox("panel", x - lw / 2, x + lw / 2, h - SHEET - 0.016, h - SHEET - 0.012, z - ld / 2, z + ld / 2, 0.01, "vertical");
         }
       }
     },

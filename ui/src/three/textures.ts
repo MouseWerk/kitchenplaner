@@ -1,7 +1,7 @@
-// Procedural textures for the 3D view: brushed steel, floor tiles and wall paint, generated as
-// pixel data (no canvas, no image files), so they are deterministic, tileable, testable without
-// a browser and cost nothing to load. Each generator returns RGBA bytes; `toTexture` wraps them
-// in a repeating, mipmapped three.js texture.
+// Procedural textures for the 3D view: brushed steel, granite, wood, floor tiles and wall paint,
+// generated as pixel data (no canvas, no image files), so they are deterministic, tileable,
+// testable without a browser and cost nothing to load. Each generator returns RGBA bytes;
+// `toTexture` wraps them in a repeating, mipmapped three.js texture.
 
 import * as THREE from "three";
 
@@ -169,6 +169,48 @@ export function wallPaintPixels(size = 128, seed = 23): Pixels {
     const v = y / size;
     const g = 128 + (fine(u * 32, v * 32) - 0.5) * 70 + (coarse(u * 8, v * 8) - 0.5) * 40;
     return [g, g, g];
+  });
+}
+
+/** Size one granite texture covers on a surface (m); `shared.ts` repeats it per metre. */
+export const GRANITE_REPEAT_M = 0.25;
+/** Size one wood texture covers along and across the grain (m). */
+export const WOOD_REPEAT_M = { along: 0.6, across: 0.3 };
+
+/**
+ * Polished dark granite (a pizza or pastry top) as a colour map: a near black ground with a
+ * cloud of slightly lighter patches and scattered grains of black, gray and white feldspar, a few
+ * millimetres each at `GRANITE_REPEAT_M`. Tiles without seams.
+ */
+export function granitePixels(size = 128, seed = 31): Pixels {
+  const cloud = periodicNoise(8, seed);
+  const grain = random(seed + 1);
+  const grains = new Float32Array(size * size).map(() => grain());
+  return pixels(size, size, (x, y) => {
+    const c = cloud((x / size) * 8, (y / size) * 8) - 0.5;
+    const g = grains[y * size + x];
+    // Most pixels are the dark ground; one in twelve a light grain, one in eight a black one.
+    const v = g > 0.92 ? 150 + (g - 0.92) * 900 : g < 0.12 ? 18 : 46 + c * 22 + (g - 0.5) * 10;
+    return [v, v, v + 3];
+  });
+}
+
+/**
+ * End-grain-free beech of a butcher block or a wooden worktop as a colour map: warm strips
+ * along u (the glued staves) with fine growth lines along the grain. Tiles without seams.
+ */
+export function woodPixels(size = 128, seed = 37): Pixels {
+  const rnd = random(seed);
+  // Staves across v (8 per texture), each its own shade; growth lines as a 1D noise across them.
+  const staves = Array.from({ length: 8 }, () => rnd() - 0.5);
+  const rows = Array.from({ length: size }, () => rnd() - 0.5);
+  const flow = periodicNoise(4, seed + 1);
+  return pixels(size, size, (x, y) => {
+    const stave = staves[Math.floor((y / size) * 8)];
+    // Growth lines: every row its own shade, softened with its neighbour; a slow flow along them.
+    const line = rows[y] * 0.6 + rows[(y + 1) % size] * 0.4;
+    const v = 1 + stave * 0.12 + line * 0.1 + (flow((x / size) * 4, (y / size) * 4) - 0.5) * 0.08;
+    return [196 * v, 150 * v, 104 * v];
   });
 }
 

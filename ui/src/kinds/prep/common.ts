@@ -7,7 +7,7 @@
 
 import type { Fill, Pen } from "../../render/drawing";
 import { FEET, INSET, LEG as FRONT_LEG, TOP as FRONT_TOP, type Front } from "../parts/elevation";
-import { castor, DOOR, GAP, LEG, SHEET, TOP, UNDERSHELF, type Hole, type Parts, type Size } from "../parts/mesh";
+import { foot as turnedFoot, TOP_RADIUS, worktop, castor, DOOR, GAP, LEG, SHEET, TOP, UNDERSHELF, type Hole, type Parts, type Size } from "../parts/mesh";
 import { INSET as PLAN_INSET, type PlanSketch } from "../parts/plan";
 
 // ---------------------------------------------------------------------------------------------
@@ -85,13 +85,15 @@ export interface TopEdges {
  */
 export function tableTop(p: Parts, { w, d, h }: Size, edges: TopEdges, holes: readonly Hole[] = []): void {
   if (holes.length > 0) p.topWithHoles("steel", w, d, h - TOP, h, holes);
-  else p.box("steel", -w / 2, w / 2, h - TOP, h, -d / 2, d / 2);
+  else worktop(p, "steel", -w / 2, w / 2, h - TOP, h, -d / 2, d / 2);
   p.rod("steel", "x", 0, h - EDGE, d / 2 - EDGE, w, EDGE);
   if (edges.rolledBack) p.rod("steel", "x", 0, h - EDGE, -d / 2 + EDGE, w, EDGE);
-  if (edges.back) p.box("steel", -w / 2, w / 2, h, h + UPSTAND_H, -d / 2, -d / 2 + UPSTAND_T);
+  // Upstands stand from inside the top's rounded edge so no gap shows under them.
+  const y0 = h - TOP_RADIUS;
+  if (edges.back) p.roundedBox("steel", -w / 2, w / 2, y0, h + UPSTAND_H, -d / 2, -d / 2 + UPSTAND_T, TOP_RADIUS, "top");
   const sideFront = d / 2 - 2 * EDGE;
-  if (edges.left) p.box("steel", -w / 2, -w / 2 + UPSTAND_T, h, h + UPSTAND_H, -d / 2, sideFront);
-  if (edges.right) p.box("steel", w / 2 - UPSTAND_T, w / 2, h, h + UPSTAND_H, -d / 2, sideFront);
+  if (edges.left) p.roundedBox("steel", -w / 2, -w / 2 + UPSTAND_T, y0, h + UPSTAND_H, -d / 2, sideFront, TOP_RADIUS, "top");
+  if (edges.right) p.roundedBox("steel", w / 2 - UPSTAND_T, w / 2, y0, h + UPSTAND_H, -d / 2, sideFront, TOP_RADIUS, "top");
 }
 
 /** Centre of the legs of a table (m from the middle): set in under the top and its rolled edge. */
@@ -101,8 +103,7 @@ function legCentre({ w, d }: Size): { x: number; z: number } {
 
 /** An adjustable foot: a threaded post on a rubber pad, centred under (x, z), up to `top`. */
 export function foot(p: Parts, x: number, z: number, top: number): void {
-  p.cyl("steelDark", x, z, FOOT_PAD, top, 0.013);
-  p.cyl("rubber", x, z, 0, FOOT_PAD, 0.02);
+  turnedFoot(p, x, z, top, 0.02);
 }
 
 /** A swivel castor of the tables and machines under (x, z), its plate at `CASTOR` (m). */

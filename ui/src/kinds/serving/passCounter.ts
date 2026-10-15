@@ -60,7 +60,8 @@ export const passCounter: KindDef = {
   },
   mesh(p, s, item) {
     const m = PLATE_MARGIN / 1000;
-    const hole: Hole = { x0: -s.w / 2 + m, x1: s.w / 2 - m, z0: -s.d / 2 + m, z1: s.d / 2 - m };
+    // Square: the heated plate lies flush in it.
+    const hole: Hole = { x0: -s.w / 2 + m, x1: s.w / 2 - m, z0: -s.d / 2 + m, z1: s.d / 2 - m, r: 0 };
     openFrame(p, s, s.h - TOP);
     p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, [hole]);
     // The heated plate lies flush in the top, one field per heat zone with a steel strip between

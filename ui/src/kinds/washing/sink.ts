@@ -4,7 +4,7 @@
 // bowls, and the pot sink with one deep, large bowl.
 
 import { INSET as FRONT_INSET, TAP, TOP as FRONT_TOP } from "../parts/elevation";
-import { openFrame, SHEET, tap, TOP, type Hole } from "../parts/mesh";
+import { openFrame, SHEET, tap, TOP, TOP_RADIUS, type Hole } from "../parts/mesh";
 import { INSET, UPSTAND, upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
 import { bowlDrain, bowlSpans, drainerGrooves, drainerPlan, mid, overflow, type Side } from "./common";
@@ -112,7 +112,7 @@ export function makeSink(spec: SinkSpec): KindDef {
       if (at === "right") drainerGrooves(p, -s.w / 2 + margin, x0 - margin, s.h, zc - bd / 2, zc + bd / 2);
       else drainerGrooves(p, x1 + margin, s.w / 2 - margin, s.h, zc - bd / 2, zc + bd / 2);
       // Upstand along the back wall, a mixer tap over each bowl.
-      p.box("steel", -s.w / 2, s.w / 2, s.h, s.h + UPSTAND_HEIGHT, -s.d / 2, -s.d / 2 + SHEET * 2);
+      p.roundedBox("steel", -s.w / 2, s.w / 2, s.h - TOP_RADIUS, s.h + UPSTAND_HEIGHT, -s.d / 2, -s.d / 2 + SHEET * 2, TOP_RADIUS, "top");
       for (const h of holes) tap(p, (h.x0 + h.x1) / 2, -s.d / 2, s.h, TAP_RISE);
     },
   };

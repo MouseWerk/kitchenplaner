@@ -14,10 +14,12 @@ kinds/
   parts/
     plan.ts         PlanSketch (line, rect, circle, quarter) + hob, controlStrip, upstandLine, frontDoorSwing, cross
     elevation.ts    Front (box, line, circle, doors, drawers, panel, worktop, legsAndUndershelf) + doorCount
-    mesh.ts         Parts (box, cyl, rod, bar, knob, barHandle, tub, topWithHoles, grid, wireBox,
-                    wireCage, slope, chamferCorner, roundOpening, ring) + body, plinth, doors,
-                    castor, openFrame, tap, cookingBody, controlKnobs, ovenWindow, roundBowl,
-                    wirePositions
+    mesh.ts         Parts (box, cyl, rod, bar, roundedBox, plate, lathe, pan, extrude, tube, knob,
+                    barHandle, tub, topWithHoles, grid, wireBox, wireCage, slope, chamferCorner,
+                    ring) + body, worktop, plinth, foot, doors, castor, openFrame, tap,
+                    cookingBody, controlKnobs, ovenWindow, roundBowl, roundedRectOutline,
+                    wirePositions, arcPoints, roundSteps; edge radii (TOP_RADIUS, BODY_RADIUS,
+                    DOOR_RADIUS, BOWL_RADIUS, GN_RADIUS, LEG_RADIUS)
     flue.ts         the flue outlet of gas variants (flueBox, flueMesh, fluePlan, flueFront,
                     withGasFlue); flueMesh takes a box for an outlet elsewhere (kettle)
     frost.ts        the freezer mark in every view (frostMark, frostFront, frostPlan, FROST_STRIP)
@@ -48,7 +50,8 @@ preparation machines (group `prep`), `cooking` only the group `cooking`. A new a
   viewer; seen from the side or back the default is a line under the top (`elevationSide`).
 - 3D: `mesh(p, s, item)` builds in metres, x across the width (centred), z from the back (-d/2)
   to the front (+d/2), y up from 0 (the elevation) to `s.h`. Use only `Parts` and the shared
-  materials (`MaterialId` in three/shared.ts): no own geometry, materials or textures.
+  materials (`MaterialId` in three/shared.ts): no own geometry, materials or textures. How a
+  model should look and which part to use for what: "Model style guide" below.
 
 Shared looks in 3D:
 
@@ -61,10 +64,10 @@ Shared looks in 3D:
   `SHELF_PITCH` (30 mm) are the usual wire distances. The 3D view merges all rods of an item into
   one draw call.
 - Shaped sheet metal: `p.slope(mat, x0, x1, zTop, yTop, run, dir)` for a sheet on a 45° fold
-  (a hood's inclined front) with `p.chamferCorner` for the side panel's triangle under it;
-  `p.roundOpening(mat, x, z, r, y0, y1)` makes a square hole in a top read round, `p.ring` lays a
-  ring of straight bars over its edge (a wok ring); `roundBowl` is a round bowl pressed into a
-  deck (a hand wash basin).
+  with `p.chamferCorner` for the side panel's triangle under it (a folded front with a rounded
+  bend and a rolled edge is better drawn as one `p.extrude` profile, as the canopy hoods do); a
+  round hole in a top is a `Hole` with `r` half its size, `p.ring` lays a turned ring over its
+  edge (a wok ring); `roundBowl` is a round bowl pressed into a deck (a hand wash basin).
 - Water in basins, bain-marie wells and pans is `water` (light, glossy, see-through); `oil` is
   for fryers and dark drinks only. Food in wells, pans and displays is `foodRed`, `foodGreen`,
   `foodCream` or `foodBrown` (muted), never a steel, panel or hob material.
@@ -81,6 +84,109 @@ Every view fills exactly width × depth × height. Only these may stick out, and
 `rise` (mm above the height, for taps), door swings in the plan (arcs, an open leaf with the
 `opening` pen) at the front, and a stand below a raised floor unit (`elevationBase`, and in 3D
 negative y down to `-item.elevation`).
+
+## Model style guide
+
+The models are read at 1 to 5 m in the 3D view and at 56 × 44 px in the catalog. What makes them
+read as real equipment is light on edges, round things turned round, and the right material per
+element, not small detail. The reference units are `range-6` (gas and electric), `combi-20`,
+`fryer-2`, `sink-2`, `fridge-1400` and `hood-island`; look at them before you build.
+
+### Which part for what
+
+| Part | Use for | Not for |
+|---|---|---|
+| `p.roundedBox(mat, x0..z1, r, edges, axis)` | bodies, worktops, doors and drawer fronts, panels, control strips, legs (`"vertical"`), upstands (`"top"`), door leaves (`"top"` along `"z"`: rounded at the front, flat at the back) | flush marks on a face |
+| `p.plate(mat, x0..z1, r, front)` | windows, displays, glass, switch panels, slots with round ends: thin along z, corners rounded in the face | |
+| `p.lathe(mat, x, y, z, profile, { axis, rect })` | anything turned: knobs with skirts, feet, burners and caps, hotplates, bowls, kettles, pots, lamp shades, collars, hinge barrels, tyres (`axis: "x"`); with `rect`, a frame or band with round corners (a glass door frame, a gasket round a leaf) | boxes (use `roundedBox`) |
+| `p.pan` / `p.tub(mat, x0..z1, wall, r)` | bowls, tanks, wells, GN containers (`pan` with `rim`): round corners, a cove at the floor, open at the top; the `Hole` it sits in gets the same `r` (the default for both) | a square insert in a hole (`Hole.r: 0`) |
+| `p.extrude(mat, axis, a, b, outline, holes)` | profiles along a straight run: a hood's skirt with its fold and rolled edge, kick plates, handle and gasket profiles, rails, a deck with a round hole | turned shapes |
+| `p.tube(mat, points, r, { bend })` | taps and spouts, bar handles on stand-offs (`barHandle`), gas and waste pipes, rails with bends, basket handles | straight rods (`rod` is cheaper) |
+| `p.box`, `p.cyl`, `p.rod`, `p.bar` | flush marks and slots (`slot`), small hidden or dark parts, straight rods, wires | visible bodies, doors and tops (no edge catches light) |
+| `p.grid`, `p.wireBox`, `p.wireCage` | wire work (8-sided wires, merged into one draw call) | |
+
+The shared helpers already use them: `body`, `worktop`, `topWithHoles`, `plinth` and `foot`,
+`doors`, `knob`/`controlKnobs`, `barHandle`, `tap`, `tub`, `castor`, `openFrame`, `cookingBody`,
+`ovenWindow`, `roundBowl`, `ring`, `flueMesh`, and in the areas `lineModule`, `gasBurners`,
+`hotplates`, `coolDoor`, `uprightCarcass`, `bowlDrain`, `tableTop`, `counterBody`. Use them before
+building your own.
+
+Profiles for `lathe` are (radius, height) pairs from the bottom of the axis out and up, so the
+normals point out of the material; an inside surface (a bowl's) runs back down. A turn of more
+than 40° stays a sharp edge, less is smoothed (weighted by the segments' lengths, so a narrow
+bevel does not shade a wide face). For an exact round give the points with their normals:
+`arcPoints(cr, cy, r, a0, a1, steps)`. A profile that ends where it started is a closed ring
+without caps.
+
+### Edge radii
+
+| Element | Radius | Constant |
+|---|---|---|
+| Worktops, covers, upstands, undershelves | 3 mm | `TOP_RADIUS` |
+| Bodies (upright corners), plinths, control strips, panels | 2 mm | `BODY_RADIUS` |
+| Door and drawer leaves (front edges) | 2 mm | `DOOR_RADIUS` |
+| Insulated doors (refrigeration), cabinet corners | 4 mm | `cooling/common.ts` |
+| Pressed housings (combi ovens, ovens, machines) | 8 mm | `combiOven.ts` |
+| Square tube legs | 4 mm | `LEG_RADIUS` |
+| Cast pan supports (top edges) | 4 mm | `cooking/common.ts` |
+| Bowls, tanks, wells and their holes (corners seen from above) | 20 mm | `BOWL_RADIUS` |
+| GN containers | 12 mm | `GN_RADIUS` |
+| Windows in doors | 12 to 30 mm | `ovenWindow`, `combiOven.ts` |
+
+Below 0.2 mm a radius is not drawn. Rounded parts never touch with flat faces in the same plane:
+start what stands on a rounded top inside its edge (`h - TOP_RADIUS`, as `tableTop` does), and
+let flush marks stand 0.5 to 2 mm proud of the face they lie on.
+
+### Materials per element
+
+| Element | Material |
+|---|---|
+| Bodies, doors, tops, sheet work | `steel` (brushed; the grain runs along x on tops and fronts) |
+| Kick plates, feet, legs, hinges and inner frames in shadow | `steelDark` |
+| Turned and pressed steel without grain (hinge barrels, bezels, strainers) | `satin` |
+| Handles, taps, index marks, bright trim | `handle` (polished) |
+| Chromed griddle plates | `chrome` |
+| Pan supports, burner caps, wok rings of gas units | `castIron` (enamelled) |
+| Knobs and plastic grips | `knob` |
+| Feet pads, gaskets, tyres, seals round windows | `rubber` |
+| Glass ceramic hobs | `ceramic`; zones `zone` |
+| Hotplates | `plate` |
+| See-through glass | `glass`; tinted oven and display glass `glassDark` |
+| Panels, liners, light panels | `panel` (white), `panelDark` (control panels) |
+| Painted steel: cold room panels and doors, machine housings | `paintGray` (or `panel` for white) |
+| Stone and wood tops (pizza, pastry, butcher block) | `granite`, `wood` |
+| Water, oil, food | `water`, `oil`, `foodRed`, `foodGreen`, `foodCream`, `foodBrown` |
+| Flush slots, vents, openings | `slot` |
+
+### Budget
+
+A unit at its default size stays within 200 parts and 10 000 triangles (today: median 28 parts
+and 2 100 triangles; the fryers and the pasta cooker with their baskets the most, about 190 parts
+and 8 400 triangles).
+Parts are merged per material, so they cost build time, not draw calls; triangles cost every
+frame, twice with shadows. Leave the segments to the parts (lathes 16, 24 or 32 round by size,
+tubes 8 to 16, rounds 1 to 4 steps per quarter by radius) and spend detail where it shows: the
+front, the top and what the hand touches. Shaped parts are cached by their size and shape, so
+equal parts of equal units cost nothing extra.
+
+### Checklist for a unit
+
+1. Bodies, tops, doors and panels are `roundedBox` or `plate` with the radius from the table;
+   `box` only for flush, hidden or dark parts.
+2. Everything round is turned (`lathe`) or a `tube`: knobs, feet, bowls, burners, pipes, handles.
+   No stack of cylinders where one profile does it.
+3. Tanks, bowls and wells are `tub`/`pan` with their `Hole` in the top at the same radius.
+4. Materials from the table; no steel for rubber, glass or food.
+5. Shaped parts are never scaled or reused across items by hand; place them with the extents and
+   points the call takes. Everything stays inside width × depth × height (plus the declared
+   `rise` and stand).
+6. Nothing stands in the plane of another face of a different part (no flicker): offset by 0.5
+   to 2 mm, or start inside a rounded edge.
+7. Within the budget; the 3D view's frame time with the example kitchen stays where it was
+   (`window.__view3d.measure()` in the development build).
+8. `npx tsc --noEmit` and `npx vitest run src/kinds src/three` are green; then look at the unit
+   from the front, from above and from below in the app and in the catalog thumbnail, in the
+   light and the dark theme.
 
 ## Placement
 
@@ -171,8 +277,8 @@ export const brattPan: KindDef = {
   overhead, table-top and flat units start at their elevation, floor units reach the floor;
 - the model and the plan symbol turn with the item: at 90 degrees the front faces west, and
   every part is the unturned part turned (nothing depends on the rotation);
-- every mesh carries `userData.itemId` and uses only the shared geometry and materials, none of
-  them a wireframe;
+- every mesh carries `userData.itemId` and uses only the shared geometry (the unit box and
+  cylinders or a cached shaped part, never scaled) and materials, none of them a wireframe;
 - a gas variant has the `flue` parts and an electric one none (unless the kind has `flue: false`),
   and every energy variant of an entry looks different in 3D from the default one;
 - an item of the entry survives saving and opening the project unchanged;

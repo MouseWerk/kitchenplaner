@@ -67,7 +67,8 @@ export const sortingTable: KindDef = {
   mesh(p, s) {
     const { chute: c, basin: b } = layout(s.w * 1000, s.d * 1000);
     const m = (v: number) => v / 1000;
-    const chute = { x0: m(c.x0), x1: m(c.x1), z0: m(c.y0), z1: m(c.y1) };
+    // The chute is a square funnel of four sheets: a square hole.
+    const chute = { x0: m(c.x0), x1: m(c.x1), z0: m(c.y0), z1: m(c.y1), r: 0 };
     const basin = { x0: m(b.x0), x1: m(b.x1), z0: m(b.y0), z1: m(b.y1) };
     const cc = (chute.x0 + chute.x1) / 2;
     const bin = Math.min(m(BIN_R), (chute.x1 - chute.x0) * 0.8);

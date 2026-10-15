@@ -3,7 +3,7 @@
 // the elevations and 3D of refrigerated counters agree on.
 
 import { INSET, type Front } from "../parts/elevation";
-import { GAP, PLINTH, plinth, SHEET, SHELF_PITCH, type Parts, type Size } from "../parts/mesh";
+import { arcPoints, BODY_RADIUS, GAP, PLINTH, plinth, SHEET, SHELF_PITCH, type Parts, type Size } from "../parts/mesh";
 import { INSET as PLAN_INSET, type PlanSketch } from "../parts/plan";
 import { MM_PER_UNIT } from "../../three/shared";
 
@@ -22,6 +22,11 @@ export const STANDOFF = 0.02;
 const HINGE = 0.012;
 /** Thickness of the rubber gasket that shows in the gap around a door. */
 const GASKET = 0.004;
+/** Width of the magnetic gasket under the leaf's edge, and how far its bulb shows past the leaf (m). */
+const GASKET_W = 0.012;
+const GASKET_BULGE = 0.0015;
+/** Edge radius of an insulated door leaf: a pressed, foamed leaf, rounder than a cabinet door (m). */
+const LEAF_RADIUS = 0.004;
 /** Width of the frame around a glass door pane. */
 export const GLASS_FRAME = 0.05;
 /** Height of the fascia with the controls on top of upright cabinets (m). */
@@ -99,9 +104,10 @@ export interface DoorSpec {
 }
 
 /**
- * An insulated door: the rubber gasket shows as a dark line in the gap, the leaf, two hinges at
- * the hinge side and the handle. A glass door is a framed pane without the gasket so the
- * shelves behind it show.
+ * An insulated door: the leaf, rounded at its front, on its magnetic gasket whose bulb shows dark
+ * in the gap all round, two turned hinge barrels at the hinge side and the handle. A glass door
+ * is a pane in one frame with round outer corners, without the gasket so the shelves behind it
+ * show.
  */
 export function coolDoor(p: Parts, o: DoorSpec): void {
   const { x0, x1, y0, y1, zBody, zFront } = o;
@@ -110,22 +116,63 @@ export function coolDoor(p: Parts, o: DoorSpec): void {
   const b = x1 - GAP;
   const lo = y0 + GAP;
   const hi = y1 - GAP;
+  const cx = (a + b) / 2;
+  const cy = (lo + hi) / 2;
   if (o.glass) {
+    // The frame: a band round the pane, its outer corners and front edge rounded.
     const fw = Math.min(GLASS_FRAME, (b - a) / 4, (hi - lo) / 4);
-    p.box("steel", a, b, lo, lo + fw, zBody, zLeaf);
-    p.box("steel", a, b, hi - fw, hi, zBody, zLeaf);
-    p.box("steel", a, a + fw, lo + fw, hi - fw, zBody, zLeaf);
-    p.box("steel", b - fw, b, lo + fw, hi - fw, zBody, zLeaf);
+    const depth = zLeaf - zBody;
+    const r = Math.min(LEAF_RADIUS, fw / 2, depth / 2);
+    p.lathe(
+      "steel",
+      cx,
+      cy,
+      zBody,
+      [
+        [0, 0],
+        [fw, 0],
+        ...arcPoints(fw - r, depth - r, r, 0, Math.PI / 2, 1),
+        [0, depth],
+        [0, 0],
+      ],
+      { axis: "z", rect: [(b - a) / 2 - fw, (hi - lo) / 2 - fw] },
+    );
     p.box("glass", a + fw, b - fw, lo + fw, hi - fw, zLeaf - SHEET, zLeaf - SHEET / 2);
   } else {
-    p.box("rubber", x0 + GAP / 2, x1 - GAP / 2, y0 + GAP / 2, y1 - GAP / 2, zBody, zBody + GASKET);
-    p.box("steel", a, b, lo, hi, zBody + GASKET, zLeaf);
+    // The gasket: a closed bulb profile round the leaf's outline, showing a little past its edge.
+    const g = GASKET_W;
+    p.lathe(
+      "rubber",
+      cx,
+      cy,
+      zBody,
+      [
+        [0, 0],
+        [g + GASKET_BULGE * 0.6, 0],
+        [g + GASKET_BULGE, GASKET * 0.5],
+        [g + GASKET_BULGE * 0.6, GASKET],
+        [0, GASKET],
+        [0, 0],
+      ],
+      { axis: "z", rect: [(b - a) / 2 - g, (hi - lo) / 2 - g] },
+    );
+    p.roundedBox("steel", a, b, lo, hi, zBody + GASKET, zLeaf, LEAF_RADIUS, "top", "z");
   }
   const left = o.hinge === "left";
-  // Hinges sit on the hinge edge, a little in from the top and the bottom.
-  const hx = left ? a : b - HINGE;
+  // Hinge barrels on the hinge edge, a little in from the top and the bottom.
+  const hr = HINGE / 2;
+  const hx = left ? a + hr : b - hr;
   const hh = Math.min(0.05, (hi - lo) / 6);
-  for (const hy of [lo + hh * 0.5, hi - hh * 1.5]) p.box("steelDark", hx, hx + HINGE, hy, hy + hh, zLeaf - 0.006, zLeaf + 0.004);
+  for (const hy of [lo + hh * 0.5, hi - hh * 1.5]) {
+    p.lathe("satin", hx, hy, zLeaf - 0.001, [
+      [0, 0],
+      [hr * 0.7, 0],
+      [hr, hr * 0.4],
+      [hr, hh - hr * 0.4],
+      [hr * 0.7, hh],
+      [0, hh],
+    ]);
+  }
   if (o.handle === "vertical") {
     const len = Math.min(0.4, (hi - lo) * 0.5);
     const mid = Math.min(Math.max(o.gripY ?? (lo + hi) / 2, lo + len / 2), hi - len / 2);
@@ -176,15 +223,18 @@ export function display(p: Parts, cx: number, cy: number, zFace: number): void {
 export function uprightCarcass(p: Parts, s: Size, zBody: number, hollow = false): void {
   plinth(p, s.w, s.d);
   // A hollow cabinet (glass doors) gets its shell from `cabinetShell`; only the head is solid.
-  p.box("steel", -s.w / 2, s.w / 2, hollow ? s.h - FASCIA : PLINTH, s.h, -s.d / 2, zBody);
+  p.roundedBox("steel", -s.w / 2, s.w / 2, hollow ? s.h - FASCIA : PLINTH, s.h, -s.d / 2, zBody, CABINET_RADIUS, "vertical");
   const zLeaf = s.d / 2 - STANDOFF;
   const y0 = s.h - FASCIA;
-  p.box("steel", -s.w / 2, s.w / 2, y0 + GAP, s.h, zBody, zLeaf);
+  p.roundedBox("steel", -s.w / 2, s.w / 2, y0 + GAP, s.h, zBody, zLeaf, BODY_RADIUS, "top", "z");
   // Grille over the left part, display at the right.
   const gw = Math.min(0.45, s.w * 0.55);
   grille(p, -s.w / 2 + 0.03, -s.w / 2 + 0.03 + gw, y0 + 0.025, s.h - 0.025, zLeaf, s.d / 2);
   display(p, s.w / 2 - 0.13, y0 + FASCIA / 2, zLeaf);
 }
+
+/** Radius of the upright corners of a refrigerated cabinet's body (m). */
+const CABINET_RADIUS = 0.004;
 
 /** Wall thickness of an insulated cabinet shell (m). */
 export const SHELL = 0.04;

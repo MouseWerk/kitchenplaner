@@ -5,6 +5,7 @@ import { sinkBowlCount } from "../kinds/washing/sink";
 import { frontOf } from "../model/geometry";
 import type { Item } from "../model/types";
 import { buildItemObject, itemIdOf } from "./meshes";
+import { isSharedGeometry } from "./shared";
 
 /** Tolerance for sizes in metres (a tenth of a millimetre). */
 const TOL = 1e-4;
@@ -110,14 +111,22 @@ describe("buildItemObject", () => {
     }
   });
 
-  it("shares geometry between items", () => {
-    const geos = new Set<THREE.BufferGeometry>();
-    for (const entry of CATALOG) {
-      buildItemObject(item(entry.id)).traverse((o) => {
-        if (o instanceof THREE.Mesh) geos.add(o.geometry);
+  it("shares geometry: equal items are built from the same shared geometries", () => {
+    const geosOf = (it0: Item) => {
+      const out: THREE.BufferGeometry[] = [];
+      buildItemObject(it0).traverse((o) => {
+        if (o instanceof THREE.Mesh) out.push(o.geometry);
       });
+      return out;
+    };
+    for (const entry of CATALOG) {
+      const a = geosOf(item(entry.id));
+      // Another item of the same size elsewhere and turned: not one geometry of its own.
+      const b = geosOf(item(entry.id, { id: "other", x: 500, y: 700, rotation: 90 }));
+      expect(b).toEqual(a);
+      b.forEach((g, i) => expect(g).toBe(a[i]));
+      for (const g of b) expect(isSharedGeometry(g), g.name).toBe(true);
     }
-    expect(geos.size).toBeLessThanOrEqual(2);
   });
 
   it("draws unknown catalog ids as a table", () => {

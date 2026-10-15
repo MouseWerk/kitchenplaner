@@ -5,8 +5,8 @@
 // (south, down on screen) becomes +z. Every model is first built in its own frame, x along the
 // width, z towards the front and y up from the item's elevation, then placed and turned.
 //
-// All meshes reuse the shared unit box and cylinder and a fixed set of materials
-// (`shared.ts`); the 3D view merges each model per material to keep the draw calls low.
+// All meshes reuse the shared unit box and cylinders, cached shaped parts and a fixed set of
+// materials (`shared.ts`); the 3D view merges each model per material to keep the draw calls low.
 
 import * as THREE from "three";
 import type { Item } from "../model/types";

@@ -3,7 +3,7 @@
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
 import { INSET } from "../parts/plan";
-import type { MaterialId } from "../parts/mesh";
+import { worktop, type MaterialId } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { m } from "./common";
 import { counterBase, counterFrontElevation, counterPlan } from "./counterFridge";
@@ -51,7 +51,7 @@ export const pizzaPrep: KindDef = {
     const work = s.h - m(ABOVE_MM);
     const granite = m(GRANITE_MM);
     counterBase(p, s, "doors", work - granite);
-    p.box("top", -s.w / 2, s.w / 2, work - granite, work, -s.d / 2, s.d / 2);
+    worktop(p, "granite", -s.w / 2, s.w / 2, work - granite, work, -s.d / 2, s.d / 2);
     // The rail: a cooled block with the pans let into its top, toppings showing in them.
     const z0 = -s.d / 2;
     const z1 = z0 + m(railDepth(s.d * 1000));
