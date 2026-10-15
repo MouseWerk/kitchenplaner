@@ -20,6 +20,8 @@ kinds/
                     cookingBody, controlKnobs, ovenWindow, roundBowl, roundedRectOutline,
                     wirePositions, arcPoints, roundSteps; edge radii (TOP_RADIUS, BODY_RADIUS,
                     DOOR_RADIUS, BOWL_RADIUS, GN_RADIUS, LEG_RADIUS)
+    details.ts      machine details several areas share (housing, HOUSING_RADIUS, controlPanel,
+                    display, ratingPlate, ventSlots)
     flue.ts         the flue outlet of gas variants (flueBox, flueMesh, fluePlan, flueFront,
                     withGasFlue); flueMesh takes a box for an outlet elsewhere (kettle)
     frost.ts        the freezer mark in every view (frostMark, frostFront, frostPlan, FROST_STRIP)
@@ -36,7 +38,9 @@ kinds/
 Areas and sidebar groups are not the same: `prep` holds the work tables (group `tables`) and
 preparation machines (group `prep`), `cooking` only the group `cooking`. A new area is added to
 `AREAS` in `registry.ts`, a new group to `CategoryId` in `types.ts`, `CATEGORIES` in
-`registry.ts` and the `category.<id>` texts.
+`registry.ts` and the `category.<id>` texts. The large groups (cooking, cooling, washing, serving) are divided
+into sub-groups (`SUBGROUPS` in `registry.ts`, `GroupId` in `types.ts`, the `group.<id>` texts),
+shown as sub-headings in the sidebar: every entry of such a group names its `group`.
 
 ## Frames and units
 
@@ -107,7 +111,8 @@ element, not small detail. The reference units are `range-6` (gas and electric),
 
 The shared helpers already use them: `body`, `worktop`, `topWithHoles`, `plinth` and `foot`,
 `doors`, `knob`/`controlKnobs`, `barHandle`, `tap`, `tub`, `castor`, `openFrame`, `cookingBody`,
-`ovenWindow`, `roundBowl`, `ring`, `flueMesh`, and in the areas `lineModule`, `gasBurners`,
+`ovenWindow`, `roundBowl`, `ring`, `flueMesh`, the machine details in `parts/details.ts`
+(`housing`, `controlPanel`, `display`, `ratingPlate`, `ventSlots`), and in the areas `lineModule`, `gasBurners`,
 `hotplates`, `coolDoor`, `uprightCarcass`, `bowlDrain`, `tableTop`, `counterBody`. Use them before
 building your own.
 
@@ -156,13 +161,16 @@ let flush marks stand 0.5 to 2 mm proud of the face they lie on.
 | Painted steel: cold room panels and doors, machine housings | `paintGray` (or `panel` for white) |
 | Stone and wood tops (pizza, pastry, butcher block) | `granite`, `wood` |
 | Water, oil, food | `water`, `oil`, `foodRed`, `foodGreen`, `foodCream`, `foodBrown` |
+| Safety and signal marks: fire extinguishers, exit signs, 400 V sockets, hot and cold water caps, gas levers, hazard labels, alarm lights | `signalRed`, `signalGreen`, `signalYellow`, `signalBlue` (never a food tone) |
 | Flush slots, vents, openings | `slot` |
 
 ### Budget
 
-A unit at its default size stays within 200 parts and 10 000 triangles (today: median 28 parts
-and 2 100 triangles; the fryers and the pasta cooker with their baskets the most, about 190 parts
-and 8 400 triangles).
+A unit stays within 200 parts and 10 000 triangles in every variant, its widest included (the
+contract test checks it; today: median 30 parts and 3 000 triangles at the default size; the
+pasta cooker and the fryers with their baskets, the multideck, the cold pass and the flight
+dishwasher the most). Wide units cap what they repeat (bottles, plates, stacks) and space it out;
+the fryers and the pasta cooker widen their basket wires (`basketPitch`).
 Parts are merged per material, so they cost build time, not draw calls; triangles cost every
 frame, twice with shadows. Leave the segments to the parts (lathes 16, 24 or 32 round by size,
 tubes 8 to 16, rounds 1 to 4 steps per quarter by radius) and spend detail where it shows: the
@@ -217,7 +225,7 @@ the plan check keeps the rectangle.
 ## Adding a unit
 
 1. **Entry** in `kinds/<area>/entries.ts`. The `id` is written into project files: never change or
-   reuse one. Give `kind`, `category`, `name` (a `cat.<name>` key), sizes, `elevation` and
+   reuse one. Give `kind`, `category` (and `group` in a divided category), `name` (a `cat.<name>` key), sizes, `elevation` and
    `connections` of the default variant. Optional: `widths` (must include `width`), `energy`
    (`["electric", "gas"]`, the first is the default) with `variantConnections`, `tags` (lower case
    search words in both languages), `description` (a `catDesc.<name>` key).
@@ -279,6 +287,7 @@ export const brattPan: KindDef = {
   every part is the unturned part turned (nothing depends on the rotation);
 - every mesh carries `userData.itemId` and uses only the shared geometry (the unit box and
   cylinders or a cached shaped part, never scaled) and materials, none of them a wireframe;
+- the model stays within the budget (200 parts, 10 000 triangles) in every variant;
 - a gas variant has the `flue` parts and an electric one none (unless the kind has `flue: false`),
   and every energy variant of an entry looks different in 3D from the default one;
 - an item of the entry survives saving and opening the project unchanged;

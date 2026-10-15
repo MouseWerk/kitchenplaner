@@ -12,6 +12,34 @@ import type { PlanSketch } from "./parts/plan";
 /** The groups of the catalog sidebar, in their order there; each has a `category.<id>` text. */
 export type CategoryId = "cooking" | "cooling" | "washing" | "tables" | "prep" | "serving" | "storage" | "ventilation" | "building";
 
+/**
+ * Sub-groups of a large sidebar group, shown as sub-headings in their order there
+ * (`SUBGROUPS` in registry.ts); each has a `group.<id>` text.
+ */
+export type GroupId =
+  | "line900"
+  | "line700"
+  | "lineAccessories"
+  | "bulkCooking"
+  | "ovens"
+  | "specialities"
+  | "tableTop"
+  | "coolCabinets"
+  | "coolCounters"
+  | "blastChillers"
+  | "coolDisplays"
+  | "ice"
+  | "coldRooms"
+  | "sinks"
+  | "hygiene"
+  | "dishMachines"
+  | "dishLine"
+  | "cleaning"
+  | "serveCounters"
+  | "selfService"
+  | "coffee"
+  | "bar";
+
 export type { Energy } from "../model/types";
 
 /**
@@ -42,6 +70,8 @@ export interface CatalogEntry {
   /** The kind that draws it (`KindDef.kind`). */
   kind: string;
   category: CategoryId;
+  /** The sub-group within the category, for a category that has them (`SUBGROUPS`). */
+  group?: GroupId;
   name: TKey;
   /** One sentence for the catalog preview. */
   description?: TKey;

@@ -1,19 +1,17 @@
-// Shelving units: four corner posts carrying shelves with folded edges, the lowest bay braced
-// at the back. The shelves are solid sheet, perforated sheet (drawn as rows of slots) or open
+// Shelving units: four round corner posts on plastic feet carrying pressed shelves with folded
+// edges, the lowest bay braced at the back. The shelves are solid sheet, perforated sheet (drawn as rows of slots) or open
 // slats (aluminium shelving); the corner unit is an L of two runs sharing the corner posts.
 
 import { FEET, LEG, TOP } from "../parts/elevation";
 import type { Front } from "../parts/elevation";
-import type { MaterialId, Parts } from "../parts/mesh";
+import type { MaterialId } from "../parts/mesh";
 import { cross, type PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
-import { type Deck, LIP, shelf, strut } from "./helpers";
+import { type Deck, LIP, POST_R, roundPost, shelf, strut } from "./helpers";
 
 // Construction sizes (m).
-/** Square post. */
+/** Room a post takes at each corner: its foot (the post is `POST_R` round). */
 const POST = 0.03;
-/** Plastic foot cap under each post. */
-const FOOT_CAP = 0.012;
 /** Lower edge of the lowest shelf above the floor. */
 const LOWEST = 0.15;
 /** Radius of a bracing rod. */
@@ -21,16 +19,16 @@ const BRACE = 0.004;
 /** Depth of one run of a corner shelving unit (mm in the plan and elevation, m in 3D). */
 const RUN_MM = 500;
 
-/** Plan: the four posts and one diagonal, the usual symbol of open shelving. */
+/** Plan: the four round posts and one diagonal, the usual symbol of open shelving. */
 function planPosts(s: PlanSketch, x0: number, y0: number, x1: number, y1: number) {
-  const q = POST * 1000;
+  const q = (POST * 1000) / 2;
   for (const [x, y] of [
-    [x0, y0],
-    [x1 - q, y0],
-    [x0, y1 - q],
+    [x0 + q, y0 + q],
+    [x1 - q, y0 + q],
+    [x0 + q, y1 - q],
     [x1 - q, y1 - q],
   ]) {
-    s.rect("detail", x, y, x + q, y + q);
+    s.circle("detail", x, y, POST_R * 1000);
   }
 }
 
@@ -57,14 +55,8 @@ function levelHeights(h: number, levels: number): number[] {
   return Array.from({ length: levels }, (_, i) => LOWEST + ((h - LIP - LOWEST) * i) / (levels - 1));
 }
 
-/** A post with its foot cap, centred at (x, z). */
-function post(p: Parts, mat: MaterialId, x: number, z: number, h: number) {
-  p.box("rubber", x - POST / 2, x + POST / 2, 0, FOOT_CAP, z - POST / 2, z + POST / 2);
-  p.box(mat, x - POST / 2, x + POST / 2, FOOT_CAP, h, z - POST / 2, z + POST / 2);
-}
-
-/** Shelving with `levels` shelves of the given deck; posts of the frame material. */
-function shelvingKind(kind: string, levels: number, deck: Deck, frame: MaterialId): KindDef {
+/** Shelving with `levels` shelves of the given deck; posts and shelves of the frame material. */
+export function shelvingKind(kind: string, levels: number, deck: Deck, frame: MaterialId, shelfMat: MaterialId = "steel"): KindDef {
   return {
     kind,
     plan(s) {
@@ -79,10 +71,11 @@ function shelvingKind(kind: string, levels: number, deck: Deck, frame: MaterialI
     },
     mesh(p, s) {
       for (const sx of [-1, 1]) {
-        for (const sz of [-1, 1]) post(p, frame, sx * (s.w / 2 - POST / 2), sz * (s.d / 2 - POST / 2), s.h);
+        for (const sz of [-1, 1]) roundPost(p, frame, sx * (s.w / 2 - POST / 2), sz * (s.d / 2 - POST / 2), s.h);
       }
       const ys = levelHeights(s.h, levels);
-      for (const y of ys) shelf(p, deck, -s.w / 2 + POST, s.w / 2 - POST, -s.d / 2, s.d / 2, y);
+      // The shelves sit between the posts and reach the front and the back of the footprint.
+      for (const y of ys) shelf(p, deck, -s.w / 2 + POST / 2, s.w / 2 - POST / 2, -s.d / 2, s.d / 2, y, shelfMat);
       // Cross bracing at the back of the lowest bay keeps the unit from racking.
       const x = s.w / 2 - POST - BRACE * 2;
       const z = -s.d / 2 + POST / 2;
@@ -94,10 +87,11 @@ function shelvingKind(kind: string, levels: number, deck: Deck, frame: MaterialI
   };
 }
 
-export const shelving = shelvingKind("shelving", 4, "solid", "steelDark");
-export const shelving5 = shelvingKind("shelving5", 5, "solid", "steelDark");
-export const shelvingPerforated = shelvingKind("shelvingPerforated", 4, "perforated", "steelDark");
-export const shelvingSlatted = shelvingKind("shelvingSlatted", 4, "slatted", "steel");
+export const shelving = shelvingKind("shelving", 4, "solid", "steel");
+export const shelving5 = shelvingKind("shelving5", 5, "solid", "steel");
+export const shelvingPerforated = shelvingKind("shelvingPerforated", 4, "perforated", "steel");
+// Anodised aluminium: satin, without the grain of brushed stainless.
+export const shelvingSlatted = shelvingKind("shelvingSlatted", 4, "slatted", "satin", "satin");
 
 /** The depth of each run of a corner unit, never more than half its footprint (mm). */
 function runMm(w: number, d: number): number {
@@ -142,12 +136,17 @@ export const shelvingCorner: KindDef = {
       [L + run - c, s.d / 2 - c],
       [L + c, s.d / 2 - c],
     ]) {
-      post(p, "steelDark", x, z, s.h);
+      roundPost(p, "steel", x, z, s.h);
     }
     for (const y of levelHeights(s.h, 4)) {
-      // The back run between its end posts, the left run in front of it.
-      shelf(p, "solid", L + POST, s.w / 2 - POST, B, B + run, y);
-      shelf(p, "solid", L, L + run, B + run, s.d / 2 - POST, y);
+      // The back run between its end posts, the left run in front of it (a hair apart, so the
+      // folded edges do not share a face).
+      shelf(p, "solid", L + c, s.w / 2 - c, B, B + run, y);
+      shelf(p, "solid", L, L + run, B + run + 0.002, s.d / 2 - c, y);
     }
   },
 };
+
+// Cold room shelving: anodised aluminium posts and white polymer grid shelves that take washing
+// in the dishwasher (drawn as a perforated deck in `panel`).
+export const coldRoomShelving = shelvingKind("coldRoomShelving", 5, "perforated", "satin", "panel");

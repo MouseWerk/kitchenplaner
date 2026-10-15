@@ -9,6 +9,7 @@ import { INSET } from "../parts/elevation";
 import { BODY_RADIUS, GAP, SHEET, type Parts, type Point2, type Size } from "../parts/mesh";
 import { cross, INSET as PLAN_INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { controlBox, PRESSED, slotRows, spigotUp } from "./common";
 
 /** Usual width of a grease filter of a canopy hood (mm, 500 × 500 filters). */
 const FILTER = 500;
@@ -161,7 +162,29 @@ function canopy(p: Parts, { w, d, h }: Size, island: boolean): void {
   }
 }
 
-function makeHood(kind: string, island: boolean): KindDef {
+/**
+ * What a hood brings besides its filters: a UV module (a box on the plenum with its own control
+ * and a warning label; the UV lamps sit behind the filters) or supply air (a perforated panel low on
+ * the front skirt that lets the make-up air out gently, fed by its own spigot on the top).
+ */
+type HoodExtra = "none" | "uv" | "supply";
+
+/** UV module on the plenum (m): width, depth, height; inset from the right end. */
+const UV_BOX = { w: 0.5, d: 0.26, h: 0.09, inset: 0.15 };
+/** Supply air panel low on the front skirt (share of the skirt's straight height) and its slot rows. */
+const SUPPLY_SHARE = 0.55;
+const SUPPLY_ROWS = 5;
+/** Radius of the supply spigot (m). */
+const SUPPLY_R = 0.1;
+
+/** Centre of the supply spigot on the top (m, x and z): near the right end, in front of the plenum. */
+function supplySpigot(w: number, d: number, h: number): [number, number] {
+  const pd = plenum(d * 1000, false) / 1000;
+  const zMax = d / 2 - slope(h) - SUPPLY_R - 0.04;
+  return [w / 2 - Math.min(0.4, w / 4), Math.min(zMax, -d / 2 + pd + SUPPLY_R + 0.06)];
+}
+
+function makeHood(kind: string, island: boolean, extra: HoodExtra = "none"): KindDef {
   return {
     kind,
     placement: "overhead",
@@ -180,6 +203,13 @@ function makeHood(kind: string, island: boolean): KindDef {
         s.line("overhead", [s.L + PLAN_INSET, s.B + pd], [s.R - PLAN_INSET, s.B + pd]);
       }
       for (const x of collarXs(s.w / 1000)) s.circle("overhead", x * 1000, zc, COLLAR_R * 1000);
+      if (extra === "uv") {
+        const x1 = s.R - UV_BOX.inset * 1000;
+        s.rect("overhead", x1 - UV_BOX.w * 1000, s.B + PLAN_INSET, x1, s.B + PLAN_INSET + UV_BOX.d * 1000);
+      } else if (extra === "supply") {
+        const [x, z] = supplySpigot(s.w / 1000, s.d / 1000, s.item.height / 1000);
+        s.circle("overhead", x * 1000, z * 1000, SUPPLY_R * 1000);
+      }
     },
     elevation(f) {
       const { l, r, z0, top, w } = f;
@@ -200,6 +230,17 @@ function makeHood(kind: string, island: boolean): KindDef {
         f.box("hidden", a + INSET / 4, a + fw - INSET / 4, fz0, fz1);
       }
       collarsFront(f, collarXs(w / 1000).map((x) => l + w / 2 + x * 1000));
+      if (extra === "uv") {
+        const x1 = r - UV_BOX.inset * 1000;
+        f.box("detail", x1 - UV_BOX.w * 1000, x1, top, top + UV_BOX.h * 1000);
+      } else if (extra === "supply") {
+        // The perforated supply panel low on the skirt, and its spigot on the top.
+        const sh = (f.item.height - sl) * SUPPLY_SHARE;
+        f.box("detail", l + INSET, r - SWITCHES.inset * 1000 - SWITCHES.w * 1000 - INSET, z0 + ROLL * 2000 + 10, z0 + sh);
+        const [x] = supplySpigot(w / 1000, f.item.depth / 1000, f.item.height / 1000);
+        const cx = l + w / 2 + x * 1000;
+        f.box("detail", cx - SUPPLY_R * 1000, cx + SUPPLY_R * 1000, top, top + COLLAR_RISE);
+      }
     },
     elevationSide(f) {
       const { l, r, top, w } = f;
@@ -282,6 +323,8 @@ function makeHood(kind: string, island: boolean): KindDef {
           p.roundedBox("panel", x - lw / 2, x + lw / 2, h - SHEET - 0.016, h - SHEET - 0.012, z - ld / 2, z + ld / 2, 0.01, "vertical");
         }
       }
+      if (extra === "uv") uvModule(p, s);
+      else if (extra === "supply") supplyPanel(p, s);
     },
   };
 }
@@ -295,5 +338,47 @@ function collarsFront(f: Parameters<KindDef["elevation"]>[0], xs: number[]): voi
   }
 }
 
+/**
+ * The UV module of a wall hood: a pressed box on the plenum with its display, keys and an amber
+ * warning label, its cable gland at the side (the UV lamps sit in the plenum behind the filters).
+ */
+function uvModule(p: Parts, s: Size): void {
+  const { w, d, h } = s;
+  const x1 = w / 2 - UV_BOX.inset;
+  const x0 = x1 - Math.min(UV_BOX.w, w / 2);
+  const z0 = -d / 2 + 0.05;
+  const z1 = z0 + UV_BOX.d;
+  p.roundedBox("paintGray", x0, x1, h - 0.001, h + UV_BOX.h, z0, z1, PRESSED, "top");
+  controlBox(p, x0 + 0.05, x0 + 0.21, h + 0.02, h + UV_BOX.h - 0.02, z1, z1 + 0.006);
+  p.plate("signalYellow", x1 - 0.12, x1 - 0.04, h + 0.025, h + UV_BOX.h - 0.025, z1 - 0.0005, z1 + 0.0005, 0.004);
+  p.lathe("knob", x0, h + UV_BOX.h / 2, (z0 + z1) / 2, [
+    [0, 0],
+    [0.012, 0],
+    [0.012, 0.01],
+    [0.008, 0.016],
+    [0, 0.016],
+  ], { axis: "x" }).rotation.z = Math.PI / 2;
+}
+
+/**
+ * The supply air of a wall hood: a perforated panel low on the front skirt (slot rows on a dark
+ * band) and its spigot on the top in front of the plenum.
+ */
+function supplyPanel(p: Parts, s: Size): void {
+  const { w, d, h } = s;
+  const sl = slope(h);
+  const zf = d / 2 - EDGE;
+  const x0 = -w / 2 + 0.06;
+  const x1 = w / 2 - SWITCHES.inset - SWITCHES.w - 0.06;
+  const y0 = ROLL * 2 + 0.012;
+  const y1 = (h - sl) * SUPPLY_SHARE;
+  p.plate("steelDark", x0, x1, y0, y1, zf - 0.0005, zf + 0.0015, 0.004, true);
+  slotRows(p, x0 + 0.02, x1 - 0.02, y0 + 0.01, y1 - 0.01, zf + 0.0015, SUPPLY_ROWS);
+  const [x, z] = supplySpigot(w, d, h);
+  spigotUp(p, x, h, z, SUPPLY_R, COLLAR_RISE / 1000);
+}
+
 export const hood = makeHood("hood", false);
 export const hoodIsland = makeHood("hoodIsland", true);
+export const hoodUv = makeHood("hoodUv", false, "uv");
+export const hoodSupply = makeHood("hoodSupply", false, "supply");

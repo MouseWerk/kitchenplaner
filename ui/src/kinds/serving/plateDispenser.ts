@@ -3,10 +3,11 @@
 // heated version has a thermostat knob and a pilot lamp on the front.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { SHEET, TOP } from "../parts/mesh";
+import { BODY_RADIUS, SHEET, TOP } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { CASTOR, castors, castorsFront } from "./common";
+import { bumper, CASTOR, castors, castorsFront, PANEL_SHEET, pilotLamp, plateStack, ratingPlate } from "./common";
+import { ventSlots } from "../parts/details";
 
 /** Width taken by one tube (mm) and the largest plate (radius, m). */
 const TUBE = 420;
@@ -50,32 +51,59 @@ function makePlateDispenser(kind: string, heated: boolean): KindDef {
       const zb = -s.d / 2 + HANDLE_SPACE;
       const zc = (zb + s.d / 2) / 2;
       castors(p, s.w, s.d);
-      p.box("rubber", -s.w / 2, s.w / 2, CASTOR.h, CASTOR.h + BUMPER, zb, s.d / 2);
-      p.box("steel", -s.w / 2 + SHEET, s.w / 2 - SHEET, CASTOR.h + BUMPER, s.h - TOP, zb + SHEET, s.d / 2 - SHEET);
-      // The cover with an opening per tube, the top plate of each stack in it.
+      bumper(p, -s.w / 2, s.w / 2, CASTOR.h, CASTOR.h + BUMPER, zb, s.d / 2);
+      p.roundedBox("steel", -s.w / 2 + SHEET, s.w / 2 - SHEET, CASTOR.h + BUMPER, s.h - TOP, zb + SHEET, s.d / 2 - SHEET, BODY_RADIUS * 4, "vertical");
+      // The cover with an opening per tube, the top plate of each stack in it, a little below
+      // the cover so the tube's rim shows.
       const n = tubes(item.width);
       const tw = s.w / n;
       const r = Math.min(PLATE_R, tw / 2 - 0.03, (s.d - HANDLE_SPACE) / 2 - 0.03);
       const holes = Array.from({ length: n }, (_, i) => {
         const cx = -s.w / 2 + tw * (i + 0.5);
-        return { x0: cx - r - 0.01, x1: cx + r + 0.01, z0: zc - r - 0.01, z1: zc + r + 0.01 };
+        return { x0: cx - r - 0.01, x1: cx + r + 0.01, z0: zc - r - 0.01, z1: zc + r + 0.01, r: r + 0.01 };
       });
-      // The cover reaches over the push handle as a grip lip.
       p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, holes);
       for (const h of holes) {
         const cx = (h.x0 + h.x1) / 2;
-        p.box("steelDark", h.x0, h.x1, s.h - TOP - 0.02, s.h - TOP, h.z0, h.z1);
-        p.cyl("panel", cx, zc, s.h - TOP, s.h - 0.006, r);
-        p.cyl("panel", cx, zc, s.h - 0.006, s.h - 0.003, r * 0.6);
+        // The tube's rolled collar in the opening and the stack of plates inside it.
+        p.lathe("satin", cx, s.h - TOP - 0.02, zc, [
+          [r + 0.004, 0],
+          [r + 0.012, 0],
+          [r + 0.012, TOP + 0.016],
+          [r + 0.008, TOP + 0.019],
+          [r + 0.004, TOP + 0.016],
+          [r + 0.004, 0],
+        ]);
+        p.lathe("steelDark", cx, s.h - TOP - 0.02, zc, [
+          [0, 0],
+          [r + 0.005, 0],
+          [r + 0.005, 0.004],
+          [0, 0.004],
+        ]);
+        plateStack(p, cx, s.h - TOP - 0.016, zc, r, TOP + 0.01);
       }
-      // Push handle at the back, on two stand-offs.
+      // Push handle at the back: one bent bar on its two stand-offs.
       const hy = s.h - 0.08;
-      const hz = -s.d / 2 + 0.012;
-      p.rod("handle", "x", 0, hy, hz, s.w - 0.12, 0.01);
-      for (const x of [-s.w / 2 + 0.08, s.w / 2 - 0.08]) p.box("handle", x - 0.008, x + 0.008, hy - 0.008, hy + 0.008, hz, zb + SHEET);
+      const hz = -s.d / 2 + 0.01;
+      const hx = s.w / 2 - 0.08;
+      p.tube(
+        "handle",
+        [
+          { x: -hx, y: hy, z: zb + SHEET },
+          { x: -hx, y: hy, z: hz },
+          { x: hx, y: hy, z: hz },
+          { x: hx, y: hy, z: zb + SHEET },
+        ],
+        0.01,
+        { bend: 0.02 },
+      );
+      ratingPlate(p, -s.w / 2 + 0.08, CASTOR.h + BUMPER + 0.05, s.d / 2 - SHEET);
       if (heated) {
-        p.knob(s.w / 2 - 0.08, s.h - TOP - 0.08, s.d / 2 - SHEET, s.d / 2);
-        p.rod("oil", "z", s.w / 2 - 0.08, s.h - TOP - 0.14, s.d / 2 - SHEET / 2, SHEET, 0.007);
+        const zp = s.d / 2 - SHEET;
+        p.plate("panelDark", s.w / 2 - 0.13, s.w / 2 - 0.03, s.h - TOP - 0.2, s.h - TOP - 0.04, zp, zp + PANEL_SHEET, 0.006, true);
+        p.knob(s.w / 2 - 0.08, s.h - TOP - 0.08, zp + PANEL_SHEET, s.d / 2);
+        pilotLamp(p, s.w / 2 - 0.08, s.h - TOP - 0.155, zp + PANEL_SHEET);
+        ventSlots(p, -s.w / 2 + 0.08, s.w / 2 - 0.16, s.h - TOP - 0.14, s.h - TOP - 0.06, zp, 3);
       }
     },
   };

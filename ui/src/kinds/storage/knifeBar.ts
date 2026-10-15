@@ -2,7 +2,7 @@
 // lengths held by the flat of their blades, blades up and round handles hanging below, as they
 // are put on a magnet bar. The longest blade's tip is the unit's top.
 
-import type { Parts } from "../parts/mesh";
+import { BODY_RADIUS, type Parts } from "../parts/mesh";
 import type { KindDef } from "../types";
 
 // Construction sizes (m).
@@ -47,16 +47,22 @@ function levels(h: number) {
 }
 
 /**
- * One blade from `y0` (the heel) up to `y0 + len`, `bw` wide, centred on `x`: the straight part
- * and the point, a square turned by 45 degrees whose upper half sticks out above it.
+ * One blade from `y0` (the heel) up to `y0 + len`, `bw` wide, centred on `x`, lying flat on the
+ * magnet strip from `z0`: a straight spine at the back, the edge curving up into the point.
  */
 function blade(p: Parts, x: number, bw: number, y0: number, len: number, z0: number) {
-  const yp = y0 + len - bw / 2;
-  p.box("steel", x - bw / 2, x + bw / 2, y0, yp, z0, z0 + BLADE_T);
-  // A hair thinner than the blade, so its lower half hides inside it without shared faces.
-  const side = bw / Math.SQRT2;
-  const tip = p.box("steel", x - side / 2, x + side / 2, yp - side / 2, yp + side / 2, z0 + BLADE_T * 0.1, z0 + BLADE_T * 0.9);
-  tip.rotation.z = Math.PI / 4;
+  const l = x - bw / 2;
+  const r = x + bw / 2;
+  const y1 = y0 + len;
+  p.extrude("steel", "z", z0, z0 + BLADE_T, [
+    [l, y0],
+    [r, y0],
+    [r, y1 - bw * 0.15],
+    [x + bw * 0.25, y1 - bw * 0.02],
+    [x, y1],
+    [l + bw * 0.1, y1 - bw * 0.6],
+    [l, y1 - bw * 1.4],
+  ]);
 }
 
 export const knifeBar: KindDef = {
@@ -90,16 +96,31 @@ export const knifeBar: KindDef = {
   mesh(p, s) {
     const B = -s.d / 2;
     const { heel, bar, blade: longest } = levels(s.h);
-    p.box("steel", -s.w / 2, s.w / 2, bar, bar + BAR_H, B, B + BAR_D);
-    p.box("knob", -s.w / 2 + 0.015, s.w / 2 - 0.015, bar + 0.008, bar + BAR_H - 0.008, B + BAR_D, B + BAR_D + STRIP);
+    p.roundedBox("steel", -s.w / 2, s.w / 2, bar, bar + BAR_H, B, B + BAR_D, BODY_RADIUS);
+    p.plate("knob", -s.w / 2 + 0.015, s.w / 2 - 0.015, bar + 0.008, bar + BAR_H - 0.008, B + BAR_D - 0.001, B + BAR_D + STRIP, 0.004);
     const zb = B + BAR_D + STRIP;
     knives(s.w).forEach((x, i) => {
       const r = handleR(s.d, i);
       const zh = zb + BLADE_T + r;
       blade(p, x, WIDTHS[i % WIDTHS.length], heel, longest * BLADES[i % BLADES.length], zb);
-      // The bolster and the round handle hanging below the heel.
-      p.rod("steel", "y", x, heel - BOLSTER / 2, zh, BOLSTER, r * 0.8);
-      p.rod("knob", "y", x, (heel - BOLSTER) / 2, zh, heel - BOLSTER, r);
+      // The turned bolster and the round handle with its rounded butt, hanging below the heel.
+      p.lathe("satin", x, heel - BOLSTER, zh, [
+        [0, 0],
+        [r * 0.85, 0],
+        [r * 0.85, BOLSTER * 0.5],
+        [r * 0.55, BOLSTER],
+        [0, BOLSTER],
+      ]);
+      const hl = heel - BOLSTER;
+      p.lathe("knob", x, 0, zh, [
+        [0, 0],
+        [r * 0.6, 0],
+        [r * 0.95, hl * 0.12],
+        [r, hl * 0.5],
+        [r * 0.9, hl * 0.95],
+        [r * 0.85, hl],
+        [0, hl],
+      ]);
     });
   },
 };

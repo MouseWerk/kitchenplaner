@@ -2,7 +2,7 @@
 // for washing vegetables or rinsing at the preparation station.
 
 import { INSET as FRONT_INSET, TAP, TOP as FRONT_TOP } from "../parts/elevation";
-import { SHEET, tap, TOP, type Hole } from "../parts/mesh";
+import { SHEET, tap, TOP, type Hole, type Parts } from "../parts/mesh";
 import { INSET, UPSTAND, upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
 import { tableFrame, tableFront, tableTop } from "./common";
@@ -49,7 +49,23 @@ export const tableSink: KindDef = {
     tableTop(p, s, { back: true }, [hole]);
     const y0 = s.h - BOWL_DEPTH / 1000;
     p.tub("steel", hole.x0, hole.x1, y0, s.h, hole.z0, hole.z1);
-    p.cyl("steelDark", (a + b) / 2, zc, y0 + SHEET, y0 + SHEET + 0.003, 0.035);
+    strainer(p, (a + b) / 2, zc, y0 + SHEET);
+    // The overflow slot in the bowl's back wall, under the rim.
+    p.plate("slot", (a + b) / 2 - 0.03, (a + b) / 2 + 0.03, s.h - 0.065, s.h - 0.05, hole.z0 + SHEET, hole.z0 + SHEET + 0.002, 0.0075);
     tap(p, (a + b) / 2, -s.d / 2, s.h, TAP / 1000);
   },
 };
+
+/** The strainer in a bowl's floor at `y` (m): a turned satin flange with a domed plug. */
+export function strainer(p: Parts, x: number, z: number, y: number): void {
+  p.lathe("satin", x, y, z, [
+    [0, 0],
+    [0.035, 0],
+    [0.035, 0.001],
+    [0.03, 0.003],
+    [0.014, 0.003],
+    [0.012, 0.004],
+    [0.006, 0.0055],
+    [0, 0.0055],
+  ]);
+}

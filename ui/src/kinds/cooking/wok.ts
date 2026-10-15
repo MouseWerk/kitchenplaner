@@ -4,10 +4,11 @@
 
 import { TAP } from "../parts/elevation";
 import { flueBox } from "../parts/flue";
-import { CONTROLS, SHEET, tap, type Size } from "../parts/mesh";
+import { CONTROLS, SHEET, tap, TOP_RADIUS, type Size } from "../parts/mesh";
 import { controlStrip } from "../parts/plan";
 import type { KindDef } from "../types";
 import { columns, lineFront, lineModule } from "./common";
+import { splashGuards } from "./details";
 
 /** Thickness of the top (m). */
 const TOP_SHEET = 0.03;
@@ -68,11 +69,9 @@ export const wok: KindDef = {
     lineModule(p, s, { base: "doors", knobs: n, underTop: topY - TOP_SHEET, solidTo: topY - BOWL - 0.01 });
     p.topWithHoles("steel", s.w, s.d, topY - TOP_SHEET, topY, holes);
     // Raised edges at the back and the sides keep the splashes on the top.
-    p.box("steel", -s.w / 2, s.w / 2, topY, s.h, -s.d / 2, -s.d / 2 + SHEET * 2);
-    p.box("steel", -s.w / 2, -s.w / 2 + SHEET, topY, s.h, -s.d / 2, s.d / 2);
-    p.box("steel", s.w / 2 - SHEET, s.w / 2, topY, s.h, -s.d / 2, s.d / 2);
-    // Gutter across the front of the top.
-    p.box("steelDark", -s.w / 2 + 0.03, s.w / 2 - 0.03, topY - 0.002, topY + 0.001, s.d / 2 - CONTROLS - 0.03, s.d / 2 - CONTROLS);
+    splashGuards(p, s, topY - TOP_RADIUS, s.h, s.d / 2);
+    // Gutter across the front of the top, a dark channel with round ends.
+    p.roundedBox("slot", -s.w / 2 + 0.03, s.w / 2 - 0.03, topY - 0.002, topY + 0.001, s.d / 2 - CONTROLS - 0.03, s.d / 2 - CONTROLS, 0.015, "vertical");
     const gas = item.energy === "gas";
     for (const { x, z, r } of all) {
       // The pit under the opening ends under the top, so only the round opening shows.
@@ -80,9 +79,26 @@ export const wok: KindDef = {
       if (gas) {
         // The ring burner at the bottom of a dark pit, under a cast wok ring with three prongs.
         p.tub("top", x - r, x + r, topY - BOWL, pitTop, z - r, z + r, SHEET, r);
-        p.cyl("steelDark", x, z, topY - BOWL, topY - BOWL + 0.025, r * 0.45);
-        p.cyl("knob", x, z, topY - BOWL + 0.025, topY - BOWL + 0.035, r * 0.3);
-        p.ring("knob", x, z, topY + RING_BAR, r * RING_AT, RING_BAR);
+        // A turned ring burner: the crown with its ports and the dark centre cap.
+        const by = topY - BOWL + SHEET;
+        p.lathe("steelDark", x, by, z, [
+          [0, 0],
+          [r * 0.5, 0],
+          [r * 0.5, 0.012],
+          [r * 0.46, 0.018],
+          [r * 0.46, 0.024],
+          [r * 0.36, 0.024],
+          [r * 0.36, 0.014],
+          [0, 0.014],
+        ]);
+        p.lathe("castIron", x, by + 0.014, z, [
+          [0, 0],
+          [r * 0.3, 0],
+          [r * 0.3, 0.004],
+          [r * 0.22, 0.01],
+          [0, 0.012],
+        ]);
+        p.ring("castIron", x, z, topY + RING_BAR, r * RING_AT, RING_BAR);
         const py = s.h - RING_BAR / 2;
         for (let i = 0; i < 3; i++) {
           const a = Math.PI / 2 + (i / 3) * Math.PI * 2;
@@ -90,14 +106,20 @@ export const wok: KindDef = {
           const k = Math.sin(a);
           const outer = r * RING_AT;
           const inner = r * 0.55;
-          p.bar("knob", { x: x + outer * c, y: py, z: z + outer * k }, { x: x + inner * c, y: py, z: z + inner * k }, RING_BAR / 2);
+          p.bar("castIron", { x: x + outer * c, y: py, z: z + outer * k }, { x: x + inner * c, y: py, z: z + inner * k }, RING_BAR / 2);
         }
       } else {
         // Induction: a black glass bowl set into the top, its zone marked at the bottom, under a
         // bright trim ring.
         p.tub("ceramic", x - r, x + r, topY - BOWL, pitTop, z - r, z + r, SHEET, r);
-        p.cyl("zone", x, z, topY - BOWL, topY - BOWL + 0.012, r * 0.5);
-        p.cyl("ceramic", x, z, topY - BOWL, topY - BOWL + 0.014, r * 0.42);
+        const zy = topY - BOWL + SHEET;
+        p.lathe("zone", x, zy, z, [
+          [r * 0.42, 0],
+          [r * 0.5, 0],
+          [r * 0.5, 0.001],
+          [r * 0.42, 0.001],
+          [r * 0.42, 0],
+        ]);
         p.ring("handle", x, z, topY + RING_BAR, r * RING_AT, RING_BAR);
       }
     }

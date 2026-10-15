@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG, catalogEntry } from "../kinds/registry";
-import { matchesQuery } from "./CatalogPanel";
+import { CATALOG, catalogEntry, SUBGROUPS } from "../kinds/registry";
+import { matchesQuery, subgroupsOf } from "./CatalogPanel";
 import { setLang, t as translate } from "../lib/i18n";
 
 const ids = (q: string) => CATALOG.filter((e) => matchesQuery(e, q)).map((e) => e.id);
@@ -22,7 +22,12 @@ describe("catalog search", () => {
       const e = catalogEntry(id)!;
       expect([translate(e.name), ...(e.tags ?? [])].join(" ").toLocaleLowerCase()).toContain("fritteuse");
     }
-    expect(ids("gully")).toEqual(["floor-drain"]);
+    // A tag finds the unit although its name does not say it.
+    expect(ids("gully")).toEqual(expect.arrayContaining(["floor-drain", "floor-gully"]));
+    for (const id of ids("gully")) {
+      const e = catalogEntry(id)!;
+      expect([translate(e.name), ...(e.tags ?? [])].join(" ").toLocaleLowerCase()).toContain("gully");
+    }
   });
 
   it("matches category names", () => {
@@ -57,5 +62,23 @@ describe("catalog search", () => {
 
   it("an empty query matches everything", () => {
     expect(ids("  ")).toHaveLength(CATALOG.length);
+  });
+});
+
+describe("catalog sub-groups", () => {
+  it("splits a large group into its sub-groups in their order, keeping every entry once", () => {
+    const cooking = CATALOG.filter((e) => e.category === "cooking");
+    const parts = subgroupsOf("cooking", cooking);
+    expect(parts.map((p) => p.id)).toEqual(SUBGROUPS.cooking);
+    expect(parts.flatMap((p) => p.entries).map((e) => e.id).sort()).toEqual(cooking.map((e) => e.id).sort());
+    expect(parts[0].entries.map((e) => e.id)).toContain("range-6");
+    expect(parts.find((p) => p.id === "line700")!.entries.map((e) => e.id)).toContain("fryer-700");
+  });
+
+  it("leaves out empty sub-groups and does not divide a small group", () => {
+    const found = CATALOG.filter((e) => e.category === "cooking" && matchesQuery(e, "fritteuse"));
+    expect(subgroupsOf("cooking", found).map((p) => p.id)).toEqual(["line900", "line700"]);
+    const tables = CATALOG.filter((e) => e.category === "tables");
+    expect(subgroupsOf("tables", tables)).toEqual([{ id: null, entries: tables }]);
   });
 });

@@ -612,6 +612,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A sub-heading inside a large group (cooking: 900 line, 700 line, ovens, ...): quiet, smaller
+   than the group's head, aligned with the rows' thumbnails. */
+.cat-subhead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-2) 2px 6px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.cat-subhead > span:not(.count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cat-list {
   display: flex;
   flex-direction: column;

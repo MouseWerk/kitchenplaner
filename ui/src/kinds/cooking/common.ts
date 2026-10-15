@@ -3,7 +3,7 @@
 // and the stand under table-top units (combi ovens, deck ovens).
 
 import { FEET, INSET, LEG as FRONT_LEG, PANEL, TOP, UNDERSHELF as FRONT_UNDERSHELF, type Front } from "../parts/elevation";
-import { BODY_RADIUS, CONTROLS, controlKnobs, DOOR, DOOR_RADIUS, doors, foot, GAP, LEG, LEG_RADIUS, ovenWindow, PLINTH, plinth, SHEET, UNDERSHELF, type Parts, type Size } from "../parts/mesh";
+import { BASKET_PITCH, BODY_RADIUS, CONTROLS, controlKnobs, DOOR, DOOR_RADIUS, doors, foot, GAP, LEG, LEG_RADIUS, ovenWindow, PLINTH, plinth, SHEET, TOP_RADIUS, UNDERSHELF, type Parts, type Size } from "../parts/mesh";
 import { CONTROL_STRIP, INSET as PLAN_INSET, type PlanSketch } from "../parts/plan";
 
 /** Width taken by one column of cooking zones (two zones front to back, m). */
@@ -34,6 +34,20 @@ const RECESS_EDGE = 0.002;
 /** Columns of cooking zones on a top of the given width (mm or m with `per` in the same unit). */
 export function columns(width: number, per = ZONE_COLUMN_WIDTH * 1000): number {
   return Math.max(1, Math.round(width / per));
+}
+
+/** Wires in the bottoms and walls of all baskets of one unit together (the rims not counted). */
+const BASKET_WIRES = 96;
+
+/**
+ * The wire pitch of `n` baskets `kw` wide and `kd` deep (m) in one unit (fryers, pasta cookers):
+ * `BASKET_PITCH` across the bottom, twice that in the walls (seen end-on from above), wider when
+ * many or wide baskets would take more than `BASKET_WIRES` wires, so the unit stays within the
+ * part budget.
+ */
+export function basketPitch(n: number, kw: number, kd: number): { pitch: number; wallPitch: number } {
+  const pitch = Math.max(BASKET_PITCH, (n * (2 * kw + kd)) / BASKET_WIRES);
+  return { pitch, wallPitch: pitch * 2 };
 }
 
 /** Positions of cooking zones in a grid of rows and columns over the top (centres, radius; m). */
@@ -167,11 +181,13 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
   if (o.base === "open") {
     // Sides, back and floor of an open base with a shelf in the middle; dark inside.
     const top = Math.min(solidTo, o.underTop);
-    p.box("steel", -w / 2, -w / 2 + SHEET, PLINTH, top, -d / 2, zBody);
-    p.box("steel", w / 2 - SHEET, w / 2, PLINTH, top, -d / 2, zBody);
+    p.roundedBox("steel", -w / 2, -w / 2 + SHEET, PLINTH, top, -d / 2, zBody, BODY_RADIUS, "vertical");
+    p.roundedBox("steel", w / 2 - SHEET, w / 2, PLINTH, top, -d / 2, zBody, BODY_RADIUS, "vertical");
     p.box("steelDark", -w / 2 + SHEET, w / 2 - SHEET, PLINTH, top, -d / 2, -d / 2 + SHEET);
     p.box("steel", -w / 2 + SHEET, w / 2 - SHEET, PLINTH, PLINTH + SHEET, -d / 2 + SHEET, zBody);
-    p.box("steel", -w / 2 + SHEET, w / 2 - SHEET, (PLINTH + yc) / 2, (PLINTH + yc) / 2 + SHEET, -d / 2 + SHEET, zBody - SHEET);
+    // The shelf with a rounded front edge.
+    const ys = (PLINTH + yc) / 2;
+    p.roundedBox("steel", -w / 2 + SHEET, w / 2 - SHEET, ys, ys + SHEET, -d / 2 + SHEET, zBody - SHEET, TOP_RADIUS);
     // The body over the opening, behind the control strip, or at least the opening's ceiling.
     if (top > yc) p.box("steel", -w / 2, w / 2, yc, top, -d / 2, zBody);
     else p.box("steel", -w / 2 + SHEET, w / 2 - SHEET, yc - SHEET, yc, -d / 2 + SHEET, zBody);
@@ -204,7 +220,7 @@ export function lineModule(p: Parts, s: Size, o: LineOptions): number {
       // Vent slots at the top of the cabinet front.
       for (let i = 0; i < 3; i++) {
         const y = yc - 0.03 - i * 0.02;
-        p.box("steelDark", -w / 2 + 0.05, -w / 2 + 0.15, y - 0.004, y, d / 2 - DOOR / 2, d / 2 - DOOR / 2 + 0.002);
+        p.plate("slot", -w / 2 + 0.05, -w / 2 + 0.15, y - 0.005, y, d / 2 - DOOR / 2, d / 2 - DOOR / 2 + 0.001, 0.0025);
       }
     }
   }
@@ -317,7 +333,7 @@ export function standMesh(p: Parts, s: Size, elev: number) {
     }
   }
   p.box("steel", -s.w / 2 + LEG, s.w / 2 - LEG, -elev, -elev + LEG, -s.d / 2 + LEG / 2, -s.d / 2 + LEG);
-  p.box("steel", -s.w / 2 + LEG, s.w / 2 - LEG, -elev + UNDERSHELF, -elev + UNDERSHELF + SHEET, -s.d / 2 + LEG / 2, s.d / 2 - LEG / 2);
+  p.roundedBox("steel", -s.w / 2 + LEG, s.w / 2 - LEG, -elev + UNDERSHELF, -elev + UNDERSHELF + SHEET, -s.d / 2 + LEG / 2, s.d / 2 - LEG / 2, TOP_RADIUS);
   // Tray runners on the inside of the side frames, below the unit.
   const top = -0.06;
   const n = Math.min(6, Math.floor((top - (-elev + UNDERSHELF + 0.08)) / RUNNER_PITCH));

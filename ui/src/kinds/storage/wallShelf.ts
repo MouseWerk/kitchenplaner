@@ -2,6 +2,7 @@
 // under each board and a strut under the top board).
 
 import type { Front } from "../parts/elevation";
+import { BODY_RADIUS } from "../parts/mesh";
 import type { PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
 import { LIP, shelf, strut } from "./helpers";
@@ -67,8 +68,9 @@ function wallShelfKind(kind: string, boards: 1 | 2): KindDef {
       for (const x of consoles(s.w)) {
         const x0 = x - CONSOLE / 2;
         const x1 = x + CONSOLE / 2;
-        p.box("steelDark", x0, x1, 0, top, B, B + RAIL);
-        for (const y of ys) p.box("steelDark", x0, x1, y - ARM, y, B + RAIL, s.d / 2 - LIP);
+        // The console: a wall rail screwed to the wall, an arm under each board.
+        p.roundedBox("steelDark", x0, x1, 0, top, B, B + RAIL, BODY_RADIUS);
+        for (const y of ys) p.roundedBox("steelDark", x0, x1, y - ARM, y - 0.001, B + RAIL - 0.002, s.d / 2 - LIP, BODY_RADIUS);
         const low = boards === 1 ? STRUT * 2 : ARM + LIP + STRUT * 2;
         strut(p, "steelDark", [x, low, B + RAIL], [x, top - ARM, B + RAIL + (s.d - RAIL) * 0.6], STRUT);
       }

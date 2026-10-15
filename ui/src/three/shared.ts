@@ -73,7 +73,11 @@ export type MaterialId =
   | "foodRed"
   | "foodGreen"
   | "foodCream"
-  | "foodBrown";
+  | "foodBrown"
+  | "signalRed"
+  | "signalGreen"
+  | "signalYellow"
+  | "signalBlue";
 
 /** Materials that should not darken what is behind them in shadows. */
 export const NO_SHADOW: ReadonlySet<MaterialId> = new Set<MaterialId>(["glass", "water", "wire"]);
@@ -158,6 +162,13 @@ export function getShared(): Shared {
     foodGreen: std(0x6c7d4e, 0, 0.65),
     foodCream: std(0xd9ccad, 0, 0.7),
     foodBrown: std(0x765236, 0, 0.6),
+    // Safety and signal colours of painted steel and plastic (RAL 3000, 6032, 1003, 5015): fire
+    // extinguishers and blankets, exit signs, 400 V sockets and hot water marks, gas levers and
+    // hazard labels, cold water marks. Not for food.
+    signalRed: std(0xa8261d, 0, 0.42),
+    signalGreen: std(0x1f8a4c, 0, 0.45),
+    signalYellow: std(0xe8a90c, 0, 0.45),
+    signalBlue: std(0x2874b2, 0, 0.45),
   };
   // Named after their id so tests and debugging can tell the parts apart.
   for (const [id, m] of Object.entries(mat)) m.name = id;

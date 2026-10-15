@@ -1,6 +1,7 @@
 // Platform (Podest): a raised, tiled floor area for equipment or a step, with a stainless nosing
 // along the front edge.
 
+import { BODY_RADIUS, type Point2 } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -35,9 +36,21 @@ export const platform: KindDef = {
   mesh(p, s) {
     const W = s.w / 2;
     const D = s.d / 2;
-    p.box("concrete", -W, W, 0, s.h - 0.001, -D, D - NOSING_T);
-    p.box("steel", -W, W, s.h - NOSING_T, s.h, D - NOSING, D);
-    p.box("steel", -W, W, s.h - NOSING, s.h, D - NOSING_T, D);
+    p.roundedBox("concrete", -W, W, 0, s.h - 0.001, -D, D - NOSING_T, BODY_RADIUS, "vertical");
+    // The nosing: one angle with a rounded bend over the front edge, seen in the (z, y) plane.
+    const r = 0.004;
+    const outline: Point2[] = [
+      [D - NOSING, s.h],
+      [D - r, s.h],
+      [D - r + r * Math.SQRT1_2, s.h - r + r * Math.SQRT1_2],
+      [D, s.h - r],
+      [D, s.h - NOSING],
+      [D - NOSING_T, s.h - NOSING],
+      [D - NOSING_T, s.h - NOSING_T],
+      [D - NOSING, s.h - NOSING_T],
+    ];
+    p.extrude("steel", "x", -W, W, outline);
+    // Tile joints drawn into the top, standing a millimetre proud of the concrete.
     for (const x of joints(s.w)) p.box("steelDark", x - JOINT / 2, x + JOINT / 2, s.h - 0.002, s.h, -D, D - NOSING);
     for (const z of joints(s.d)) if (z < D - NOSING - JOINT) p.box("steelDark", -W, W, s.h - 0.002, s.h, z - JOINT / 2, z + JOINT / 2);
   },

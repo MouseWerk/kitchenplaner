@@ -4,7 +4,7 @@
 // carries the frost strip with the snowflake on every door, and the snowflake in the plan.
 
 import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
-import { GAP, PLINTH, type Parts, type Size } from "../parts/mesh";
+import { GAP, GN_RADIUS, PLINTH, type Parts, type Size } from "../parts/mesh";
 import type { KindDef } from "../types";
 import {
   BASE_MM,
@@ -123,8 +123,12 @@ function glassInterior(p: Parts, s: Size, zBody: number, cols: number): void {
       const a = inner.x0 + c * cw + 0.04;
       const b = inner.x0 + (c + 1) * cw - 0.04;
       const mid = (a + b) / 2;
-      p.box("steelDark", a, mid - GAP * 2, y, y + CONTAINER_H, inner.z0 + 0.04, inner.z0 + 0.04 + depth);
-      p.box("steelDark", mid + GAP * 2, b, y, y + CONTAINER_H * 0.65, inner.z0 + 0.04, inner.z0 + 0.04 + depth);
+      // Lidded GN containers: a pressed pan with its lid, the lid's rim a little wider.
+      for (const [x0, x1, h] of [[a, mid - GAP * 2, CONTAINER_H], [mid + GAP * 2, b, CONTAINER_H * 0.65]]) {
+        const z0 = inner.z0 + 0.04;
+        p.roundedBox("satin", x0 + 0.004, x1 - 0.004, y + 0.001, y + h - 0.008, z0 + 0.004, z0 + depth - 0.004, GN_RADIUS, "vertical");
+        p.roundedBox("panel", x0, x1, y + h - 0.008, y + h, z0, z0 + depth, GN_RADIUS, "all");
+      }
     }
   }
 }

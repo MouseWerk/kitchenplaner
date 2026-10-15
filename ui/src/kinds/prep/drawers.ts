@@ -22,6 +22,6 @@ export const drawers: KindDef = {
   mesh(p, s) {
     const { y0, y1, zf } = cabinetBody(p, s);
     drawerFronts(p, -s.w / 2, s.w / 2, y0, y1, zf, DRAWERS);
-    tableTop(p, s, { back: true });
+    tableTop(p, s, { back: true, solid: true });
   },
 };

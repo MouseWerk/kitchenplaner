@@ -2,6 +2,7 @@
 // the floor of a store or cold room so the floor can be cleaned underneath.
 
 import { LEG } from "../parts/elevation";
+import { BODY_RADIUS, LEG_RADIUS, TOP_RADIUS } from "../parts/mesh";
 import type { KindDef } from "../types";
 
 // Construction sizes (m).
@@ -54,13 +55,21 @@ export const dunnageRack: KindDef = {
     for (const x of legs(s.w)) {
       for (const sz of [-1, 1]) {
         const z = sz * (D - POST / 2);
-        p.box("rubber", x - POST / 2, x + POST / 2, 0, PAD, z - POST / 2, z + POST / 2);
-        p.box("steelDark", x - POST / 2, x + POST / 2, PAD, railTop - RAIL, z - POST / 2, z + POST / 2);
+        // A turned levelling pad under each square leg.
+        p.lathe("rubber", x, 0, z, [
+          [0, 0],
+          [POST * 0.45, 0],
+          [POST * 0.5, PAD * 0.4],
+          [POST * 0.42, PAD],
+          [0, PAD],
+        ]);
+        p.roundedBox("steelDark", x - POST / 2, x + POST / 2, PAD, railTop - RAIL, z - POST / 2, z + POST / 2, LEG_RADIUS, "vertical");
       }
       // A bearer across the depth over each pair of legs.
-      p.box("steelDark", x - POST / 2, x + POST / 2, railTop - RAIL, railTop, -D, D);
+      p.roundedBox("steelDark", x - POST / 2, x + POST / 2, railTop - RAIL, railTop - 0.001, -D, D, BODY_RADIUS);
     }
-    for (const sz of [-1, 1]) p.box("steelDark", -W, W, railTop - RAIL, railTop, sz * D - (sz > 0 ? POST / 2 : 0), sz * D + (sz < 0 ? POST / 2 : 0));
-    for (const z of slats(s.d)) p.box("steel", -W, W, railTop, s.h, z - SLAT_W / 2, z + SLAT_W / 2);
+    for (const sz of [-1, 1]) p.roundedBox("steelDark", -W, W, railTop - RAIL, railTop - 0.001, sz * D - (sz > 0 ? POST / 2 : 0), sz * D + (sz < 0 ? POST / 2 : 0), BODY_RADIUS);
+    // Pressed slats with rounded edges along the width, lying on the bearers.
+    for (const z of slats(s.d)) p.roundedBox("steel", -W, W, railTop, s.h, z - SLAT_W / 2, z + SLAT_W / 2, TOP_RADIUS, "top");
   },
 };

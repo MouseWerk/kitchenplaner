@@ -109,7 +109,7 @@ export const en = {
           caption: 'The whole kitchen in 3D from the south-east.',
         },
         {
-          title: 'A catalog of 165 units',
+          title: 'A catalog of 359 units',
           text: 'Cooking, cooling, washing, tables and preparation, serving, storage, ventilation and building elements such as columns and floor drains. Many units come in several widths and as electric or gas units, each with a 3D preview and its connection values.',
           alt: 'The catalog with a 3D preview and connection values, searching for “kombi”',
           caption: 'The catalog: searching for “kombi”, next to it the preview with connection values.',

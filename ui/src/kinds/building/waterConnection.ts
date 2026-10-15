@@ -2,6 +2,7 @@
 // hot water and the drain socket, where a sink, dishwasher or combi steamer is connected.
 
 import type { KindDef } from "../types";
+import { angleValve } from "./pipes";
 
 // Sizes (m).
 /** Depth of the box from the wall. */
@@ -37,18 +38,21 @@ export const waterConnection: KindDef = {
   mesh(p, s) {
     const B = -s.d / 2;
     const zf = B + Math.min(BOX, s.d / 2);
-    p.box("steel", -s.w / 2, s.w / 2, 0, s.h, B, zf);
+    p.roundedBox("steel", -s.w / 2, s.w / 2, 0, s.h, B, zf, 0.004);
     const yc = s.h / 2;
-    for (const k of [COLD, HOT]) {
-      const x = s.w * k;
-      // Angle valve: the body out of the box, the outlet down and a lever handle on the front.
-      p.rod("handle", "z", x, yc + 0.02, (zf + s.d / 2 - 0.02) / 2, s.d / 2 - 0.02 - zf, VALVE);
-      p.cyl("handle", x, s.d / 2 - 0.03, yc - 0.03, yc + 0.02, VALVE * 0.7);
-      p.box("knob", x - 0.006, x + 0.006, yc + 0.02, yc + 0.075, s.d / 2 - 0.012, s.d / 2);
-    }
-    // Drain socket with its rubber seal.
+    for (const k of [COLD, HOT]) angleValve(p, s.w * k, yc + 0.02, zf, s.d / 2, VALVE, k === COLD ? "cold" : "hot");
+    // Drain socket (DN 50) with its rubber seal.
     const x = s.w * OUTLET;
-    p.rod("panelDark", "z", x, yc - 0.02, (zf + s.d / 2) / 2, s.d / 2 - zf, DRAIN);
-    p.rod("rubber", "z", x, yc - 0.02, s.d / 2 - 0.002, 0.004, DRAIN * 0.75);
+    p.lathe("panelDark", x, yc - 0.02, zf - 0.001, [
+      [0, 0],
+      [DRAIN * 1.3, 0],
+      [DRAIN * 1.3, 0.006],
+      [DRAIN, 0.008],
+      [DRAIN, s.d / 2 - zf - 0.004],
+      [DRAIN * 1.08, s.d / 2 - zf - 0.002],
+      [DRAIN * 1.08, s.d / 2 - zf + 0.001],
+      [0, s.d / 2 - zf + 0.001],
+    ], { axis: "z" });
+    p.lathe("rubber", x, yc - 0.02, s.d / 2 - 0.0005, [[0, 0], [DRAIN * 0.85, 0], [DRAIN * 0.85, 0.0005], [0, 0.0005]], { axis: "z" });
   },
 };

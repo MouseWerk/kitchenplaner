@@ -1,6 +1,7 @@
 // Installation shaft (Schacht): a boxed-in riser for pipes, ducts or cables, drawn like a wall
 // with the usual cross, and an access panel at the front.
 
+import { BODY_RADIUS } from "../parts/mesh";
 import { cross } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -30,12 +31,18 @@ export const shaft: KindDef = {
     f.box("detail", c - half, c + half, f.z0 + y0 * 1000, f.z0 + y1 * 1000);
   },
   mesh(p, s) {
-    p.box("panel", -s.w / 2, s.w / 2, 0, s.h, -s.d / 2, s.d / 2 - FRAME);
+    // Plastered cladding with lightly rounded edges.
+    p.roundedBox("panel", -s.w / 2, s.w / 2, 0, s.h, -s.d / 2, s.d / 2 - FRAME, BODY_RADIUS * 3, "vertical");
     const [y0, y1] = panel(s.h);
     const half = Math.min(PANEL / 2, s.w / 2 - 0.02);
-    p.box("steel", -half, half, y0, y1, s.d / 2 - FRAME, s.d / 2 - FRAME / 2);
-    // The panel's lock.
+    const zf = s.d / 2 - FRAME;
+    // The access panel: a narrow frame flush in the cladding and the door in it with its lock.
+    p.lathe("satin", 0, (y0 + y1) / 2, zf - 0.001, [[0, 0], [0.012, 0], [0.012, FRAME * 0.5], [0, FRAME * 0.5], [0, 0]], { axis: "z", rect: [half - 0.012, (y1 - y0) / 2 - 0.012] });
+    p.roundedBox("steel", -half + 0.014, half - 0.014, y0 + 0.014, y1 - 0.014, zf - 0.001, s.d / 2 - FRAME * 0.25, 0.002, "top", "z");
+    // A square-key lock: a turned rosette with the key square.
     const yl = (y0 + y1) / 2;
-    p.box("knob", half - 0.05, half - 0.03, yl - 0.01, yl + 0.01, s.d / 2 - FRAME / 2, s.d / 2);
+    const xl = half - 0.045;
+    p.lathe("satin", xl, yl, s.d / 2 - FRAME * 0.25 - 0.0005, [[0, 0], [0.011, 0], [0.011, FRAME * 0.1], [0.008, FRAME * 0.25], [0, FRAME * 0.25]], { axis: "z" });
+    p.box("slot", xl - 0.003, xl + 0.003, yl - 0.003, yl + 0.003, s.d / 2 - 0.0008, s.d / 2 - 0.0002);
   },
 };

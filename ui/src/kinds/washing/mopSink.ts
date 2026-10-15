@@ -3,7 +3,7 @@
 // above it.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { PLINTH, SHEET, tap } from "../parts/mesh";
+import { BODY_RADIUS, PLINTH, SHEET, tap, TOP_RADIUS } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { bowlDrain } from "./common";
@@ -53,23 +53,44 @@ export const mopSink: KindDef = {
     // The body under the basin as wide as the basin, its front a little back from the rim, on a
     // kick plate set back further; the back plate up to the top.
     const kick = Math.min(PLINTH, floor / 2);
-    p.box("steelDark", -s.w / 2 + 0.03, s.w / 2 - 0.03, 0, kick, zb + PLATE, zf - 0.07);
-    p.box("steel", -s.w / 2, s.w / 2, kick, floor, zb + PLATE, zf - 0.02);
-    p.tub("steel", -s.w / 2, s.w / 2, floor, rim, zb + PLATE, zf, SHEET * 1.5);
-    p.rod("steel", "x", 0, rim - 0.012, zf - 0.012, s.w, 0.012);
+    p.roundedBox("steelDark", -s.w / 2 + 0.03, s.w / 2 - 0.03, 0, kick, zb + PLATE, zf - 0.07, BODY_RADIUS, "vertical");
+    p.roundedBox("steel", -s.w / 2, s.w / 2, kick, floor + 0.01, zb + PLATE, zf - 0.02, BODY_RADIUS, "vertical");
+    p.tub("steel", -s.w / 2, s.w / 2, floor, rim - 0.012, zb + PLATE, zf, SHEET * 1.5);
+    // The rolled rim round the basin's top: a tube along the front and the sides.
+    const er = 0.012;
+    p.tube(
+      "steel",
+      [
+        { x: -s.w / 2 + er, y: rim - er, z: zb + PLATE + er },
+        { x: -s.w / 2 + er, y: rim - er, z: zf - er },
+        { x: s.w / 2 - er, y: rim - er, z: zf - er },
+        { x: s.w / 2 - er, y: rim - er, z: zb + PLATE + er },
+      ],
+      er,
+      { bend: 0.03 },
+    );
     bowlDrain(p, 0, 0, floor, zb, false);
-    p.box("steel", -s.w / 2, s.w / 2, floor, s.h, zb, zb + PLATE);
-    // Folding grate over the front half: bars from the middle to the front rim, a hinge rod.
+    p.roundedBox("steel", -s.w / 2, s.w / 2, floor, s.h, zb, zb + PLATE, TOP_RADIUS, "top");
+    // Folding grate over the front half: bars from the hinge rod to the front rim, on two hinges.
     const g0 = (zb + PLATE + zf) / 2;
-    const gy = rim - 0.015;
-    p.rod("handle", "x", 0, gy, g0, s.w - 0.04, 0.008);
+    const gy = rim - er * 2 - 0.006;
+    p.rod("handle", "x", 0, gy, g0, s.w - 0.06, 0.008);
     for (let i = 1; i <= BARS; i++) {
-      const x = -s.w / 2 + 0.02 + ((s.w - 0.04) * i) / (BARS + 1);
-      p.rod("handle", "z", x, gy, (g0 + zf - 0.02) / 2, zf - 0.02 - g0, 0.006);
+      const x = -s.w / 2 + 0.03 + ((s.w - 0.06) * i) / (BARS + 1);
+      p.rod("handle", "z", x, gy, (g0 + zf - 0.03) / 2, zf - 0.03 - g0, 0.006);
     }
-    // The wall tap with a hose connection, high enough for a bucket.
+    p.rod("handle", "x", 0, gy, zf - 0.03, s.w - 0.08, 0.006);
+    // The wall tap with a hose connection, high enough for a bucket: a wall block with the
+    // shut-off valve's handle and the long spout.
     const ty = rim + (s.h - rim) * 0.35;
-    p.box("handle", -0.02, 0.02, ty - 0.03, ty, zb + PLATE, zb + 0.06);
+    p.roundedBox("handle", -0.025, 0.025, ty - 0.035, ty, zb + PLATE, zb + 0.06, 0.006);
+    p.lathe("knob", 0.045, ty - 0.0175, zb + 0.04, [
+      [0, 0],
+      [0.014, 0],
+      [0.016, 0.01],
+      [0.012, 0.018],
+      [0, 0.02],
+    ], { axis: "x" });
     tap(p, 0, zb, ty, Math.min(0.25, s.h - ty));
   },
 };

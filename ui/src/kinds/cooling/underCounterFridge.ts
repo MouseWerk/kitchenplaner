@@ -4,7 +4,7 @@
 
 import { TOP as FRONT_TOP } from "../parts/elevation";
 import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
-import { PLINTH, plinth, TOP } from "../parts/mesh";
+import { BODY_RADIUS, GAP, PLINTH, plinth, TOP, worktop } from "../parts/mesh";
 import type { KindDef } from "../types";
 import {
   BASE_MM,
@@ -61,12 +61,12 @@ function underCounter(kind: string, freezer: boolean): KindDef {
       const zBody = s.d / 2 - FRONT;
       const zLeaf = s.d / 2 - STANDOFF;
       plinth(p, s.w, s.d);
-      p.box("steel", -s.w / 2, s.w / 2, PLINTH, s.h - TOP, -s.d / 2, zBody);
-      p.box("steel", -s.w / 2, s.w / 2, s.h - TOP, s.h, -s.d / 2, s.d / 2);
+      p.roundedBox("steel", -s.w / 2, s.w / 2, PLINTH, s.h - TOP, -s.d / 2, zBody, BODY_RADIUS, "vertical");
+      worktop(p, "steel", -s.w / 2, s.w / 2, s.h - TOP, s.h, -s.d / 2, s.d / 2);
       const d0 = PLINTH + m(GRILLE_MM);
       const d1 = s.h - TOP - m(STRIP_MM);
       grille(p, -s.w / 2 + 0.01, s.w / 2 - 0.01, PLINTH, d0 - 0.01, zBody, zLeaf);
-      p.box("panelDark", -s.w / 2, s.w / 2, d1, s.h - TOP, zBody, zLeaf - 0.006);
+      p.roundedBox("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, d1, s.h - TOP - GAP, zBody, zLeaf - 0.006, BODY_RADIUS, "top", "z");
       display(p, s.w / 2 - 0.13, d1 + m(STRIP_MM) / 2, zLeaf - 0.006);
       const n = doorsOf(s.w * 1000);
       const dw = s.w / n;

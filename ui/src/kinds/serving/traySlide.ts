@@ -44,11 +44,35 @@ export const traySlide: KindDef = {
   },
   mesh(p, s) {
     const y = s.h - TUBE_R;
-    for (const z of tubeZ(s.d)) p.rod("handle", "x", 0, y, z, s.w, TUBE_R);
-    // Brackets: a plate on the counter and an arm under the tubes.
+    // The tubes with turned end caps.
+    for (const z of tubeZ(s.d)) {
+      p.rod("handle", "x", 0, y, z, s.w - 0.02, TUBE_R);
+      for (const [x, dir] of [
+        [-s.w / 2, 1],
+        [s.w / 2, -1],
+      ] as const) {
+        p.lathe(
+          "satin",
+          x,
+          y,
+          z,
+          [
+            [0, 0],
+            [TUBE_R * 0.8, 0],
+            [TUBE_R, 0.004],
+            [TUBE_R, 0.012],
+            [0, 0.012],
+          ],
+          { axis: "x" },
+        ).rotation.z = dir > 0 ? -Math.PI / 2 : Math.PI / 2;
+      }
+    }
+    // Brackets: a plate screwed to the counter and a bent arm under the tubes.
     for (const x of bracketXs(s.w)) {
-      p.box("steel", x, x + BRACKET, 0, s.h, -s.d / 2, -s.d / 2 + 0.01);
-      p.box("steel", x, x + BRACKET, y - TUBE_R - 0.03, y - TUBE_R, -s.d / 2, s.d / 2 - TUBE_R);
+      p.roundedBox("steel", x, x + BRACKET, 0, s.h, -s.d / 2, -s.d / 2 + 0.008, 0.003, "vertical", "z");
+      p.roundedBox("steel", x, x + BRACKET, y - TUBE_R - 0.03, y - TUBE_R, -s.d / 2 + 0.008, s.d / 2 - TUBE_R, 0.003, "all", "z");
+      p.roundedBox("steel", x, x + BRACKET, 0.02, y - TUBE_R - 0.03, -s.d / 2 + 0.008, -s.d / 2 + 0.03, 0.003, "vertical", "z");
+      for (const yy of [0.03, s.h - 0.04]) p.lathe("satin", x + BRACKET / 2, yy, -s.d / 2 + 0.008, [[0, 0], [0.004, 0], [0.003, 0.002], [0, 0.002]], { axis: "z" });
     }
   },
 };

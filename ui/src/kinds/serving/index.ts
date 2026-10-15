@@ -1,4 +1,9 @@
 import type { Area } from "../types";
+import { backBar, barCounter, beerCooler, cocktailStation, draughtColumn, glassFroster, iceWell, juiceDispenser } from "./bar";
+import { buffetCold, buffetHot, buffetNeutral } from "./buffet";
+import { coffeeGrinder, cupWarmer, espressoMachine, filterCoffee, hotWaterDispenser, knockBoxModule, milkCooler } from "./coffee";
+import { cutleryDispenser, frozenYoghurt, softServe, trayStand } from "./selfService";
+import { carvingLamp, chafingDish, displayWarmer, holdingDrawers, soupKettle } from "./warmers";
 import { beverageCounter } from "./beverageCounter";
 import { carvingStation } from "./carvingStation";
 import { cashDesk } from "./cashDesk";
@@ -39,5 +44,32 @@ export const serving: Area = {
     beverageCounter,
     cashDesk,
     waiterStation,
+    buffetHot,
+    buffetCold,
+    buffetNeutral,
+    soupKettle,
+    chafingDish,
+    carvingLamp,
+    displayWarmer,
+    holdingDrawers,
+    espressoMachine,
+    coffeeGrinder,
+    filterCoffee,
+    hotWaterDispenser,
+    milkCooler,
+    cupWarmer,
+    knockBoxModule,
+    barCounter,
+    draughtColumn,
+    beerCooler,
+    glassFroster,
+    iceWell,
+    cocktailStation,
+    backBar,
+    juiceDispenser,
+    cutleryDispenser,
+    trayStand,
+    softServe,
+    frozenYoghurt,
   ],
 };

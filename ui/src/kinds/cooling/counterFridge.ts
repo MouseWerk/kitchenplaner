@@ -5,7 +5,7 @@
 
 import { INSET as FRONT_INSET, TOP as FRONT_TOP, type Front } from "../parts/elevation";
 import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
-import { PLINTH, plinth, TOP, type Parts, type Size } from "../parts/mesh";
+import { BODY_RADIUS, castor, PLINTH, plinth, TOP, worktop, type Parts, type Size } from "../parts/mesh";
 import { INSET, upstandLine, type PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
 import {
@@ -30,6 +30,8 @@ export type CounterFront = "doors" | "drawers";
 const DRAWERS = 2;
 /** Length of a horizontal handle in the elevation (mm). */
 const HANDLE_MM = 200;
+/** Wheel radius of the castors of a mobile base (m). */
+const CASTOR_R = 0.04;
 /** Distance of a freezer door's frost strip below the top of the door, under its handle (m). */
 const FROST_DROP = 0.09;
 
@@ -52,10 +54,15 @@ export function counterPlan(s: PlanSketch, front: CounterFront): void {
 }
 
 /** The front of a refrigerated base from its feet up to `z1` (mm): grille, then the sections. */
-export function counterFrontElevation(f: Front, front: CounterFront, z1: number, freezer = false): void {
+export function counterFrontElevation(f: Front, front: CounterFront, z1: number, freezer = false, castors = false): void {
   const { l, r } = f;
   const z0 = f.z0 + BASE_MM;
   f.line("detail", [l, z0], [r, z0]);
+  if (castors) {
+    // The wheels of the castors at the corners.
+    const cr = CASTOR_R * 1000;
+    for (const x of [l + cr * 1.5, r - cr * 1.5]) f.circle("detail", x, f.z0 + cr, cr);
+  }
   const mx = l + machineWidth(f.w);
   grilleFront(f, l + LEAF_GAP_MM, mx - LEAF_GAP_MM, z0 + LEAF_GAP_MM, z1 - LEAF_GAP_MM);
   const n = counterSections(f.w);
@@ -81,11 +88,14 @@ export function counterFrontElevation(f: Front, front: CounterFront, z1: number,
  * The 3D refrigerated base from the floor up to `topY` (m): feet, body, grille and sections. The
  * body behind the fronts ends at `bodyTop` (a well let into the top fills the rest itself).
  */
-export function counterBase(p: Parts, s: Size, front: CounterFront, topY: number, freezer = false, bodyTop = topY): void {
+export function counterBase(p: Parts, s: Size, front: CounterFront, topY: number, freezer = false, bodyTop = topY, castors = false): void {
   const zBody = s.d / 2 - FRONT;
   const zLeaf = s.d / 2 - STANDOFF;
-  plinth(p, s.w, s.d);
-  p.box("steel", -s.w / 2, s.w / 2, PLINTH, bodyTop, -s.d / 2, zBody);
+  if (castors) {
+    // Swivel castors at the corners, so the base rolls out for cleaning behind the line.
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) castor(p, sx * (s.w / 2 - CASTOR_R * 1.5), sz * (s.d / 2 - FRONT - CASTOR_R * 1.2), CASTOR_R, PLINTH);
+  } else plinth(p, s.w, s.d);
+  p.roundedBox("steel", -s.w / 2, s.w / 2, PLINTH, bodyTop, -s.d / 2, zBody, BODY_RADIUS, "vertical");
   const mx = -s.w / 2 + m(machineWidth(s.w * 1000));
   grille(p, -s.w / 2 + 0.01, mx - 0.01, PLINTH + 0.01, topY - 0.01, zBody, zLeaf);
   const n = counterSections(s.w * 1000);
@@ -116,7 +126,7 @@ function counter(kind: string, front: CounterFront, freezer = false): KindDef {
     },
     mesh(p, s) {
       counterBase(p, s, front, s.h - TOP, freezer);
-      p.box("steel", -s.w / 2, s.w / 2, s.h - TOP, s.h, -s.d / 2, s.d / 2);
+      worktop(p, "steel", -s.w / 2, s.w / 2, s.h - TOP, s.h, -s.d / 2, s.d / 2);
     },
   };
 }

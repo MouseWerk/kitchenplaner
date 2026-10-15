@@ -1,10 +1,11 @@
 // Pasta cooker (Nudelkocher): one deep water basin per 400 mm with portion baskets hanging on a
 // bar at the back, a water inlet in the basin; doors below (drain valve behind them).
 
-import { BASKET_PITCH, CONTROLS, SHEET } from "../parts/mesh";
+import { BOWL_RADIUS, CONTROLS, SHEET } from "../parts/mesh";
 import { CONTROL_STRIP, controlStrip, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { columns, lineFront, lineModule } from "./common";
+import { basketPitch, columns, lineFront, lineModule } from "./common";
+import { gripZ } from "./details";
 
 /** Thickness of the top (m). */
 const TOP_SHEET = 0.03;
@@ -45,20 +46,34 @@ export const pastaCooker: KindDef = {
     lineModule(p, s, { base: "doors", knobs: n, underTop: s.h - TOP_SHEET, solidTo: s.h - BASIN - 0.01 });
     p.topWithHoles("steel", s.w, s.d, s.h - TOP_SHEET, s.h, holes);
     for (const { x0, x1 } of holes) {
-      p.tub("steelDark", x0, x1, s.h - BASIN, s.h, z0, z1, SHEET / 2);
-      p.box("water", x0 + SHEET / 2, x1 - SHEET / 2, s.h - BASIN + SHEET, s.h - WATER, z0 + SHEET / 2, z1 - SHEET / 2);
-      // The bar at the back the baskets hang on, and the water inlet below it.
+      const wall = SHEET / 2;
+      p.tub("steelDark", x0, x1, s.h - BASIN, s.h, z0, z1, wall);
+      // The water, round in the corners like the basin.
+      p.roundedBox("water", x0 + wall, x1 - wall, s.h - BASIN + wall, s.h - WATER, z0 + wall, z1 - wall, BOWL_RADIUS - wall, "vertical");
+      // The bar at the back the baskets hang on, and the water inlet bent down over the back wall.
       p.rod("handle", "x", (x0 + x1) / 2, s.h - 0.012, z0 + 0.03, x1 - x0 - SHEET, 0.006);
-      p.rod("handle", "z", x0 + 0.04, s.h - WATER + 0.02, z0 + 0.025, 0.04, 0.008);
+      const ix = x0 + 0.04;
+      p.tube("handle", [
+        { x: ix, y: s.h - 0.03, z: z0 + wall + 0.008 },
+        { x: ix, y: s.h - 0.03, z: z0 + 0.05 },
+        { x: ix, y: s.h - WATER + 0.01, z: z0 + 0.05 },
+      ], 0.007, { bend: 0.015 });
       // Two portion baskets, their grips at the front of the basin.
       const inset = 0.015;
       const kw = (x1 - x0 - inset * 3) / 2;
       const kz1 = z1 - 0.08;
+      const { pitch, wallPitch } = basketPitch(n * 2, kw, kz1 - z0 - 0.05);
       for (const kx of [x0 + inset, x0 + inset * 2 + kw]) {
-        p.wireBox(kx, kx + kw, s.h - 0.22, s.h - 0.04, z0 + 0.05, kz1, BASKET_PITCH);
+        p.wireBox(kx, kx + kw, s.h - 0.22, s.h - 0.04, z0 + 0.05, kz1, pitch, { wallPitch });
+        // Handle: a bent bracket up from the basket's front and a black grip towards the front.
         const cx = kx + kw / 2;
-        p.box("handle", cx - 0.004, cx + 0.004, s.h - 0.04, s.h - 0.012, kz1 - 0.008, kz1);
-        p.rod("knob", "z", cx, s.h - 0.02, kz1 + 0.035, 0.07, 0.009);
+        const gy = s.h - 0.02;
+        p.tube("handle", [
+          { x: cx, y: s.h - 0.07, z: kz1 - 0.004 },
+          { x: cx, y: gy, z: kz1 - 0.004 },
+          { x: cx, y: gy, z: kz1 + 0.01 },
+        ], 0.004, { bend: 0.01 });
+        gripZ(p, cx, gy, kz1, kz1 + 0.07, 0.009);
       }
     }
   },

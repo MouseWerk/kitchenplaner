@@ -4,6 +4,7 @@
 import { INSET } from "../parts/elevation";
 import { castor } from "../parts/mesh";
 import type { KindDef } from "../types";
+import { invertedTray } from "./helpers";
 
 // Construction sizes (m).
 /** Castor wheel radius and the top of its mounting plate. */
@@ -14,6 +15,9 @@ const LID = 0.025;
 const REAR_LID = 0.3;
 /** Depth of the front grip standing out of the tub. */
 const GRIP = 0.025;
+/** Wall of the moulded tub and the radius of its corners seen from above. */
+const TUB_WALL = 0.006;
+const TUB_RADIUS = 0.05;
 
 export const ingredientBin: KindDef = {
   kind: "ingredientBin",
@@ -36,17 +40,23 @@ export const ingredientBin: KindDef = {
     const B = -s.d / 2;
     const front = s.d / 2 - GRIP;
     for (const sx of [-1, 1]) for (const z of [B + WHEEL + 0.01, front - WHEEL - 0.01]) castor(p, sx * (W - WHEEL - 0.01), z, WHEEL, CASTOR_TOP);
-    // The tub, a little narrower at the bottom as moulded bins are.
-    p.box("panel", -W + 0.01, W - 0.01, CASTOR_TOP, CASTOR_TOP + 0.05, B + 0.01, front - 0.01);
-    p.box("panel", -W, W, CASTOR_TOP + 0.05, s.h - LID, B, front);
-    // Lids: the fixed rear part, the hinge and the clear lid.
+    // The moulded tub with its large round corners, open at the top under the lids.
+    p.pan("panel", -W, W, CASTOR_TOP, s.h - LID, B, front, { wall: TUB_WALL, r: TUB_RADIUS });
+    // Flour in the tub, seen through the clear lid.
+    p.roundedBox("foodCream", -W + TUB_WALL * 2, W - TUB_WALL * 2, CASTOR_TOP + 0.02, s.h - LID - 0.08, B + TUB_WALL * 2, front - TUB_WALL * 2, 0.03, "vertical");
+    // Lids: the fixed rear part, the hinge and the clear lid over the front.
     const joint = B + s.d * REAR_LID;
-    p.box("panel", -W, W, s.h - LID, s.h, B, joint);
-    p.rod("handle", "x", 0, s.h - LID / 2, joint, s.w - 0.04, LID / 2);
-    p.box("glass", -W, W, s.h - LID * 0.8, s.h - LID * 0.1, joint + LID / 2, front + GRIP * 0.4);
-    // Moulded grip on the front and a label holder below it.
+    invertedTray(p, "panel", -W, W, s.h - LID, s.h, B, joint, 0.004, TUB_RADIUS);
+    p.rod("satin", "x", 0, s.h - LID / 2, joint + 0.004, s.w - 0.08, 0.006);
+    invertedTray(p, "glass", -W, W, s.h - LID, s.h - 0.003, joint + 0.012, front + GRIP * 0.4, 0.003, TUB_RADIUS);
+    // Moulded grip on the front: a bent bar on two bosses, and a label holder below it.
     const gy = s.h - 0.14;
-    p.box("panel", -0.1, 0.1, gy - 0.02, gy + 0.02, front, s.d / 2);
-    p.box("panelDark", -0.08, 0.08, gy - 0.12, gy - 0.06, front, front + 0.003);
+    p.tube("panel", [
+      { x: -0.1, y: gy, z: front - 0.002 },
+      { x: -0.1, y: gy, z: s.d / 2 - 0.012 },
+      { x: 0.1, y: gy, z: s.d / 2 - 0.012 },
+      { x: 0.1, y: gy, z: front - 0.002 },
+    ], 0.012, { bend: 0.012 });
+    p.plate("panelDark", -0.08, 0.08, gy - 0.12, gy - 0.06, front - 0.001, front + 0.002, 0.006);
   },
 };

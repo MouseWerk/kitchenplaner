@@ -6,10 +6,11 @@
 // the dispensers). The bowl is round in the plan, the elevations and 3D.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { roundBowl, SHEET, tap } from "../parts/mesh";
+import { BODY_RADIUS, roundBowl, SHEET, tap, TOP_RADIUS, type Parts } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { bowlDrain } from "./common";
+import { bottleTrap, wallDispenser } from "./details";
 
 /** How the water is switched on. */
 type Operation = "lever" | "knee" | "sensor";
@@ -25,9 +26,8 @@ const APRON = 0.05;
 const PLATE = SHEET * 2;
 /** The bowl's radius as a share of the deck's smaller side. */
 const BOWL_SHARE = 0.35;
-/** Bottle trap under a wall basin (m): radius, and the height of its arm to the wall. */
+/** Radius of the bottle trap under a wall basin (m). */
 const TRAP_R = 0.022;
-const TRAP_ARM = 0.025;
 /** Soap dispenser and paper towel dispenser (m): width, height, depth. */
 const SOAP = { w: 0.09, h: 0.2, d: 0.1 };
 const TOWEL = { w: 0.28, h: 0.36, d: 0.12 };
@@ -113,55 +113,80 @@ export function makeHandwash(spec: HandwashSpec): KindDef {
       const zf = s.d / 2;
       const { rim, floor } = basin(spec, s.h);
       const { cz, r } = bowl(s.w, s.d, PLATE);
-      // Wall plate behind the basin, up to the top of the unit.
-      p.box("steel", -s.w / 2, s.w / 2, 0, s.h, zb, zb + PLATE);
-      // The deck with the bowl, and its apron at the front and the sides.
+      // Wall plate behind the basin, up to the top of the unit, its edges rounded.
+      p.roundedBox("steel", -s.w / 2, s.w / 2, 0, s.h, zb, zb + PLATE, BODY_RADIUS, "top", "z");
+      // The deck with the bowl, and its apron at the front and the sides, rounded over the top.
       roundBowl(p, "steel", s.w, zb + PLATE, zf - SHEET, cz, r, rim, floor, DECK);
-      p.box("steel", -s.w / 2, s.w / 2, rim - APRON, rim, zf - SHEET, zf);
-      for (const sx of [-1, 1]) p.box("steel", sx > 0 ? s.w / 2 - SHEET : -s.w / 2, sx > 0 ? s.w / 2 : -s.w / 2 + SHEET, rim - APRON, rim - 0.0005, zb + PLATE, zf - SHEET);
+      p.roundedBox("steel", -s.w / 2, s.w / 2, rim - APRON, rim, zf - SHEET, zf, TOP_RADIUS, "top");
+      for (const sx of [-1, 1]) {
+        const x0 = sx > 0 ? s.w / 2 - SHEET : -s.w / 2;
+        p.roundedBox("steel", x0, x0 + SHEET, rim - APRON, rim - 0.0005, zb + PLATE, zf - SHEET, TOP_RADIUS, "top");
+      }
       if (spec.operation === "knee") {
         // Skirt from the apron down to the lower edge, the knee push plate in it. It is solid
         // below the bowl and a shell around it, so the bowl keeps its depth.
-        p.box("steel", -s.w / 2, s.w / 2, 0, floor, zb + PLATE, zf - SHEET);
-        p.box("steel", -s.w / 2, s.w / 2, floor, rim - APRON, zf - SHEET * 2, zf - SHEET);
+        p.roundedBox("steel", -s.w / 2, s.w / 2, 0, floor, zb + PLATE, zf - SHEET, BODY_RADIUS, "vertical");
+        p.box("steel", -s.w / 2 + SHEET, s.w / 2 - SHEET, floor, rim - APRON, zf - SHEET * 2, zf - SHEET);
         for (const x of [-s.w / 2, s.w / 2 - SHEET]) p.box("steel", x, x + SHEET, floor, rim - APRON, zb + PLATE, zf - SHEET * 2);
+        // The knee push plate on its pivot, a dark joint round it.
         const kw = Math.min(0.2, s.w * 0.45);
-        p.box("panelDark", -kw / 2, kw / 2, 0.08, 0.22, zf - SHEET, zf - SHEET / 2);
+        p.plate("slot", -kw / 2 - 0.004, kw / 2 + 0.004, 0.076, 0.224, zf - SHEET - 0.0005, zf - SHEET + 0.0005, 0.012);
+        p.plate("steel", -kw / 2, kw / 2, 0.08, 0.22, zf - SHEET, zf - 0.002, 0.01, true);
+        p.lathe("satin", -kw / 2 + 0.02, 0.18, zf - 0.002, [
+          [0, 0],
+          [0.008, 0],
+          [0.006, 0.002],
+          [0, 0.002],
+        ], { axis: "z" });
         bowlDrain(p, 0, cz, floor, zb, false);
       } else {
         // The bottle trap under the bowl and its arm back to the wall.
         bowlDrain(p, 0, cz, floor, zb, false);
-        p.cyl("steelDark", 0, cz, 0, floor, TRAP_R);
-        p.rod("steelDark", "z", 0, TRAP_ARM, (zb + PLATE + cz) / 2, cz - zb - PLATE, TRAP_R * 0.6);
+        bottleTrap(p, 0, cz, 0, floor, zb + PLATE, TRAP_R);
       }
       // The tap on the deck behind the bowl.
       const tapY = rim;
       const tapRise = Math.min(TAP_ZONE * 0.9, s.h - tapY);
       if (spec.operation === "lever") tap(p, 0, zb, tapY, tapRise);
-      else {
-        // A fixed spout (knee and sensor taps have no lever): a column and an arm forward.
-        const z = zb + TAP_Z;
-        p.cyl("handle", 0, z, tapY, tapY + 0.02, 0.024);
-        p.cyl("handle", 0, z, tapY, tapY + tapRise - 0.012, 0.012);
-        p.rod("handle", "z", 0, tapY + tapRise - 0.012, z + 0.06, 0.12, 0.012);
-        p.cyl("handle", 0, z + 0.11, tapY + tapRise - 0.05, tapY + tapRise - 0.012, 0.01);
-        if (spec.operation === "sensor") p.box("glassDark", -0.008, 0.008, tapY + tapRise * 0.45, tapY + tapRise * 0.65, z + 0.011, z + 0.013);
-      }
+      else fixedSpout(p, zb + TAP_Z, tapY, tapRise, spec.operation === "sensor");
       if (spec.dispensers) {
         const y0 = rim + TAP_ZONE + 0.04;
-        const sy1 = Math.min(s.h - 0.01, y0 + SOAP.h);
         const sx0 = -s.w / 2 + 0.02;
-        p.box("panel", sx0, sx0 + SOAP.w, y0, sy1, zb + PLATE, zb + SOAP.d);
-        p.box("glass", sx0 + 0.02, sx0 + SOAP.w - 0.02, y0 + 0.04, sy1 - 0.05, zb + SOAP.d, zb + SOAP.d + 0.002);
-        p.box("knob", sx0 + 0.02, sx0 + SOAP.w - 0.02, y0 + 0.005, y0 + 0.025, zb + SOAP.d - 0.02, zb + SOAP.d);
-        const ty1 = Math.min(s.h - 0.01, y0 + TOWEL.h);
+        wallDispenser(p, sx0, sx0 + SOAP.w, y0, Math.min(s.h - 0.01, y0 + SOAP.h), zb + PLATE, zb + SOAP.d, "soap");
         const tx1 = s.w / 2 - 0.02;
-        p.box("panel", tx1 - TOWEL.w, tx1, y0, ty1, zb + PLATE, zb + TOWEL.d);
-        p.box("glassDark", tx1 - TOWEL.w + 0.04, tx1 - 0.04, ty1 - 0.1, ty1 - 0.04, zb + TOWEL.d, zb + TOWEL.d + 0.002);
-        p.box("knob", tx1 - TOWEL.w + 0.05, tx1 - 0.05, y0 + 0.01, y0 + 0.025, zb + TOWEL.d - 0.03, zb + TOWEL.d);
+        wallDispenser(p, tx1 - TOWEL.w, tx1, y0, Math.min(s.h - 0.01, y0 + TOWEL.h), zb + PLATE, zb + TOWEL.d, "towel");
       }
     },
   };
+}
+
+/**
+ * A fixed spout without a lever (knee, foot and sensor taps) on a deck at `y0`, its column at
+ * depth `z`, rising `rise` (m): a rosette and one bent tube reaching forward over the bowl, with
+ * the sensor's dark window on the column.
+ */
+export function fixedSpout(p: Parts, z: number, y0: number, rise: number, sensor: boolean): void {
+  const r = 0.012;
+  p.lathe("handle", 0, y0, z, [
+    [0, 0],
+    [0.024, 0],
+    [0.024, 0.004],
+    [0.018, 0.014],
+    [0, 0.016],
+  ]);
+  const yTop = y0 + rise - r;
+  p.tube(
+    "handle",
+    [
+      { x: 0, y: y0 + 0.01, z },
+      { x: 0, y: yTop, z },
+      { x: 0, y: yTop, z: z + 0.11 },
+      { x: 0, y: yTop - 0.04, z: z + 0.11 },
+    ],
+    r,
+    { bend: Math.min(0.04, rise * 0.3) },
+  );
+  if (sensor) p.plate("glassDark", -0.008, 0.008, y0 + rise * 0.4, y0 + rise * 0.6, z + r - 0.001, z + r + 0.002, 0.004, true);
 }
 
 export const handwash = makeHandwash({ kind: "handwash", operation: "lever", dispensers: false });

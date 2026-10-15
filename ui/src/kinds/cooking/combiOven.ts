@@ -4,31 +4,30 @@
 // table-top sizes stand on a stand (their elevation), the floor sizes on their own feet.
 
 import { INSET as FRONT_INSET, PANEL } from "../parts/elevation";
-import { BODY_RADIUS, DOOR, GAP, type Parts } from "../parts/mesh";
+import { BODY_RADIUS, DOOR, GAP } from "../parts/mesh";
 import { frontDoorSwing, INSET } from "../parts/plan";
 import { MM_PER_UNIT } from "../../three/shared";
 import type { KindDef } from "../types";
 import { standFront, standMesh, unitFeet } from "./common";
+import { buttons, dial, doorWindow, pilot } from "./details";
+import { display, HOUSING_RADIUS } from "../parts/details";
 
 /** Width of the control panel at the right (m). */
 const PANEL_W = 0.22;
 /** Height of the control strip across the top of a holding cabinet (m). */
 const TOP_PANEL = 0.12;
-/** Edge radius of the housing: these units are pressed and deep drawn, rounder than a counter (m). */
-const HOUSING_RADIUS = 0.008;
-/** Edge radius of the door leaf and corner radius of its window (m). */
+/** Edge radius of the door leaf (m). */
 const LEAF_RADIUS = 0.005;
-const WINDOW_RADIUS = 0.03;
-/** Width of the black seal round the door window as seen from the front (m). */
-const WINDOW_SEAL = 0.006;
 
 interface OvenLook {
   /** Where the controls sit: a panel at the right or a strip across the top. */
   panel: "right" | "top";
-  /** Touch display and dial, or knobs. */
-  controls: "display" | "knobs";
-  /** A large viewing window or a small one in a solid door. */
-  window: "large" | "small";
+  /** Touch display and dial, a small display over push buttons, or knobs. */
+  controls: "display" | "buttons" | "knobs";
+  /** A large viewing window, a small one in a solid door, or a solid door. */
+  window: "large" | "small" | "none";
+  /** Stands on a table or counter (on short feet) instead of on a stand or the floor. */
+  tableTop?: boolean;
 }
 
 /** Width of the control panel at the right of an oven `w` wide (same unit as `w`, m or mm). */
@@ -40,15 +39,17 @@ function makeOven(kind: string, look: OvenLook): KindDef {
   const right = look.panel === "right";
   return {
     kind,
+    ...(look.tableTop ? { placement: "tableTop" as const } : {
+      elevationBase(f) {
+        standFront(f);
+      },
+    }),
     plan(s) {
       // The door swings open to the left of the controls; hinge at the left.
       const panel = right ? panelWidth(s.w, 1000) : 0;
       s.rect("detail", s.L + INSET / 2, s.F - INSET, s.R - panel - INSET / 2, s.F);
       if (right) s.line("detail", [s.R - panel, s.B + INSET], [s.R - panel, s.F]);
       frontDoorSwing(s, s.w - panel);
-    },
-    elevationBase(f) {
-      standFront(f);
     },
     elevation(f) {
       const { l, r, z0, top } = f;
@@ -58,7 +59,7 @@ function makeOven(kind: string, look: OvenLook): KindDef {
       const dTop = right ? top - I : top - TOP_PANEL * 1000;
       f.box("detail", l + I, dr - I / 2, z0 + I, dTop);
       if (look.window === "large") f.box("detail", l + I * 3, dr - I * 3, z0 + I * 4, dTop - I * 3, "glass");
-      else {
+      else if (look.window === "small") {
         const cx = (l + dr) / 2;
         const ww = Math.min(f.w * 0.25, 200);
         f.box("detail", cx - ww / 2, cx + ww / 2, (z0 + dTop) / 2, dTop - I * 3, "glass");
@@ -70,6 +71,10 @@ function makeOven(kind: string, look: OvenLook): KindDef {
         if (look.controls === "display") {
           f.box("detail", dr + I, r - I * 1.5, top - I * 2 - (top - z0) / 5, top - I * 2);
           f.circle("detail", (dr + r) / 2, top - I * 4 - (top - z0) / 5, panelW * 0.2);
+        } else if (look.controls === "buttons") {
+          const bw = (panelW - I * 2) / 2;
+          f.box("detail", dr + I / 2, r - I, top - I * 3, top - I * 1.5);
+          for (let k = 0; k < 3; k++) for (const c of [0, 1]) f.box("detail", dr + I / 2 + c * (bw + I / 2), dr + I / 2 + c * (bw + I / 2) + bw, top - I * (4.5 + k * 1.2), top - I * (4.5 + k * 1.2) + I * 0.6);
         } else for (let i = 1; i <= 3; i++) f.circle("detail", (dr + r) / 2, top - I - ((top - z0) / 6) * i, panelW * 0.2);
       } else {
         f.box("detail", l + I / 2, r - I / 2, dTop + I / 2, top - I / 2, "item-dark");
@@ -79,8 +84,8 @@ function makeOven(kind: string, look: OvenLook): KindDef {
     mesh(p, s, item) {
       const elev = item.elevation / MM_PER_UNIT;
       // On a stand: the stand reaches from the floor up to the unit (negative local y).
-      standMesh(p, s, elev);
-      const y0 = unitFeet(p, s, elev > 0);
+      if (!look.tableTop) standMesh(p, s, elev);
+      const y0 = unitFeet(p, s, look.tableTop || elev > 0);
       const zf = s.d / 2;
       p.roundedBox("steel", -s.w / 2, s.w / 2, y0, s.h, -s.d / 2, zf - DOOR, HOUSING_RADIUS);
       const panelW = right ? panelWidth(s.w, 1) : 0;
@@ -92,7 +97,7 @@ function makeOven(kind: string, look: OvenLook): KindDef {
       p.roundedBox("steel", -s.w / 2 + GAP, doorX1 - GAP, y0 + GAP, doorTop - GAP, zf - DOOR, zf - DOOR / 2, LEAF_RADIUS, "top", "z");
       if (look.window === "large") {
         doorWindow(p, -s.w / 2 + m * 2, doorX1 - m * 3, y0 + m * 2.5, doorTop - m * 2.5, zf - DOOR / 2);
-      } else {
+      } else if (look.window === "small") {
         const cx = (-s.w / 2 + doorX1) / 2;
         const ww = Math.min(0.2, s.w * 0.25);
         const wy = y0 + (doorTop - y0) * 0.55;
@@ -116,8 +121,14 @@ function makeOven(kind: string, look: OvenLook): KindDef {
             p.plate("glassDark", px - pw / 2, px + pw / 2, top - dh, top, zFace, zFace + 0.003, 0.008, true);
             dial(p, px, top - dh - 0.08, zFace, zf, Math.min(0.035, pw / 2));
           }
+        } else if (look.controls === "buttons") {
+          // A small display and two columns of push buttons under it, a start button below.
+          display(p, px, top - 0.03, pw, 0.035, zFace);
+          for (let k = 0; k < 3; k++) buttons(p, px - pw / 2, px + pw / 2, top - 0.08 - k * 0.035, zFace, 2, Math.min(0.022, pw / 3));
+          p.plate("handle", px - pw / 2, px + pw / 2, top - 0.2, top - 0.17, zFace, zFace + 0.002, 0.004, true);
         } else {
           for (let i = 0; i < 3; i++) p.knob(px, top - 0.06 - i * 0.12, zFace, zf, Math.min(0.025, pw / 2));
+          pilot(p, px, top - 0.06 - 3 * 0.12 + 0.03, zFace);
         }
       } else {
         const zFace = zf - DOOR / 2;
@@ -130,39 +141,8 @@ function makeOven(kind: string, look: OvenLook): KindDef {
   };
 }
 
-/**
- * A door window from x0 to x1 and y0 to y1 on a face at `zFace` (m): the tinted pane with round
- * corners in a black seal that shows round it.
- */
-function doorWindow(p: Parts, x0: number, x1: number, y0: number, y1: number, zFace: number): void {
-  const r = Math.min(WINDOW_RADIUS, (x1 - x0) / 4, (y1 - y0) / 4);
-  p.plate("rubber", x0 - WINDOW_SEAL, x1 + WINDOW_SEAL, y0 - WINDOW_SEAL, y1 + WINDOW_SEAL, zFace, zFace + 0.0015, r + WINDOW_SEAL);
-  p.plate("glassDark", x0, x1, y0, y1, zFace, zFace + 0.003, r, true);
-}
-
-/**
- * The central dial of a control panel at (cx, cy) on a face at `zFace` (m): a large knob of radius
- * `r` in a satin bezel ring, ending at `zFront`.
- */
-function dial(p: Parts, cx: number, cy: number, zFace: number, zFront: number, r: number): void {
-  const t = 0.004;
-  p.lathe(
-    "satin",
-    cx,
-    cy,
-    zFace,
-    [
-      [0, 0],
-      [r * 1.25, 0],
-      [r * 1.25, t * 0.4],
-      [r * 1.12, t],
-      [0, t],
-    ],
-    { axis: "z" },
-  );
-  p.knob(cx, cy, zFace + t, zFront, r);
-}
-
 export const combiOven = makeOven("combiOven", { panel: "right", controls: "display", window: "large" });
 export const convectionOven = makeOven("convectionOven", { panel: "right", controls: "knobs", window: "large" });
 export const holdingCabinet = makeOven("holdingCabinet", { panel: "top", controls: "knobs", window: "small" });
+export const steamerTable = makeOven("steamerTable", { panel: "right", controls: "knobs", window: "none", tableTop: true });
+export const microwave = makeOven("microwave", { panel: "right", controls: "buttons", window: "large", tableTop: true });

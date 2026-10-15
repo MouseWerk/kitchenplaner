@@ -109,7 +109,7 @@ export const de = {
           caption: 'Die ganze Küche in 3D aus Südost.',
         },
         {
-          title: 'Katalog mit 165 Geräten',
+          title: 'Katalog mit 359 Geräten',
           text: 'Kochen, Kühlen, Spülen, Tische und Vorbereitung, Ausgabe, Lagern, Lüftung und Bauteile wie Stützen und Bodenabläufe. Viele Geräte gibt es in mehreren Breiten und als Elektro- oder Gasgerät, jedes mit 3D-Vorschau und Anschlusswerten.',
           alt: 'Der Katalog mit 3D-Vorschau und Anschlusswerten, gesucht wird nach „kombi“',
           caption: 'Der Katalog: Suche nach „kombi“, daneben die Vorschau mit Anschlusswerten.',

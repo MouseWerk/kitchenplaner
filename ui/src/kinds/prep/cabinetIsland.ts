@@ -4,7 +4,7 @@
 import { doorCount } from "../parts/elevation";
 import { doors } from "../parts/mesh";
 import type { KindDef } from "../types";
-import { cabinetBody, cabinetFront, doorsFront, frontsPlan, tableTop } from "./common";
+import { cabinetBody, cabinetFront, doorHinges, doorsFront, frontsPlan, tableTop } from "./common";
 
 export const cabinetIsland: KindDef = {
   kind: "cabinetIsland",
@@ -18,6 +18,7 @@ export const cabinetIsland: KindDef = {
   mesh(p, s, item) {
     const { y0, y1, zf } = cabinetBody(p, s);
     doors(p, -s.w / 2, s.w / 2, y0, y1, 2 * zf, doorCount(item.width), "vertical");
-    tableTop(p, s, { rolledBack: true });
+    doorHinges(p, -s.w / 2, s.w / 2, y0, y1, zf, doorCount(item.width));
+    tableTop(p, s, { rolledBack: true, solid: true });
   },
 };

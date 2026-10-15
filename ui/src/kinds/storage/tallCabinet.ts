@@ -2,7 +2,8 @@
 // and ventilation slots at the top and bottom of each door.
 
 import { doorCount, FEET, INSET } from "../parts/elevation";
-import { DOOR, DOOR_WIDTH, doors, plinth, PLINTH, SHEET } from "../parts/mesh";
+import { BODY_RADIUS, DOOR, DOOR_WIDTH, doors, plinth, PLINTH, TOP_RADIUS } from "../parts/mesh";
+import { hinges } from "./cabinet";
 import { INSET as PLAN_INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -36,17 +37,20 @@ export const tallCabinet: KindDef = {
   },
   mesh(p, s) {
     plinth(p, s.w, s.d);
-    p.box("steel", -s.w / 2, s.w / 2, PLINTH, s.h, -s.d / 2, s.d / 2 - DOOR);
+    p.roundedBox("steel", -s.w / 2, s.w / 2, PLINTH, s.h - 0.02, -s.d / 2, s.d / 2 - DOOR, BODY_RADIUS, "vertical");
+    // A pressed cover on top, its front edge over the doors.
+    p.roundedBox("steel", -s.w / 2, s.w / 2, s.h - 0.02, s.h, -s.d / 2, s.d / 2 - DOOR / 2 - 0.001, TOP_RADIUS);
     const n = Math.max(1, Math.round(s.w / DOOR_WIDTH));
-    doors(p, -s.w / 2, s.w / 2, PLINTH, s.h, s.d, n, "vertical");
+    doors(p, -s.w / 2, s.w / 2, PLINTH, s.h - 0.02, s.d, n, "vertical");
+    hinges(p, -s.w / 2, s.w / 2, PLINTH, s.h - 0.02, s.d / 2 - DOOR, n);
     const zFace = s.d / 2 - DOOR / 2;
     const dw = s.w / n;
     for (let i = 0; i < n; i++) {
       const x0 = -s.w / 2 + i * dw + dw * 0.25;
       const x1 = x0 + dw * 0.5;
       for (let k = 0; k < SLOTS; k++) {
-        for (const y of [s.h - 0.06 - k * SLOT_PITCH, PLINTH + 0.05 + k * SLOT_PITCH]) {
-          p.box("panelDark", x0, x1, y - SLOT_H / 2, y + SLOT_H / 2, zFace, zFace + SHEET / 5);
+        for (const y of [s.h - 0.08 - k * SLOT_PITCH, PLINTH + 0.05 + k * SLOT_PITCH]) {
+          p.plate("slot", x0, x1, y - SLOT_H / 2, y + SLOT_H / 2, zFace - 0.001, zFace + 0.0008, SLOT_H / 2);
         }
       }
     }

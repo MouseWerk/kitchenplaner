@@ -2,10 +2,10 @@
 // at the opening, four corner guides hold the stack; on castors.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { SHEET } from "../parts/mesh";
+import { BODY_RADIUS, SHEET } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { CASTOR, castors, castorsFront } from "./common";
+import { bumper, CASTOR, castors, castorsFront, ratingPlate, trayStack } from "./common";
 
 /** Height of the corner guides above the body (m) and their size. */
 const GUIDES = 0.12;
@@ -36,23 +36,38 @@ export const trayDispenser: KindDef = {
   mesh(p, s) {
     const yb = s.h - GUIDES;
     castors(p, s.w, s.d);
-    p.box("rubber", -s.w / 2, s.w / 2, CASTOR.h, CASTOR.h + 0.03, -s.d / 2, s.d / 2);
-    p.box("steel", -s.w / 2 + SHEET, s.w / 2 - SHEET, CASTOR.h + 0.03, yb, -s.d / 2 + SHEET, s.d / 2 - SHEET);
-    p.box("steelDark", -s.w / 2 + GUIDE, s.w / 2 - GUIDE, yb - 0.002, yb, -s.d / 2 + GUIDE, s.d / 2 - GUIDE);
-    // The tray stack, alternating shades so the trays read one by one.
+    bumper(p, -s.w / 2, s.w / 2, CASTOR.h, CASTOR.h + 0.03, -s.d / 2, s.d / 2);
+    p.roundedBox("steel", -s.w / 2 + SHEET, s.w / 2 - SHEET, CASTOR.h + 0.03, yb, -s.d / 2 + SHEET, s.d / 2 - SHEET, BODY_RADIUS * 4, "vertical");
+    // The opening at the top with its rolled edge and the spring platform's dark gap round the
+    // stack.
+    p.lathe(
+      "satin",
+      0,
+      yb - 0.012,
+      0,
+      [
+        [0, 0],
+        [0.012, 0],
+        [0.012, 0.01],
+        [0.006, 0.014],
+        [0, 0.012],
+        [0, 0],
+      ],
+      { rect: [s.w / 2 - SHEET - 0.012, s.d / 2 - SHEET - 0.012] },
+    );
+    p.box("slot", -s.w / 2 + GUIDE, s.w / 2 - GUIDE, yb - 0.004, yb - 0.002, -s.d / 2 + GUIDE, s.d / 2 - GUIDE);
+    // The tray stack, reaching down into the body.
     const tw = s.w / 2 - GUIDE - 0.005;
     const td = s.d / 2 - GUIDE - 0.005;
-    for (let i = 0; i < TRAYS; i++) {
-      const y = yb + i * TRAY;
-      p.box(i % 2 === 0 ? "panelDark" : "knob", -tw, tw, y, y + TRAY, -td, td);
-    }
-    // Corner guides.
+    trayStack(p, -tw, tw, yb - 0.04, -td, td, TRAYS + 2, TRAY);
+    // Corner guides: angle profiles standing in the corners, rounded at their tops.
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         const x = sx * (s.w / 2 - GUIDE / 2);
         const z = sz * (s.d / 2 - GUIDE / 2);
-        p.box("handle", x - GUIDE / 2, x + GUIDE / 2, yb - 0.04, s.h, z - GUIDE / 2, z + GUIDE / 2);
+        p.roundedBox("handle", x - GUIDE / 2, x + GUIDE / 2, yb - 0.06, s.h, z - GUIDE / 2, z + GUIDE / 2, 0.006, "top");
       }
     }
+    ratingPlate(p, 0, CASTOR.h + 0.09, s.d / 2 - SHEET);
   },
 };

@@ -1,4 +1,5 @@
-// Storage: shelving, rack trolleys, wall shelves and cabinets, bins and rails.
+// Storage: shelving, racks and rack trolleys, wall shelves and cabinets, lockers, bins and rails,
+// pallets, crates and sack trucks.
 
 import { TABLE_WIDTHS, WALL_SHELF_ELEVATION } from "../parts/sizes";
 import type { CatalogEntry } from "../types";
@@ -7,6 +8,10 @@ import type { CatalogEntry } from "../types";
 const SHELVING_WIDTHS = [600, 800, 1000, 1200, 1400, 1600] as const;
 /** Lower edge of a rail or knife bar on the wall above a work table (mm). */
 const RAIL_ELEVATION = 1300;
+/** Width steps of mobile shelving systems (mm). */
+const MOBILE_WIDTHS = [1600, 2000, 2400, 3000] as const;
+/** Width steps of lockers: one to four compartments of 300 mm. */
+const LOCKER_WIDTHS = [300, 600, 900, 1200] as const;
 
 export const entries: readonly CatalogEntry[] = [
   { id: "shelving", kind: "shelving", category: "storage", name: "cat.shelving", description: "catDesc.shelving", tags: ["regal", "lagerregal", "edelstahl", "stainless", "shelf", "rack"], width: 1200, depth: 500, height: 1800, elevation: 0, connections: {}, widths: TABLE_WIDTHS },
@@ -24,4 +29,21 @@ export const entries: readonly CatalogEntry[] = [
   { id: "ingredient-bin", kind: "ingredientBin", category: "storage", name: "cat.ingredientBin", description: "catDesc.ingredientBin", tags: ["zutatenwagen", "mehlwagen", "zutatenbehälter", "fahrbar", "mehl", "zucker", "ingredient bin", "flour"], width: 400, depth: 700, height: 720, elevation: 0, connections: {} },
   { id: "utensil-rail", kind: "utensilRail", category: "storage", name: "cat.utensilRail", description: "catDesc.utensilRail", tags: ["gerätereling", "reling", "hakenleiste", "haken", "utensil rail", "hooks"], width: 800, depth: 80, height: 350, elevation: RAIL_ELEVATION, connections: {}, widths: [400, 600, 800, 1000, 1200] },
   { id: "knife-bar", kind: "knifeBar", category: "storage", name: "cat.knifeBar", description: "catDesc.knifeBar", tags: ["messerleiste", "magnetleiste", "messer", "knife bar", "magnetic"], width: 450, depth: 50, height: 300, elevation: RAIL_ELEVATION, connections: {}, widths: [300, 450, 600] },
+  { id: "mobile-shelving", kind: "mobileShelving", category: "storage", name: "cat.mobileShelving", description: "catDesc.mobileShelving", tags: ["fahrregal", "fahrregalanlage", "rollregal", "verschieberegal", "kompaktregal", "mobile shelving", "compact shelving"], width: 2000, depth: 1600, height: 2000, elevation: 0, connections: {}, widths: MOBILE_WIDTHS },
+  { id: "cold-room-shelving", kind: "coldRoomShelving", category: "storage", name: "cat.coldRoomShelving", description: "catDesc.coldRoomShelving", tags: ["kühlraumregal", "kunststoff", "aluminium", "gitterboden", "spülmaschinenfest", "cold room", "polymer", "shelf"], width: 1200, depth: 500, height: 1800, elevation: 0, connections: {}, widths: SHELVING_WIDTHS },
+  { id: "gn-shelving", kind: "gnShelving", category: "storage", name: "cat.gnShelving", description: "catDesc.gnShelving", tags: ["gn-regal", "auflagenregal", "gastronorm", "kühlraum", "behälter", "gn shelving", "container rack"], width: 1100, depth: 600, height: 1800, elevation: 0, connections: {}, widths: [800, 1100, 1450] },
+  { id: "wine-rack", kind: "wineRack", category: "storage", name: "cat.wineRack", description: "catDesc.wineRack", tags: ["weinregal", "flaschenregal", "wein", "flaschen", "wine rack", "bottle rack"], width: 900, depth: 350, height: 1800, elevation: 0, connections: {}, widths: [600, 900, 1200] },
+  { id: "bread-rack", kind: "breadRack", category: "storage", name: "cat.breadRack", description: "catDesc.breadRack", tags: ["brotregal", "brot", "backwaren", "bäckerei", "holz", "bread rack", "bakery"], width: 1200, depth: 500, height: 1800, elevation: 0, connections: {}, widths: [800, 1000, 1200, 1600] },
+  { id: "tray-rack", kind: "trayRack", category: "storage", name: "cat.trayRack", description: "catDesc.trayRack", tags: ["hordengestell", "blechregal", "backbleche", "600 x 400", "euronorm", "tray rack", "baking trays"], width: 460, depth: 650, height: 1800, elevation: 0, connections: {} },
+  { id: "plate-trolley", kind: "plateTrolley", category: "storage", name: "cat.plateTrolley", description: "catDesc.plateTrolley", tags: ["tellerwagen", "tellerstapelwagen", "teller", "geschirr", "fahrbar", "plate trolley", "plates"], width: 760, depth: 760, height: 950, elevation: 0, connections: {} },
+  { id: "plate-rack-wall", kind: "plateRackWall", category: "storage", name: "cat.plateRackWall", description: "catDesc.plateRackWall", tags: ["tellerregal", "tellerabtropfregal", "wandregal", "teller", "plate rack", "wall"], width: 800, depth: 300, height: 450, elevation: WALL_SHELF_ELEVATION, connections: {}, widths: [600, 800, 1000, 1200] },
+  { id: "pot-rack-wall", kind: "potRackWall", category: "storage", name: "cat.potRackWall", description: "catDesc.potRackWall", tags: ["topfregal", "topfhalter", "wandregal", "töpfe", "haken", "pot rack", "pans"], width: 1000, depth: 350, height: 400, elevation: 1500, connections: {}, widths: [800, 1000, 1200, 1600] },
+  { id: "cutlery-cabinet", kind: "cutleryCabinet", category: "storage", name: "cat.cutleryCabinet", description: "catDesc.cutleryCabinet", tags: ["besteckschrank", "schubladenschrank", "besteck", "schubladen", "cutlery cabinet", "drawers"], width: 600, depth: 600, height: 900, elevation: 0, connections: {}, widths: [600, 1200] },
+  { id: "cleaning-cabinet", kind: "cleaningCabinet", category: "storage", name: "cat.cleaningCabinet", description: "catDesc.cleaningCabinet", tags: ["reinigungsmittelschrank", "putzmittel", "chemikalien", "abschließbar", "cleaning cabinet", "chemicals", "lockable"], width: 600, depth: 500, height: 1950, elevation: 0, connections: {}, widths: [600, 1200] },
+  { id: "locker", kind: "locker", category: "storage", name: "cat.locker", description: "catDesc.locker", tags: ["spind", "garderobenschrank", "personalspind", "umkleide", "locker", "staff"], width: 600, depth: 500, height: 1950, elevation: 0, connections: {}, widths: LOCKER_WIDTHS },
+  { id: "linen-cabinet", kind: "linenCabinet", category: "storage", name: "cat.linenCabinet", description: "catDesc.linenCabinet", tags: ["wäscheschrank", "handtücher", "schürzen", "schmutzwäsche", "linen cabinet", "towels", "laundry"], width: 800, depth: 500, height: 1950, elevation: 0, connections: {} },
+  { id: "euro-pallet", kind: "euroPallet", category: "storage", name: "cat.euroPallet", description: "catDesc.euroPallet", tags: ["europalette", "palette", "anlieferung", "euro pallet", "pallet"], width: 1200, depth: 800, height: 144, elevation: 0, connections: {} },
+  { id: "crates", kind: "crates", category: "storage", name: "cat.crates", description: "catDesc.crates", tags: ["stapelkisten", "e2-kisten", "fleischkisten", "kisten", "crates", "stacking boxes"], width: 600, depth: 400, height: 800, elevation: 0, connections: {} },
+  { id: "crate-dolly", kind: "crateDolly", category: "storage", name: "cat.crateDolly", description: "catDesc.crateDolly", tags: ["kistenroller", "dolly", "rollbrett", "stapelkisten", "crate dolly", "crates"], width: 610, depth: 410, height: 950, elevation: 0, connections: {} },
+  { id: "sack-truck", kind: "sackTruck", category: "storage", name: "cat.sackTruck", description: "catDesc.sackTruck", tags: ["sackkarre", "stapelkarre", "transport", "anlieferung", "sack truck", "hand truck"], width: 520, depth: 500, height: 1200, elevation: 0, connections: {} },
 ];

@@ -9,9 +9,11 @@
 
 import type { Front } from "../parts/elevation";
 import { flueMesh } from "../parts/flue";
-import type { Parts, Size } from "../parts/mesh";
+import { BODY_RADIUS, LEG_RADIUS, type Parts, type Size } from "../parts/mesh";
 import type { PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
+import { hinges, pilot } from "./details";
+import { controlPanel, ratingPlate } from "../parts/details";
 
 /** Room the draw-off tap takes in front of the vessel (m). */
 const TAP_REACH = 0.09;
@@ -37,6 +39,13 @@ const RIM = 0.015;
 const FILL_RISE = 250;
 /** Radius of the fill tap's pipe (m). */
 const FILL_PIPE = 0.011;
+/** Edge radius of the control column (m). */
+const COLUMN_RADIUS = 0.004;
+/** How far the drive of a stirring kettle rises over the top (mm). */
+const MIXER_RISE = 400;
+/** Height and width of the mixer arm, and the radius of the drive (m). */
+const MIXER_ARM = 0.1;
+const MIXER_DRIVE = 0.11;
 /** The gas flue outlet on the column top: depth, distance from the back and height (m). */
 const FLUE_DEPTH = 0.06;
 const FLUE_BACK = 0.03;
@@ -72,13 +81,19 @@ function sizeOf(item: { width: number; depth: number; height: number }): Size {
   return { w: item.width / 1000, d: item.depth / 1000, h: item.height / 1000 };
 }
 
-function plan(s: PlanSketch, indirect: boolean) {
+function plan(s: PlanSketch, { indirect, mixer }: KettleLook) {
   const m = layout(sizeOf(s.item));
   const k = (v: number) => v * 1000;
   // The control column at the right.
   s.rect("detail", k(m.colX0), s.B, s.R, k(m.zCol));
   s.circle("detail", k(m.cx), k(m.cz), k(m.r));
   if (indirect) s.circle("detail", k(m.cx), k(m.cz), k(m.r) * 0.92);
+  if (mixer) {
+    // The mixer arm from the column to the drive over the middle of the vessel.
+    const hw = MIXER_ARM * 500;
+    s.rect("detail", k(m.cx), k(m.cz) - hw, k(m.colX0), k(m.cz) + hw);
+    s.circle("detail", k(m.cx), k(m.cz), MIXER_DRIVE * 1000);
+  }
   // The draw-off tap at the front and the fill tap on the column.
   s.rect("detail", k(m.cx) - 20, k(m.cz + m.r), k(m.cx) + 20, s.F);
   s.circle("detail", k(m.colX), k(m.fillZ), 20);
@@ -91,7 +106,7 @@ function plan(s: PlanSketch, indirect: boolean) {
   }
 }
 
-function elevation(f: Front, indirect: boolean) {
+function elevation(f: Front, { indirect, mixer }: KettleLook) {
   const s = { w: f.w / 1000, d: f.item.depth / 1000, h: f.item.height / 1000 };
   const m = layout(s);
   const X = (x: number) => f.l + (x + s.w / 2) * 1000;
@@ -118,6 +133,12 @@ function elevation(f: Front, indirect: boolean) {
   f.circle("detail", pc, f.top - 120, 25);
   f.circle("detail", pc, f.top - 250, 25);
   if (indirect) f.circle("detail", pc, f.top - 450, 40);
+  if (mixer) {
+    // The drive over the vessel on its arm from the column.
+    const top = f.top + MIXER_RISE;
+    f.box("detail", cx - MIXER_DRIVE * 1000, cx + MIXER_DRIVE * 1000, f.top, top);
+    f.box("detail", cx + MIXER_DRIVE * 1000, pc, top - MIXER_ARM * 1000, top - 5);
+  }
   // The swivel fill tap over the vessel.
   const fy = f.top + FILL_RISE * 0.92;
   f.line("detail", [pc, f.top], [pc, fy], [X(m.fillTo), fy], [X(m.fillTo), fy - 40]);
@@ -131,80 +152,238 @@ function elevation(f: Front, indirect: boolean) {
 function fillTap(p: Parts, x: number, z: number, y0: number, xTo: number) {
   const top = y0 + FILL_RISE / 1000;
   const r = FILL_PIPE;
-  p.cyl("handle", x, z, y0, y0 + 0.02, r * 2);
-  p.cyl("handle", x, z, y0, top - r, r);
-  p.rod("handle", "x", (x + xTo) / 2, top - r, z, x - xTo, r);
-  p.cyl("handle", xTo, z, top - r - 0.05, top - r, r * 0.8);
-  // The tap's handwheel on the pillar.
-  p.rod("knob", "z", x, y0 + 0.1, z + r + 0.008, 0.016, 0.02);
+  p.lathe("satin", x, y0, z, [
+    [0, 0],
+    [r * 2.2, 0],
+    [r * 2.2, 0.006],
+    [r * 1.4, 0.02],
+    [0, 0.02],
+  ]);
+  p.tube(
+    "handle",
+    [
+      { x, y: y0 + 0.01, z },
+      { x, y: top - r, z },
+      { x: xTo, y: top - r, z },
+      { x: xTo, y: top - r - 0.06, z },
+    ],
+    r,
+    { bend: 0.035 },
+  );
+  // The tap's handwheel on the pillar: a turned black wheel on a short spindle.
+  const wy = y0 + 0.1;
+  p.rod("satin", "z", x, wy, z + r + 0.006, 0.012, 0.004);
+  p.lathe(
+    "knob",
+    x,
+    wy,
+    z + r + 0.01,
+    [
+      [0, 0],
+      [0.022, 0],
+      [0.024, 0.004],
+      [0.022, 0.01],
+      [0.008, 0.012],
+      [0, 0.012],
+    ],
+    { axis: "z" },
+  );
 }
 
-function makeKettle(kind: string, indirect: boolean): KindDef {
+/** What sets a kettle apart: a water jacket, a mixer on an arm over the vessel. */
+interface KettleLook {
+  indirect: boolean;
+  mixer: boolean;
+}
+
+function makeKettle(kind: string, look: KettleLook): KindDef {
   return {
     kind,
     flue: false,
-    rise: FILL_RISE,
+    rise: look.mixer ? MIXER_RISE : FILL_RISE,
     plan(s) {
-      plan(s, indirect);
+      plan(s, look);
     },
     elevation(f) {
-      elevation(f, indirect);
+      elevation(f, look);
     },
     mesh(p, s, item) {
       const m = layout(s);
       const { cx, cz, r, legs, rim } = m;
       // The control column at the right, on a dark base.
-      p.box("steel", m.colX0, s.w / 2, RAIL, s.h, -s.d / 2, m.zCol);
-      p.box("steelDark", m.colX0 + 0.01, s.w / 2 - 0.01, 0, RAIL, -s.d / 2 + 0.01, m.zCol - 0.01);
+      p.roundedBox("steel", m.colX0, s.w / 2, RAIL, s.h, -s.d / 2, m.zCol, COLUMN_RADIUS);
+      p.roundedBox("steelDark", m.colX0 + 0.01, s.w / 2 - 0.01, 0, RAIL + 0.002, -s.d / 2 + 0.01, m.zCol - 0.01, BODY_RADIUS, "vertical");
       // The base frame: two rails from the left side to the column, under the legs.
       for (const sz of [-1, 1]) {
         const z = cz + sz * r * 0.6;
-        p.box("steelDark", -s.w / 2, m.colX0, 0, RAIL, z - RAIL / 2, z + RAIL / 2);
+        p.roundedBox("steelDark", -s.w / 2, m.colX0 + 0.004, 0, RAIL, z - RAIL / 2, z + RAIL / 2, LEG_RADIUS);
       }
-      // The vessel on its legs; an indirect one in its water jacket.
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        const x = cx + sx * r * 0.6;
-        const z = cz + sz * r * 0.6;
-        p.cyl("steelDark", x, z, RAIL, legs, 0.02);
+      // The vessel on four turned legs; an indirect one in its water jacket.
+      const v0 = legs - 0.02;
+      for (const [sx, sz] of [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ]) {
+        p.lathe("steelDark", cx + sx * r * 0.6, RAIL, cz + sz * r * 0.6, [
+          [0, 0],
+          [0.026, 0],
+          [0.026, 0.008],
+          [0.018, 0.016],
+          [0.018, v0 - RAIL + 0.03],
+          [0, v0 - RAIL + 0.03],
+        ]);
       }
-      p.cyl("steelDark", cx, cz, legs - 0.02, legs, r * 0.8);
-      p.cyl("steel", cx, cz, legs, rim - RIM, r);
-      if (indirect) p.cyl("steel", cx, cz, legs, legs + (rim - legs) * 0.75, r * 1.03);
-      p.cyl("handle", cx, cz, rim - RIM, rim, r * 1.04);
+      const wallTop = rim - RIM - v0;
+      const dish = Math.min(r * 0.25, wallTop * 0.4);
+      const rr = look.indirect ? r * 1.03 : r;
+      // A dished bottom rising into the straight wall.
+      p.lathe("steel", cx, v0, cz, [
+        [0, 0],
+        [rr * 0.5, dish * 0.15],
+        [rr * 0.85, dish * 0.55],
+        [rr, dish],
+        [rr, wallTop],
+        [0, wallTop],
+      ]);
+      // The seam where the jacket of an indirect kettle ends, a little under the rim.
+      if (look.indirect) p.ring("satin", cx, cz, v0 + wallTop * 0.8, rr, 0.003);
+      // The rolled rim the lid sits on.
+      p.lathe("satin", cx, rim - RIM, cz, [
+        [r * 0.95, 0],
+        [rr + 0.004, 0],
+        [rr + 0.008, RIM * 0.5],
+        [rr + 0.004, RIM],
+        [r * 0.95, RIM],
+      ]);
       // The bracket holding the vessel on the column.
       const by = legs + (rim - legs) * 0.4;
       const bz = Math.min(cz, m.zCol - 0.06);
-      p.box("steelDark", cx + r * 0.9, m.colX0, by, by + 0.1, bz - 0.05, bz + 0.05);
-      // The lid with its knob, hinged at the back, its handle bar at the front.
-      p.cyl("steel", cx, cz, rim, s.h - 0.01, r);
-      p.cyl("steelDark", cx, cz, s.h - 0.01, s.h - 0.006, r * 0.15);
-      p.box("steelDark", cx - r * 0.3, cx + r * 0.3, rim - 0.03, s.h - 0.012, cz - r - 0.025, cz - r * 0.9);
-      p.rod("handle", "x", cx, s.h - 0.016, cz + r * 0.85, r * 0.6, 0.008);
-      for (const sx of [-1, 1]) p.box("handle", cx + sx * r * 0.3 - 0.006, cx + sx * r * 0.3 + 0.006, rim + 0.004, s.h - 0.016, cz + r * 0.8, cz + r * 0.85);
-      // The draw-off tap at the bottom front, its lever pointing up.
+      p.roundedBox("steelDark", cx + r * 0.9, m.colX0 + 0.004, by, by + 0.1, bz - 0.05, bz + 0.05, BODY_RADIUS);
+      // The lid: a shallow dome hinged at the back, a knob on top and a handle bar at the front.
+      const lidTop = s.h - 0.012;
+      const lh = lidTop - rim;
+      p.lathe("steel", cx, rim, cz, [
+        [0, 0],
+        [r + 0.006, 0],
+        [r + 0.006, lh * 0.25],
+        [r * 0.92, lh * 0.55],
+        [r * 0.6, lh * 0.9],
+        [0, lh],
+      ]);
+      p.lathe("knob", cx, lidTop - 0.002, cz, [
+        [0, 0],
+        [0.02, 0],
+        [0.022, 0.004],
+        [0.014, 0.012],
+        [0, 0.012],
+      ]);
+      const zh = Math.max(cz - r - 0.03, -s.d / 2);
+      p.roundedBox("steelDark", cx - r * 0.3, cx + r * 0.3, rim - 0.03, rim + lh * 0.4, zh, cz - r * 0.92, BODY_RADIUS);
+      hinges(p, cx - r * 0.3, cx + r * 0.3, rim + lh * 0.4, zh + 0.01, 2, 0.01, 0.05);
+      const hz = cz + r * 0.9;
+      const hy = rim + lh * 0.3;
+      p.tube(
+        "handle",
+        [
+          { x: cx - r * 0.35, y: hy, z: hz - 0.02 },
+          { x: cx - r * 0.35, y: hy + 0.03, z: hz + 0.015 },
+          { x: cx + r * 0.35, y: hy + 0.03, z: hz + 0.015 },
+          { x: cx + r * 0.35, y: hy, z: hz - 0.02 },
+        ],
+        0.008,
+        { bend: 0.02 },
+      );
+      // The draw-off tap at the bottom front: valve body, outlet bent down, lever pointing up.
       const ty = legs + 0.06;
       const zt = s.d / 2;
-      p.rod("handle", "z", cx, ty, (cz + r - 0.01 + zt - 0.03) / 2, zt - 0.03 - (cz + r - 0.01), 0.025);
-      p.cyl("handle", cx, zt - 0.025, ty - 0.06, ty, 0.015);
-      p.box("knob", cx - 0.01, cx + 0.01, ty + 0.02, ty + 0.12, zt - 0.06, zt - 0.04);
-      p.rod("handle", "z", cx, ty, zt - 0.015, 0.03, 0.03);
-      // The control panel on the front of the column: two knobs and a pilot light.
+      p.tube(
+        "handle",
+        [
+          { x: cx, y: ty, z: cz + r - 0.01 },
+          { x: cx, y: ty, z: zt - 0.03 },
+          { x: cx, y: ty - 0.07, z: zt - 0.03 },
+        ],
+        0.02,
+        { bend: 0.03 },
+      );
+      p.lathe(
+        "satin",
+        cx,
+        ty,
+        zt - 0.03,
+        [
+          [0, 0],
+          [0.03, 0],
+          [0.03, 0.025],
+          [0.024, 0.03],
+          [0, 0.03],
+        ],
+        { axis: "z" },
+      );
+      p.tube(
+        "knob",
+        [
+          { x: cx, y: ty + 0.02, z: zt - 0.02 },
+          { x: cx, y: ty + 0.13, z: zt - 0.04 },
+        ],
+        0.009,
+      );
+      // The control panel on the front of the column: two knobs and a pilot light; the rating
+      // plate low on the column.
       const zf = m.zCol;
       const px = m.colX;
-      p.box("panelDark", m.colX0 + 0.02, s.w / 2 - 0.02, s.h - 0.35, s.h - 0.03, zf, zf + 0.002);
+      controlPanel(p, m.colX0 + 0.02, s.w / 2 - 0.02, s.h - 0.35, s.h - 0.03, zf - 0.004, zf + 0.002);
       p.knob(px, s.h - 0.12, zf + 0.002, zf + 0.03);
       p.knob(px, s.h - 0.25, zf + 0.002, zf + 0.03);
-      p.rod("zone", "z", px, s.h - 0.32, zf + 0.006, 0.008, 0.006);
-      if (indirect) {
+      pilot(p, px, s.h - 0.32, zf + 0.002);
+      ratingPlate(p, px, 0.175, zf, 0.08, 0.05);
+      if (look.indirect) {
         // Pressure gauge of the water jacket under the panel, the safety valve on the column top.
         const gy = s.h - 0.45;
         const gr = 0.04;
-        p.rod("steel", "z", px, gy, zf + 0.01, 0.02, gr);
-        p.rod("panel", "z", px, gy, zf + 0.021, 0.002, gr * 0.85);
-        p.box("handle", px - 0.002, px + 0.002, gy, gy + gr * 0.7, zf + 0.022, zf + 0.024);
-        p.cyl("handle", px, zf - 0.05, s.h, s.h + 0.06, 0.015);
+        p.lathe(
+          "satin",
+          px,
+          gy,
+          zf,
+          [
+            [0, 0],
+            [gr, 0],
+            [gr, 0.016],
+            [gr * 0.9, 0.02],
+            [0, 0.02],
+          ],
+          { axis: "z" },
+        );
+        p.lathe(
+          "panel",
+          px,
+          gy,
+          zf + 0.02,
+          [
+            [0, 0],
+            [gr * 0.86, 0],
+            [gr * 0.86, 0.001],
+            [0, 0.001],
+          ],
+          { axis: "z" },
+        );
+        p.box("knob", px - 0.0015, px + 0.0015, gy, gy + gr * 0.7, zf + 0.021, zf + 0.023);
+        p.lathe("satin", px, s.h, zf - 0.05, [
+          [0, 0],
+          [0.02, 0],
+          [0.02, 0.012],
+          [0.012, 0.02],
+          [0.012, 0.045],
+          [0.016, 0.05],
+          [0.016, 0.06],
+          [0, 0.06],
+        ]);
       }
       fillTap(p, px, m.fillZ, s.h, m.fillTo);
+      if (look.mixer) mixerDrive(p, s, m);
       if (item.energy === "gas") {
         // The flue outlet on the column top: dark slots across a steel collar.
         flueMesh(p, s, { ...flue(s), y0: s.h - FLUE_HEIGHT, y1: s.h });
@@ -213,5 +392,28 @@ function makeKettle(kind: string, indirect: boolean): KindDef {
   };
 }
 
-export const kettle = makeKettle("kettle", false);
-export const kettleIndirect = makeKettle("kettleIndirect", true);
+/**
+ * The mixer of a stirring kettle: an arm from a post on the column to a gear motor over the
+ * middle of the lid, its shaft going down through the lid.
+ */
+function mixerDrive(p: Parts, s: Size, m: ReturnType<typeof layout>) {
+  const top = s.h + MIXER_RISE / 1000;
+  const armY0 = top - MIXER_ARM;
+  p.roundedBox("steel", m.colX - 0.05, m.colX + 0.05, s.h - 0.01, armY0 + 0.01, m.cz - 0.05, m.cz + 0.05, BODY_RADIUS, "vertical");
+  p.roundedBox("steel", m.cx, m.colX + 0.05, armY0, top, m.cz - MIXER_ARM / 2, m.cz + MIXER_ARM / 2, BODY_RADIUS);
+  // The gear motor: a painted drum with a rounded cap, standing on a collar on the lid.
+  const h = armY0 - (s.h - 0.02);
+  p.lathe("paintGray", m.cx, s.h - 0.02, m.cz, [
+    [0, 0],
+    [0.03, 0],
+    [0.03, 0.04],
+    [MIXER_DRIVE, 0.05],
+    [MIXER_DRIVE, h - 0.015],
+    [MIXER_DRIVE * 0.85, h],
+    [0, h],
+  ]);
+}
+
+export const kettle = makeKettle("kettle", { indirect: false, mixer: false });
+export const kettleIndirect = makeKettle("kettleIndirect", { indirect: true, mixer: false });
+export const kettleMixer = makeKettle("kettleMixer", { indirect: false, mixer: true });

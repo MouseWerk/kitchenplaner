@@ -3,9 +3,11 @@
 // the right stands higher than the pan.
 
 import { FEET, INSET, PANEL } from "../parts/elevation";
-import { DOOR, doors, GAP, PLINTH, plinth } from "../parts/mesh";
+import { BODY_RADIUS, DOOR, DOOR_RADIUS, doors, GAP, PLINTH, plinth } from "../parts/mesh";
 import { CONTROL_STRIP, INSET as PLAN_INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { dial, hinges } from "./details";
+import { controlPanel, display, housing, ratingPlate } from "../parts/details";
 
 /** Width of the control tower at the right (m). */
 const TOWER = 0.25;
@@ -52,28 +54,44 @@ export const multiPan: KindDef = {
     const panBottom = rim - PAN;
     // The body under the pan with its doors.
     plinth(p, s.w, s.d);
-    p.box("steel", -s.w / 2, tx, PLINTH, panBottom - 0.03, -s.d / 2, zf - DOOR);
+    p.roundedBox("steel", -s.w / 2, tx, PLINTH, panBottom - 0.03, -s.d / 2, zf - DOOR, BODY_RADIUS, "vertical");
     doors(p, -s.w / 2, tx, PLINTH, panBottom - 0.03, s.d, Math.max(1, Math.round((tx + s.w / 2) / 0.6)), "vertical");
-    // The pan, a little narrower than the body, with its pouring lip at the front.
+    // The pan, a little narrower than the body, on its heated floor, a satin rim round its top
+    // and the pouring lip at the front.
     const x0 = -s.w / 2 + 0.02;
     const x1 = tx - 0.02;
-    p.box("steelDark", x0, x1, panBottom - 0.03, panBottom, -s.d / 2 + 0.02, zf - 0.04);
-    p.tub("steel", x0, x1, panBottom, rim, -s.d / 2 + 0.02, zf - 0.04);
+    const z0 = -s.d / 2 + 0.02;
+    const z1 = zf - 0.04;
+    p.roundedBox("steelDark", x0, x1, panBottom - 0.03, panBottom + 0.002, z0, z1, BODY_RADIUS);
+    p.tub("steel", x0, x1, panBottom, rim, z0, z1);
     const cx = (x0 + x1) / 2;
-    p.box("steel", cx - 0.08, cx + 0.08, rim - 0.06, rim - 0.01, zf - 0.04, zf - 0.005);
-    // The lid lies closed on the pan; its handle bar along the front.
-    p.box("steel", x0, x1, rim, rim + LID, -s.d / 2 + 0.02, zf - 0.04);
-    p.rod("steelDark", "x", cx, rim + LID - 0.006, -s.d / 2 + 0.05, (x1 - x0) * 0.9, 0.014);
-    p.rod("handle", "x", cx, rim + LID / 2, zf - 0.015, (x1 - x0) * 0.6, 0.01);
-    for (const sx of [-1, 1]) p.box("handle", cx + sx * (x1 - x0) * 0.27 - 0.008, cx + sx * (x1 - x0) * 0.27 + 0.008, rim + LID / 2 - 0.008, rim + LID / 2 + 0.008, zf - 0.04, zf - 0.015);
-    // The control tower with the touch display and a dial.
-    p.box("steel", tx, s.w / 2, PLINTH, s.h, -s.d / 2, zf - DOOR);
+    p.extrude("steel", "x", cx - 0.08, cx + 0.08, [
+      [z1 - 0.01, rim - 0.07],
+      [z1 + 0.03, rim - 0.01],
+      [z1 + 0.03, rim - 0.002],
+      [z1 - 0.01, rim - 0.002],
+    ]);
+    // The lid lies closed on the pan; hinged at the back, its handle bar along the front.
+    housing(p, "steel", x0 + 0.004, x1 - 0.004, rim - 0.002, rim + LID, z0 + 0.004, z1 - 0.004, 0.01);
+    hinges(p, x0 + 0.06, x1 - 0.06, rim + LID * 0.4, z0 - 0.004, 2, 0.012, 0.09);
+    const len = (x1 - x0) * 0.6;
+    const hy = rim + LID * 0.55;
+    p.tube("handle", [
+      { x: cx - len / 2, y: hy, z: z1 - 0.01 },
+      { x: cx - len / 2, y: hy, z: zf - 0.01 },
+      { x: cx + len / 2, y: hy, z: zf - 0.01 },
+      { x: cx + len / 2, y: hy, z: z1 - 0.01 },
+    ], 0.009, { bend: 0.02 });
+    // The control tower with the touch display, a dial and the rating plate; a door below.
+    housing(p, "steel", tx, s.w / 2, PLINTH, s.h, -s.d / 2, zf - DOOR);
     const zFace = zf - DOOR / 2;
-    p.box("panelDark", tx + GAP, s.w / 2 - GAP, s.h - CONTROL_PANEL, s.h - GAP * 2, zf - DOOR, zFace);
+    controlPanel(p, tx + GAP, s.w / 2 - GAP, s.h - CONTROL_PANEL, s.h - GAP * 3, zf - DOOR, zFace);
     const px = (tx + s.w / 2) / 2;
     const pw = tower - 0.05;
-    p.box("glassDark", px - pw / 2, px + pw / 2, s.h - 0.22, s.h - 0.03, zFace, zFace + 0.003);
-    p.knob(px, s.h - DIAL, zFace, zf, Math.min(0.03, pw / 4));
-    p.box("steel", tx + GAP, s.w / 2 - GAP, PLINTH + GAP, s.h - CONTROL_PANEL - GAP, zf - DOOR, zf - DOOR / 2);
+    display(p, px, s.h - 0.125, pw, 0.19, zFace);
+    dial(p, px, s.h - DIAL, zFace, zf, Math.min(0.03, pw / 4));
+    p.roundedBox("steel", tx + GAP, s.w / 2 - GAP, PLINTH + GAP, s.h - CONTROL_PANEL - GAP, zf - DOOR, zFace, DOOR_RADIUS, "top", "z");
+    p.barHandle("y", PLINTH + 0.15, PLINTH + 0.35, tx + 0.03, zFace, zf);
+    ratingPlate(p, px, PLINTH + 0.05, zFace, 0.08, 0.04);
   },
 };

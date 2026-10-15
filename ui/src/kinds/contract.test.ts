@@ -18,12 +18,15 @@ import { fitOrthoCamera } from "../three/thumbnails";
 import { Front } from "./parts/elevation";
 import { FLUSH_HEIGHT } from "./parts/sizes";
 import { PlanSketch } from "./parts/plan";
-import { CATALOG, CATEGORIES, KINDS, kindDef, placementOf, variantConnections, type CatalogEntry, type Energy, type KindDef } from "./registry";
+import { CATALOG, CATEGORIES, KINDS, kindDef, placementOf, SUBGROUPS, variantConnections, type CatalogEntry, type Energy, type KindDef } from "./registry";
 
 /** Tolerance of 2D drawings (mm): the symbols are exact, this only absorbs rounding. */
 const TOL_MM = 1e-6;
 /** Tolerance of 3D sizes (m): a tenth of a millimetre, as the mesh tests. */
 const TOL_M = 1e-4;
+/** The budget of one unit in every variant (kinds/README.md, "Budget"). */
+const MAX_PARTS = 200;
+const MAX_TRIANGLES = 10_000;
 /** Thumbnail aspect of a catalog row (56 × 44 px). */
 const THUMB_ASPECT = 56 / 44;
 
@@ -102,6 +105,20 @@ describe("catalog registry", () => {
       for (const lang of ["de", "en"] as const) expect(texts[lang][`category.${c}`], `${lang} category.${c}`).toBeTruthy();
     }
     expect(CATALOG.filter((e) => !CATEGORIES.includes(e.category)).map((e) => e.id)).toEqual([]);
+  });
+
+  it("puts every entry of a large group into one of its sub-groups, named in both languages", () => {
+    for (const e of CATALOG) {
+      const groups = SUBGROUPS[e.category];
+      if (groups) expect(groups, `${e.id} group ${e.group}`).toContain(e.group);
+      else expect(e.group, `${e.id} has a sub-group in an undivided group`).toBeUndefined();
+    }
+    for (const groups of Object.values(SUBGROUPS)) {
+      for (const g of groups ?? []) {
+        expect(CATALOG.some((e) => e.group === g), `sub-group ${g} is used`).toBe(true);
+        for (const lang of ["de", "en"] as const) expect(texts[lang][`group.${g}`], `${lang} group.${g}`).toBeTruthy();
+      }
+    }
   });
 });
 
@@ -297,6 +314,16 @@ describe.each(ALL.map((c) => [c.label, c] as const))("variant %s", (_, { def, it
       // Wire work is made of rods: a wireframe shows the triangles of the unit box.
       expect((m.material as THREE.MeshStandardMaterial).wireframe, (m.material as THREE.Material).name).not.toBe(true);
     }
+  });
+
+  it("stays within the budget of 200 parts and 10 000 triangles", () => {
+    const meshes = meshesOf(buildItemObject(item));
+    const triangles = meshes.reduce((sum, m) => {
+      const g = m.geometry;
+      return sum + (g.index ? g.index.count : g.getAttribute("position").count) / 3;
+    }, 0);
+    expect(meshes.length, "parts").toBeLessThanOrEqual(MAX_PARTS);
+    expect(triangles, "triangles").toBeLessThanOrEqual(MAX_TRIANGLES);
   });
 
   it("shows its energy: a gas variant has the flue outlet in 3D and the plan, an electric one not", () => {

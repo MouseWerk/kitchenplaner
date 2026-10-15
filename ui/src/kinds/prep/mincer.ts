@@ -5,6 +5,8 @@
 import type { Size } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { machineFeet, MACHINE_FOOT, mBox, mCircle, metres, pCircle, pRect } from "./common";
+import { pushButton, sideSlots } from "./machine";
+import { housing, ratingPlate } from "../parts/details";
 
 function layout({ w, d, h }: Size) {
   const bodyFront = -d / 2 + d * 0.55;
@@ -39,16 +41,78 @@ export const mincer: KindDef = {
   mesh(p, s) {
     const { w, d, h } = s;
     const { bodyFront, tubeR, tubeY, throatZ, tray, bodyTop } = layout(s);
-    machineFeet(p, -w * 0.42, w * 0.42, -d / 2, bodyFront);
-    p.box("steel", -w * 0.42, w * 0.42, MACHINE_FOOT, bodyTop, -d / 2, bodyFront);
-    p.knob(w * 0.28, bodyTop * 0.45, bodyFront, bodyFront + 0.02, 0.016);
-    // Worm tube, ring nut and the cutting plate's hub at the front.
+    const bw = w * 0.42;
+    machineFeet(p, -bw, bw, -d / 2, bodyFront);
+    housing(p, "steel", -bw, bw, MACHINE_FOOT, bodyTop, -d / 2, bodyFront, 0.012);
+    pushButton(p, w * 0.28, bodyTop * 0.42, bodyFront, 0.011, "panel");
+    pushButton(p, w * 0.28, bodyTop * 0.25, bodyFront, 0.011, "knob");
+    ratingPlate(p, -w * 0.24, bodyTop * 0.3, bodyFront);
+    for (const sx of [-1, 1] as const) sideSlots(p, sx * bw, sx, bodyTop * 0.3, bodyTop * 0.7, -d / 2 + 0.04, bodyFront - 0.04, 5);
+    // Worm tube with its flange at the body, the ring nut over the cutting plate at the front.
     const tubeEnd = d / 2 - 0.03;
-    p.rod("steel", "z", 0, tubeY, (bodyFront + tubeEnd) / 2, tubeEnd - bodyFront, tubeR);
-    p.rod("steelDark", "z", 0, tubeY, d / 2 - 0.015, 0.03, tubeR * 1.35);
-    // Feed throat up to the tray, the tray open at the top with the dark throat in its floor.
-    p.cyl("steel", 0, throatZ, tubeY, tray.y0, tubeR * 0.8);
-    p.tub("steel", -w / 2, w / 2, tray.y0, h, tray.z0, tray.z1);
-    p.cyl("steelDark", 0, throatZ, tray.y0 + 0.01, tray.y0 + 0.012, tubeR * 0.7);
+    const len = tubeEnd - bodyFront;
+    p.lathe(
+      "steel",
+      0,
+      tubeY,
+      bodyFront,
+      [
+        [0, 0],
+        [tubeR * 1.2, 0],
+        [tubeR * 1.2, 0.01],
+        [tubeR, 0.018],
+        [tubeR, len],
+        [0, len],
+      ],
+      { axis: "z" },
+    );
+    const nut = tubeR * 1.35;
+    p.lathe(
+      "satin",
+      0,
+      tubeY,
+      tubeEnd - 0.01,
+      [
+        [0, 0],
+        [nut * 0.9, 0],
+        [nut, 0.006],
+        [nut, 0.034],
+        [nut * 0.92, 0.04],
+        [nut * 0.62, 0.04],
+        [nut * 0.62, 0.035],
+        [0, 0.035],
+      ],
+      { axis: "z" },
+    );
+    // The cutting plate's holes seen in the nut's opening, and the nut's two wings.
+    p.lathe(
+      "slot",
+      0,
+      tubeY,
+      tubeEnd + 0.025,
+      [
+        [0, 0],
+        [nut * 0.6, 0],
+        [nut * 0.6, 0.001],
+        [0, 0.001],
+      ],
+      { axis: "z" },
+    );
+    for (const sx of [-1, 1]) p.roundedBox("satin", sx > 0 ? nut - 0.004 : -nut - 0.028, sx > 0 ? nut + 0.028 : -nut + 0.004, tubeY - 0.008, tubeY + 0.008, tubeEnd - 0.002, tubeEnd + 0.024, 0.004);
+    // Feed throat up to the tray, the tray with its rim and the dark throat in its floor.
+    p.lathe("steel", 0, tubeY, throatZ, [
+      [0, 0],
+      [tubeR * 0.8, 0],
+      [tubeR * 0.8, tray.y0 - tubeY - 0.01],
+      [tubeR * 1.1, tray.y0 - tubeY],
+      [0, tray.y0 - tubeY],
+    ]);
+    p.pan("steel", -w / 2, w / 2, tray.y0, h, tray.z0, tray.z1, { wall: 0.003, r: 0.03 });
+    p.lathe("slot", 0, tray.y0 + 0.0035, throatZ, [
+      [0, 0],
+      [tubeR * 0.65, 0],
+      [tubeR * 0.65, 0.001],
+      [0, 0.001],
+    ]);
   },
 };

@@ -3,7 +3,7 @@
 // an electric one is a plain plate heated in zones, two front to back per 400 mm, marked by
 // the joints between them.
 
-import { CONTROLS, SHEET, type Parts, type Size } from "../parts/mesh";
+import { CONTROLS, SHEET, TOP_RADIUS, worktop, type Parts, type Size } from "../parts/mesh";
 import { controlStrip, type PlanSketch } from "../parts/plan";
 import type { Item } from "../../model/types";
 import type { KindDef } from "../types";
@@ -78,11 +78,13 @@ export const solidTop: KindDef = {
     // The rings of a gas plate stand over it; the joints of an electric one only a hair.
     const plateTop = item.energy === "gas" ? s.h - PROUD * 2 : s.h - JOINT_PROUD;
     lineModule(p, s, { base: "oven", knobs: knobs(s.w, item), underTop: plateTop - PLATE });
-    // Stainless frame with the cast plate in it.
-    p.box("steel", -s.w / 2, s.w / 2, plateTop - PLATE, plateTop - PROUD, -s.d / 2, s.d / 2);
+    // Stainless frame with the cast plate in it, its edges cast round.
+    worktop(p, "steel", -s.w / 2, s.w / 2, plateTop - PLATE, plateTop - PROUD, -s.d / 2, s.d / 2);
     const z0 = -s.d / 2 + MARGIN;
     const z1 = s.d / 2 - CONTROLS;
-    p.box("plate", -s.w / 2 + MARGIN, s.w / 2 - MARGIN, plateTop - PLATE + SHEET, plateTop, z0, z1);
+    p.roundedBox("plate", -s.w / 2 + MARGIN, s.w / 2 - MARGIN, plateTop - PLATE + SHEET, plateTop, z0, z1, TOP_RADIUS);
+    // The grease gutter in the frame in front of the plate.
+    p.roundedBox("slot", -s.w / 2 + MARGIN, s.w / 2 - MARGIN, plateTop - PROUD - 0.001, plateTop - PROUD + 0.001, z1 + 0.012, z1 + 0.024, 0.006, "vertical");
     if (item.energy !== "gas") {
       zoneJoints(p, s, plateTop, z0, z1);
       return;
@@ -93,11 +95,29 @@ export const solidTop: KindDef = {
     for (let i = 0; i < n; i++) {
       const cx = -s.w / 2 + MARGIN + cw * (i + 0.5);
       const cz = (z0 + z1) / 2;
-      // Each ring a step higher than the one around it, so no two faces share a plane.
-      p.cyl("steelDark", cx, cz, plateTop - PROUD, s.h - PROUD * 1.5, r * 0.62);
-      p.cyl("plate", cx, cz, plateTop - PROUD, s.h - PROUD, r * 0.56);
-      p.cyl("steelDark", cx, cz, plateTop - PROUD, s.h - PROUD / 2, r * 0.27);
-      p.cyl("plate", cx, cz, plateTop - PROUD, s.h, r * 0.22);
+      // The loose rings over the burner, each a step higher than the one around it, so no two faces
+      // share a plane: a turned outer ring with a dark joint, the rings and the centre plug.
+      const y0 = plateTop - PROUD;
+      const hp = s.h - y0;
+      p.lathe("steelDark", cx, y0, cz, [
+        [r * 0.56, 0],
+        [r * 0.62, 0],
+        [r * 0.62, hp * 0.4],
+        [r * 0.56, hp * 0.4],
+        [r * 0.56, 0],
+      ]);
+      p.lathe("plate", cx, y0, cz, [
+        [0, 0],
+        [r * 0.555, 0],
+        [r * 0.555, hp * 0.62],
+        [r * 0.54, hp * 0.67],
+        [r * 0.28, hp * 0.67],
+        [r * 0.27, hp * 0.75],
+        [r * 0.22, hp * 0.75],
+        [r * 0.22, hp * 0.95],
+        [r * 0.2, hp],
+        [0, hp],
+      ]);
     }
   },
 };

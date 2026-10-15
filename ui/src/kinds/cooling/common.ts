@@ -2,8 +2,9 @@
 // front of the machine compartment, temperature displays, and the section counts that the plan,
 // the elevations and 3D of refrigerated counters agree on.
 
+import * as THREE from "three";
 import { INSET, type Front } from "../parts/elevation";
-import { arcPoints, BODY_RADIUS, GAP, PLINTH, plinth, SHEET, SHELF_PITCH, type Parts, type Size } from "../parts/mesh";
+import { arcPoints, BODY_RADIUS, GAP, GN_RADIUS, PLINTH, plinth, SHEET, SHELF_PITCH, type MaterialId, type Parts, type Size } from "../parts/mesh";
 import { INSET as PLAN_INSET, type PlanSketch } from "../parts/plan";
 import { MM_PER_UNIT } from "../../three/shared";
 
@@ -26,7 +27,7 @@ const GASKET = 0.004;
 const GASKET_W = 0.012;
 const GASKET_BULGE = 0.0015;
 /** Edge radius of an insulated door leaf: a pressed, foamed leaf, rounder than a cabinet door (m). */
-const LEAF_RADIUS = 0.004;
+export const LEAF_RADIUS = 0.004;
 /** Width of the frame around a glass door pane. */
 export const GLASS_FRAME = 0.05;
 /** Height of the fascia with the controls on top of upright cabinets (m). */
@@ -35,8 +36,16 @@ export const FASCIA = 0.12;
 const SLAT_PITCH = 0.03;
 /** Most slats a grille gets, so a tall grille does not cost many parts. */
 const MAX_SLATS = 8;
-/** Size of a temperature display (m). */
+/** Size of a temperature display's window (m), its bezel round it and the bezel's reach right of it for the buttons. */
 const DISPLAY = { w: 0.1, h: 0.035 };
+const BEZEL = 0.008;
+const BUTTONS = 0.06;
+/** Height and edge radius of a grille slat (m). */
+const SLAT = 0.008;
+const SLAT_RADIUS = 0.003;
+/** Sheet and rim of a GN container hanging in a well (m). */
+const GN_WALL = 0.004;
+const GN_RIM = 0.008;
 
 // Elevation (mm)
 /** Base (feet and kick plate) below the doors of cabinets and counters (mm, the 3D `PLINTH`). */
@@ -101,6 +110,10 @@ export interface DoorSpec {
   gripY?: number;
   /** A glass pane in a steel frame instead of a solid leaf; what stands behind it shows. */
   glass?: boolean;
+  /** Material of a glass door's frame (steel by default; black on wine and bar coolers). */
+  frame?: MaterialId;
+  /** False for a sliding leaf: no hinge barrels. */
+  hinges?: boolean;
 }
 
 /**
@@ -124,7 +137,7 @@ export function coolDoor(p: Parts, o: DoorSpec): void {
     const depth = zLeaf - zBody;
     const r = Math.min(LEAF_RADIUS, fw / 2, depth / 2);
     p.lathe(
-      "steel",
+      o.frame ?? "steel",
       cx,
       cy,
       zBody,
@@ -137,25 +150,9 @@ export function coolDoor(p: Parts, o: DoorSpec): void {
       ],
       { axis: "z", rect: [(b - a) / 2 - fw, (hi - lo) / 2 - fw] },
     );
-    p.box("glass", a + fw, b - fw, lo + fw, hi - fw, zLeaf - SHEET, zLeaf - SHEET / 2);
+    p.plate("glass", a + fw - 0.002, b - fw + 0.002, lo + fw - 0.002, hi - fw + 0.002, zLeaf - SHEET, zLeaf - SHEET / 2, 0.004);
   } else {
-    // The gasket: a closed bulb profile round the leaf's outline, showing a little past its edge.
-    const g = GASKET_W;
-    p.lathe(
-      "rubber",
-      cx,
-      cy,
-      zBody,
-      [
-        [0, 0],
-        [g + GASKET_BULGE * 0.6, 0],
-        [g + GASKET_BULGE, GASKET * 0.5],
-        [g + GASKET_BULGE * 0.6, GASKET],
-        [0, GASKET],
-        [0, 0],
-      ],
-      { axis: "z", rect: [(b - a) / 2 - g, (hi - lo) / 2 - g] },
-    );
+    gasket(p, a, b, lo, hi, zBody);
     p.roundedBox("steel", a, b, lo, hi, zBody + GASKET, zLeaf, LEAF_RADIUS, "top", "z");
   }
   const left = o.hinge === "left";
@@ -163,7 +160,7 @@ export function coolDoor(p: Parts, o: DoorSpec): void {
   const hr = HINGE / 2;
   const hx = left ? a + hr : b - hr;
   const hh = Math.min(0.05, (hi - lo) / 6);
-  for (const hy of [lo + hh * 0.5, hi - hh * 1.5]) {
+  for (const hy of o.hinges === false ? [] : [lo + hh * 0.5, hi - hh * 1.5]) {
     p.lathe("satin", hx, hy, zLeaf - 0.001, [
       [0, 0],
       [hr * 0.7, 0],
@@ -185,11 +182,34 @@ export function coolDoor(p: Parts, o: DoorSpec): void {
   }
 }
 
-/** A drawer front with a gasket in the gap and a horizontal bar handle near its top. */
+/**
+ * The magnetic gasket under a leaf from a to b and lo to hi: a closed bulb profile round the
+ * leaf's outline on the body's face at `zBody`, showing a little past the leaf's edge.
+ */
+export function gasket(p: Parts, a: number, b: number, lo: number, hi: number, zBody: number): void {
+  const g = Math.min(GASKET_W, (b - a) / 4, (hi - lo) / 4);
+  p.lathe(
+    "rubber",
+    (a + b) / 2,
+    (lo + hi) / 2,
+    zBody,
+    [
+      [0, 0],
+      [g + GASKET_BULGE * 0.6, 0],
+      [g + GASKET_BULGE, GASKET * 0.5],
+      [g + GASKET_BULGE * 0.6, GASKET],
+      [0, GASKET],
+      [0, 0],
+    ],
+    { axis: "z", rect: [(b - a) / 2 - g, (hi - lo) / 2 - g] },
+  );
+}
+
+/** A drawer front on its gasket with a horizontal bar handle near its top. */
 export function coolDrawer(p: Parts, x0: number, x1: number, y0: number, y1: number, zBody: number, zFront: number): void {
   const zLeaf = zFront - STANDOFF;
-  p.box("rubber", x0 + GAP / 2, x1 - GAP / 2, y0 + GAP / 2, y1 - GAP / 2, zBody, zBody + GASKET);
-  p.box("steel", x0 + GAP, x1 - GAP, y0 + GAP, y1 - GAP, zBody + GASKET, zLeaf);
+  gasket(p, x0 + GAP, x1 - GAP, y0 + GAP, y1 - GAP, zBody);
+  p.roundedBox("steel", x0 + GAP, x1 - GAP, y0 + GAP, y1 - GAP, zBody + GASKET, zLeaf, LEAF_RADIUS, "top", "z");
   const len = Math.min(0.4, (x1 - x0) * 0.7);
   const cx = (x0 + x1) / 2;
   p.barHandle("x", cx - len / 2, cx + len / 2, y1 - Math.min(0.05, (y1 - y0) / 4), zLeaf, zFront);
@@ -200,33 +220,102 @@ export function coolDrawer(p: Parts, x0: number, x1: number, y0: number, y1: num
  * from the face at `zFace` to `zFront`.
  */
 export function grille(p: Parts, x0: number, x1: number, y0: number, y1: number, zFace: number, zFront: number): void {
-  p.box("panelDark", x0, x1, y0, y1, zFace, zFace + (zFront - zFace) / 2);
+  const depth = zFront - zFace;
+  p.plate("panelDark", x0, x1, y0, y1, zFace, zFace + depth / 2, Math.min(SLAT_RADIUS * 2, (y1 - y0) / 4));
   const n = Math.min(MAX_SLATS, Math.floor((y1 - y0) / SLAT_PITCH) - 1);
   const pitch = (y1 - y0) / (n + 1);
   for (let i = 1; i <= n; i++) {
     const y = y0 + pitch * i;
-    p.box("steel", x0 + 0.01, x1 - 0.01, y - 0.004, y + 0.004, zFace, zFront);
+    p.roundedBox("steel", x0 + 0.01, x1 - 0.01, y - SLAT / 2, y + SLAT / 2, zFace, zFront, SLAT_RADIUS);
   }
 }
 
-/** A temperature display with two buttons beside it, centred at (cx, cy) on a face at `zFace`. */
+/**
+ * A temperature display centred at (cx, cy) on a face at `zFace`: the dark bezel with the window
+ * and two turned push buttons beside it, within 5 mm of the face.
+ */
 export function display(p: Parts, cx: number, cy: number, zFace: number): void {
-  p.box("glassDark", cx - DISPLAY.w / 2, cx + DISPLAY.w / 2, cy - DISPLAY.h / 2, cy + DISPLAY.h / 2, zFace, zFace + 0.003);
-  for (const dx of [DISPLAY.w / 2 + 0.02, DISPLAY.w / 2 + 0.045]) p.rod("knob", "z", cx + dx, cy, zFace + 0.003, 0.006, 0.007);
+  const { w, h } = DISPLAY;
+  p.plate("panelDark", cx - w / 2 - BEZEL, cx + w / 2 + BUTTONS, cy - h / 2 - BEZEL, cy + h / 2 + BEZEL, zFace, zFace + 0.0015, 0.004, true);
+  p.plate("glassDark", cx - w / 2, cx + w / 2, cy - h / 2, cy + h / 2, zFace + 0.0015, zFace + 0.0025, 0.003);
+  for (const dx of [w / 2 + 0.02, w / 2 + 0.045]) pushButton(p, cx + dx, cy, zFace + 0.0015);
+}
+
+/** A turned push button (a low dome on a collar) on a face at `zFace`, `r` its radius (m). */
+export function pushButton(p: Parts, x: number, y: number, zFace: number, r = 0.007, mat: MaterialId = "knob"): void {
+  p.lathe(
+    mat,
+    x,
+    y,
+    zFace,
+    [
+      [0, 0],
+      [r, 0],
+      [r, r * 0.2],
+      [r * 0.82, r * 0.3],
+      [r * 0.7, r * 0.45],
+      [0, r * 0.5],
+    ],
+    { axis: "z" },
+  );
+}
+
+/**
+ * A bottle standing at (x, z) from `y` up to `y + h` (m), or lying from `z` towards the front
+ * (`lying`): a turned body with shoulder, neck and lip. Eight sides keep a cooler full of them
+ * within the budget.
+ */
+export function bottle(p: Parts, x: number, y: number, z: number, h: number, r: number, mat: MaterialId, lying = false): void {
+  const neck = r * 0.36;
+  p.lathe(
+    mat,
+    x,
+    y,
+    z,
+    [
+      [0, 0],
+      [r * 0.9, 0],
+      [r, h * 0.04],
+      [r, h * 0.6],
+      [r * 0.92, h * 0.66],
+      [r * 0.55, h * 0.74],
+      [neck, h * 0.82],
+      [neck, h * 0.95],
+      [neck * 1.18, h * 0.96],
+      [neck * 1.18, h],
+      [0, h],
+    ],
+    { axis: lying ? "z" : "y", segments: 8 },
+  );
+}
+
+/**
+ * A GN container hanging by its rim in a well from x0 to x1 and z0 to z1, its rim at `y1`, with
+ * food in it up to `fillDrop` below the rim (none without `food`).
+ */
+export function gnPan(p: Parts, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, food?: MaterialId, fillDrop = 0.03): void {
+  p.pan("steel", x0, x1, y0, y1, z0, z1, { wall: GN_WALL, r: GN_RADIUS, rim: GN_RIM });
+  if (!food) return;
+  const i = GN_RIM + GN_WALL + 0.0005;
+  const r = Math.max(0.001, Math.min(GN_RADIUS, (x1 - x0) / 2, (z1 - z0) / 2) - i);
+  p.roundedBox(food, x0 + i, x1 - i, y0 + (y1 - y0) * 0.35, y1 - fillDrop, z0 + i, z1 - i, r, "vertical");
 }
 
 /**
  * The carcass of an upright refrigerated cabinet: feet and kick plate, the body up to `zBody`
  * and the fascia on top with a louvre grille over the machine and the display. A `hollow` one
- * only gets its head; the caller builds the shell behind the glass doors.
+ * only gets its head; the caller builds the shell behind the glass doors. `mat` is the body's
+ * finish (steel, or dark on a dry-aging cabinet); without `controls` the caller fits the fascia's
+ * grille and display.
  */
-export function uprightCarcass(p: Parts, s: Size, zBody: number, hollow = false): void {
+export function uprightCarcass(p: Parts, s: Size, zBody: number, hollow = false, mat: MaterialId = "steel", controls = true): void {
   plinth(p, s.w, s.d);
   // A hollow cabinet (glass doors) gets its shell from `cabinetShell`; only the head is solid.
-  p.roundedBox("steel", -s.w / 2, s.w / 2, hollow ? s.h - FASCIA : PLINTH, s.h, -s.d / 2, zBody, CABINET_RADIUS, "vertical");
+  p.roundedBox(mat, -s.w / 2, s.w / 2, hollow ? s.h - FASCIA : PLINTH, s.h, -s.d / 2, zBody, CABINET_RADIUS, "vertical");
   const zLeaf = s.d / 2 - STANDOFF;
   const y0 = s.h - FASCIA;
-  p.roundedBox("steel", -s.w / 2, s.w / 2, y0 + GAP, s.h, zBody, zLeaf, BODY_RADIUS, "top", "z");
+  p.roundedBox(mat, -s.w / 2, s.w / 2, y0 + GAP, s.h, zBody, zLeaf, BODY_RADIUS, "top", "z");
+  if (!controls) return;
   // Grille over the left part, display at the right.
   const gw = Math.min(0.45, s.w * 0.55);
   grille(p, -s.w / 2 + 0.03, -s.w / 2 + 0.03 + gw, y0 + 0.025, s.h - 0.025, zLeaf, s.d / 2);
@@ -234,7 +323,7 @@ export function uprightCarcass(p: Parts, s: Size, zBody: number, hollow = false)
 }
 
 /** Radius of the upright corners of a refrigerated cabinet's body (m). */
-const CABINET_RADIUS = 0.004;
+export const CABINET_RADIUS = 0.004;
 
 /** Wall thickness of an insulated cabinet shell (m). */
 export const SHELL = 0.04;
@@ -243,24 +332,30 @@ export const SHELL = 0.04;
  * An open-fronted cabinet shell from `y0` to `y1` (behind glass doors): sides, back, floor and
  * roof in steel, a light liner at the back. Returns the inner space.
  */
-export function cabinetShell(p: Parts, s: Size, y0: number, y1: number, zBody: number): { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number } {
+export function cabinetShell(p: Parts, s: Size, y0: number, y1: number, zBody: number, mat: MaterialId = "steel"): { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number } {
   const t = Math.min(SHELL, s.w / 8);
-  p.box("steel", -s.w / 2, -s.w / 2 + t, y0, y1, -s.d / 2, zBody);
-  p.box("steel", s.w / 2 - t, s.w / 2, y0, y1, -s.d / 2, zBody);
-  p.box("steel", -s.w / 2 + t, s.w / 2 - t, y0, y0 + t, -s.d / 2, zBody);
-  p.box("steel", -s.w / 2 + t, s.w / 2 - t, y1 - t, y1, -s.d / 2, zBody);
-  p.box("steel", -s.w / 2 + t, s.w / 2 - t, y0 + t, y1 - t, -s.d / 2, -s.d / 2 + t);
+  p.roundedBox(mat, -s.w / 2, -s.w / 2 + t, y0, y1, -s.d / 2, zBody, CABINET_RADIUS, "vertical");
+  p.roundedBox(mat, s.w / 2 - t, s.w / 2, y0, y1, -s.d / 2, zBody, CABINET_RADIUS, "vertical");
+  p.box(mat, -s.w / 2 + t, s.w / 2 - t, y0, y0 + t, -s.d / 2, zBody - 0.001);
+  p.box(mat, -s.w / 2 + t, s.w / 2 - t, y1 - t, y1, -s.d / 2, zBody - 0.001);
+  p.box(mat, -s.w / 2 + t, s.w / 2 - t, y0 + t, y1 - t, -s.d / 2, -s.d / 2 + t);
   p.box("panel", -s.w / 2 + t, s.w / 2 - t, y0 + t, y1 - t, -s.d / 2 + t, -s.d / 2 + t + SHEET);
   return { x0: -s.w / 2 + t, x1: s.w / 2 - t, y0: y0 + t, y1: y1 - t, z0: -s.d / 2 + t + SHEET, z1: zBody };
 }
 
-/** Wire shelves across an inner space, `n` of them evenly spaced; returns their heights (m). */
+/**
+ * Wire shelves across an inner space, `n` of them evenly spaced; returns their heights (m). The
+ * wires run along the shelf's longer side, so a wide shelf has as few wires as a narrow one.
+ */
 export function wireShelves(p: Parts, inner: { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number }, n: number): number[] {
   const out: number[] = [];
   const pitch = (inner.y1 - inner.y0) / (n + 1);
+  const z0 = inner.z0 + 0.02;
+  const z1 = inner.z1 - 0.03;
+  const along = inner.x1 - inner.x0 > z1 - z0 ? "x" : "z";
   for (let i = 1; i <= n; i++) {
     const y = inner.y0 + pitch * i;
-    p.grid(inner.x0, inner.x1, y - 0.006, y, inner.z0 + 0.02, inner.z1 - 0.03, SHELF_PITCH);
+    p.grid(inner.x0, inner.x1, y - 0.006, y, z0, z1, SHELF_PITCH, along);
     out.push(y);
   }
   return out;
@@ -323,5 +418,20 @@ export function doorSwings(s: PlanSketch, n: number, x0 = s.L, x1 = s.R): void {
     s.line("detail", [a, s.F - PLAN_INSET / 2], [b, s.F - PLAN_INSET / 2]);
     if (hingeLeft(i, n)) s.quarter("hidden", a, s.F, dw, 0);
     else s.quarter("hidden", b, s.F, dw, 90);
+  }
+}
+
+/** A half turn about the vertical axis. */
+const HALF_TURN = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+
+/**
+ * Turns the parts added to the item since `from` (a count of its parts) half round about the
+ * vertical axis through the item's centre: what was built on the front then stands on the back,
+ * seen the same way from behind (the second door of a pass-through cabinet).
+ */
+export function turnAround(p: Parts, from: number): void {
+  for (const o of p.g.children.slice(from)) {
+    o.position.applyQuaternion(HALF_TURN);
+    o.quaternion.premultiply(HALF_TURN);
   }
 }

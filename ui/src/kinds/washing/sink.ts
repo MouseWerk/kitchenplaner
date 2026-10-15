@@ -1,13 +1,14 @@
 // Sink units (Spültische): an open table with its bowls at one end, the drainer with pressed
 // grooves at the other, a mixer tap over each bowl and the drain with its trap under each bowl.
-// One factory draws them all: one or two bowls by width with the drainer left or right, three
-// bowls, and the pot sink with one deep, large bowl.
+// One factory draws them all: one or two bowls by width with the drainer left or right or the
+// bowls in the middle between two drainers, three bowls, and the pot sink with one deep, large
+// bowl.
 
 import { INSET as FRONT_INSET, TAP, TOP as FRONT_TOP } from "../parts/elevation";
 import { openFrame, SHEET, tap, TOP, TOP_RADIUS, type Hole } from "../parts/mesh";
 import { INSET, UPSTAND, upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
-import { bowlDrain, bowlSpans, drainerGrooves, drainerPlan, mid, overflow, type Side } from "./common";
+import { bowlDrain, bowlSpans, drainerGrooves, drainerPlan, mid, overflow, type Side, type Span } from "./common";
 
 /**
  * Sink width from which the unit has two bowls. Two 500 mm bowls with their rims take about
@@ -36,12 +37,34 @@ export interface SinkSpec {
   kind: string;
   /** Number of bowls of a sink of the given width (mm). */
   bowls: (width: number) => number;
-  /** The end the bowls sit at; the drainer takes the rest of the top. */
-  at: Side;
+  /** The end the bowls sit at, the drainer taking the rest of the top; or the middle, a drainer at each end. */
+  at: Side | "centre";
   /** Inner bowl size (mm): along the width, from back to front, and its depth. */
   bowlW: number;
   bowlD: number;
   bowlDepth: number;
+}
+
+/** `n` bowls side by side in the middle of a top of width `w`, `margin` apart (any unit). */
+function centreSpans(w: number, n: number, bowlW: number, margin: number): Span[] {
+  // Leave at least a narrow drainer at each end.
+  const bw = Math.max(0, Math.min(bowlW, (w * 0.6 - (n - 1) * margin) / n));
+  const x0 = -(n * bw + (n - 1) * margin) / 2;
+  return Array.from({ length: n }, (_, i) => ({ x0: x0 + i * (bw + margin), x1: x0 + i * (bw + margin) + bw }));
+}
+
+/** The bowls of a sink of the given layout (any unit). */
+function spansOf(w: number, n: number, bowlW: number, at: Side | "centre", margin: number): Span[] {
+  return at === "centre" ? centreSpans(w, n, bowlW, margin) : bowlSpans(w, n, bowlW, at, margin);
+}
+
+/** The drainers beside the bowls `spans` on a top from l to r: [x0, x1] pairs (any unit). */
+function drainers(l: number, r: number, spans: readonly Span[], at: Side | "centre", margin: number): [number, number][] {
+  const x0 = Math.min(...spans.map((b) => b.x0));
+  const x1 = Math.max(...spans.map((b) => b.x1));
+  const left: [number, number] = [l + margin, x0 - margin];
+  const right: [number, number] = [x1 + margin, r - margin];
+  return at === "centre" ? [left, right] : at === "right" ? [left] : [right];
 }
 
 /** A sink unit of the given layout. */
@@ -53,7 +76,7 @@ export function makeSink(spec: SinkSpec): KindDef {
     plan(s) {
       const { w, d, B, F } = s;
       const n = spec.bowls(w);
-      const spans = bowlSpans(w, n, bowlW, at, INSET);
+      const spans = spansOf(w, n, bowlW, at, INSET);
       const bd = Math.min(bowlD, d - 2 * INSET - UPSTAND);
       const cy = (B + UPSTAND + F) / 2;
       for (const b of spans) {
@@ -62,10 +85,7 @@ export function makeSink(spec: SinkSpec): KindDef {
       }
       // A tap behind each bowl, as in 3D and the elevation; the drainer's grooves beside them.
       for (const b of spans) s.circle("detail", mid(b), B + UPSTAND / 2 + INSET / 2, INSET / 2);
-      const x0 = Math.min(...spans.map((b) => b.x0));
-      const x1 = Math.max(...spans.map((b) => b.x1));
-      if (at === "right") drainerPlan(s, s.L + INSET, x0 - INSET, cy - bd / 2, cy + bd / 2);
-      else drainerPlan(s, x1 + INSET, s.R - INSET, cy - bd / 2, cy + bd / 2);
+      for (const [x0, x1] of drainers(s.L, s.R, spans, at, INSET)) drainerPlan(s, x0, x1, cy - bd / 2, cy + bd / 2);
       upstandLine(s);
     },
     elevation(f) {
@@ -76,7 +96,7 @@ export function makeSink(spec: SinkSpec): KindDef {
       f.line("detail", [f.l, top - APRON * 1000], [f.r, top - APRON * 1000]);
       // The bowls lie behind the apron: hidden, with the drain below each and a tap over it.
       const n = spec.bowls(f.w);
-      for (const b of bowlSpans(f.w, n, bowlW, at, I)) {
+      for (const b of spansOf(f.w, n, bowlW, at, I)) {
         const x0 = c + b.x0;
         const x1 = c + b.x1;
         const xm = (x0 + x1) / 2;
@@ -92,7 +112,7 @@ export function makeSink(spec: SinkSpec): KindDef {
       const depth = bowlDepth / 1000;
       const bd = Math.min(bowlD / 1000, s.d - 2 * margin - UPSTAND_3D);
       const zc = UPSTAND_3D / 2;
-      const holes: Hole[] = bowlSpans(s.w, n, bowlW / 1000, at, margin).map((b) => ({ ...b, z0: zc - bd / 2, z1: zc + bd / 2 }));
+      const holes: Hole[] = spansOf(s.w, n, bowlW / 1000, at, margin).map((b) => ({ ...b, z0: zc - bd / 2, z1: zc + bd / 2 }));
       openFrame(p, s, s.h - TOP);
       p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, holes);
       // Apron under the top at the front and the sides, and the rolled front edge.
@@ -107,10 +127,7 @@ export function makeSink(spec: SinkSpec): KindDef {
         overflow(p, cx, h.z0 + SHEET, s.h);
       }
       // Pressed grooves in the drainer lead the water to the bowls.
-      const x0 = Math.min(...holes.map((h) => h.x0));
-      const x1 = Math.max(...holes.map((h) => h.x1));
-      if (at === "right") drainerGrooves(p, -s.w / 2 + margin, x0 - margin, s.h, zc - bd / 2, zc + bd / 2);
-      else drainerGrooves(p, x1 + margin, s.w / 2 - margin, s.h, zc - bd / 2, zc + bd / 2);
+      for (const [x0, x1] of drainers(-s.w / 2, s.w / 2, holes, at, margin)) drainerGrooves(p, x0, x1, s.h, zc - bd / 2, zc + bd / 2);
       // Upstand along the back wall, a mixer tap over each bowl.
       p.roundedBox("steel", -s.w / 2, s.w / 2, s.h - TOP_RADIUS, s.h + UPSTAND_HEIGHT, -s.d / 2, -s.d / 2 + SHEET * 2, TOP_RADIUS, "top");
       for (const h of holes) tap(p, (h.x0 + h.x1) / 2, -s.d / 2, s.h, TAP_RISE);
@@ -127,5 +144,7 @@ export const sink = makeSink({ kind: "sink", bowls: sinkBowlCount, at: "right", 
 export const sinkDrainerRight = makeSink({ kind: "sinkDrainerRight", bowls: sinkBowlCount, at: "left", ...BOWL });
 /** Three bowls at the right (washing, rinsing, disinfecting), the drainer at the left. */
 export const sinkThree = makeSink({ kind: "sinkThree", bowls: () => 3, at: "right", ...BOWL });
+/** One or two bowls by width in the middle, a drainer at each end. */
+export const sinkCentre = makeSink({ kind: "sinkCentre", bowls: (w) => (w >= 1800 ? 2 : 1), at: "centre", ...BOWL });
 /** Pot sink (Topfspüle): one large, deep bowl for pots and GN containers, the drainer at the left. */
 export const potSink = makeSink({ kind: "potSink", bowls: () => 1, at: "right", bowlW: 700, bowlD: 550, bowlDepth: 400 });

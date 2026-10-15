@@ -8,6 +8,8 @@ import type { KindDef } from "../types";
 import type { Front } from "../parts/elevation";
 import type { PlanSketch } from "../parts/plan";
 import { machineFeet, MACHINE_FOOT, mBox, mCircle, metres, pCircle, pRect } from "./common";
+import { controlPanel, displayWindow, handWheel, pushButton, turnedBowl } from "./machine";
+import { housing } from "../parts/details";
 
 /** Bowl rim standing out of the bowl (m). */
 const RIM = 0.008;
@@ -49,28 +51,59 @@ function mesh(p: Parts, s: Size, floor: boolean) {
   const { w, d, h } = s;
   const { baseTop, colFront, headBottom, headFront, rb, zb, yb0, yb1 } = layout(s, floor);
   machineFeet(p, -w / 2, w / 2, -d / 2, d / 2);
-  p.box("panel", -w / 2, w / 2, MACHINE_FOOT, baseTop, -d / 2, d / 2);
-  p.box("panel", -w * 0.28, w * 0.28, baseTop, headBottom, -d / 2 + 0.01, colFront);
-  p.box("panel", -w * 0.3, w * 0.3, headBottom, h, -d / 2 + 0.01, headFront);
-  // Speed lever and stop button on the front of the head.
-  p.knob(w * 0.18, h * 0.9, headFront, headFront + 0.025, 0.02);
-  p.box("knob", -w * 0.22, -w * 0.14, h * 0.88, h * 0.92, headFront, headFront + 0.006);
-  // Bowl with its rim and the dark inside, held by two arms from the column.
-  p.cyl("steel", 0, zb, yb0, yb1, rb);
-  p.cyl("steel", 0, zb, yb1 - 0.01, yb1, rb + RIM);
-  p.cyl("steelDark", 0, zb, yb1, yb1 + 0.002, rb - 0.012);
+  // Base, column and head: one enamelled casting, drawn as three pressed housings.
+  housing(p, "paintGray", -w / 2, w / 2, MACHINE_FOOT, baseTop, -d / 2, d / 2, 0.015);
+  housing(p, "paintGray", -w * 0.28, w * 0.28, baseTop - 0.01, headBottom + 0.02, -d / 2 + 0.014, colFront, 0.02);
+  housing(p, "paintGray", -w * 0.3, w * 0.3, headBottom, h, -d / 2 + 0.01, headFront, 0.03);
+  // Controls on the front of the head: the timer display, start and stop, the speed knob.
+  const face = controlPanel(p, -w * 0.24, w * 0.24, h - (h - headBottom) * 0.8, h - (h - headBottom) * 0.2, headFront);
+  const yc = h - (h - headBottom) / 2;
+  displayWindow(p, -w * 0.2, -w * 0.04, yc - 0.015, yc + 0.015, face);
+  pushButton(p, w * 0.02, yc, face, 0.009, "panel");
+  pushButton(p, w * 0.08, yc, face, 0.009, "knob");
+  p.knob(w * 0.17, yc, face, face + 0.02, 0.016);
+  // The bowl with its rolled rim, held by two arms from the column on satin lugs.
+  turnedBowl(p, "steel", 0, yb0, zb, rb, yb1 - yb0);
+  p.ring("steel", 0, zb, yb1 - 0.004, rb + RIM - 0.004, 0.004);
   const armX = Math.min(w / 2, rb + RIM + 0.03);
-  for (const sx of [-1, 1]) p.box("panel", sx * (armX - 0.02), sx * armX, yb1 - 0.07, yb1 - 0.04, colFront, zb);
-  // Planetary drive under the head, the tool reaching into the bowl and the wire guard.
+  for (const sx of [-1, 1]) {
+    p.roundedBox("paintGray", sx > 0 ? armX - 0.02 : -armX, sx > 0 ? armX : -armX + 0.02, yb1 - 0.075, yb1 - 0.04, colFront - 0.01, zb, 0.006);
+    const lug = armX - 0.02 - rb + 0.004;
+    p.rod("satin", "x", sx * (rb - 0.004 + lug / 2), yb1 - 0.0575, zb, lug, 0.012);
+  }
+  // Planetary drive under the head, the flat beater reaching into the bowl and the wire guard.
   const hubTop = headBottom;
-  p.cyl("steelDark", 0, zb, hubTop - 0.05, hubTop, 0.045);
-  p.cyl("steelDark", rb * 0.3, zb, yb1 - rb * 0.8, hubTop - 0.05, 0.008);
-  p.wireCage(0, zb, yb1, yb1 + (hubTop - 0.05 - yb1) * 0.6, rb + RIM, GUARD_WIRES);
+  p.lathe("satin", 0, hubTop - 0.06, zb, [
+    [0, 0],
+    [0.03, 0],
+    [0.04, 0.02],
+    [0.05, 0.05],
+    [0.05, 0.06],
+    [0, 0.06],
+  ]);
+  const ri = rb * 0.62;
+  const yTool = yb0 + 0.03;
+  p.tube(
+    "satin",
+    [
+      { x: 0, y: hubTop - 0.06, z: zb },
+      { x: 0, y: yb1 - 0.02, z: zb },
+      { x: -ri, y: yb1 - rb * 0.35, z: zb },
+      { x: -ri * 0.7, y: yTool, z: zb },
+      { x: ri * 0.7, y: yTool, z: zb },
+      { x: ri, y: yb1 - rb * 0.35, z: zb },
+      { x: 0, y: yb1 - 0.02, z: zb },
+    ],
+    0.006,
+    { bend: rb * 0.25 },
+  );
+  p.wireCage(0, zb, yb1, yb1 + (hubTop - 0.06 - yb1) * 0.6, rb + RIM, GUARD_WIRES);
   if (floor) {
     // Hand wheel on the right of the column lifts the bowl.
     const zc = (-d / 2 + colFront) / 2;
-    p.rod("steelDark", "x", w * 0.28 + 0.02, h * 0.5, zc, 0.04, 0.012);
-    p.rod("handle", "x", w * 0.28 + 0.045, h * 0.5, zc, 0.012, Math.min(0.08, (colFront + d / 2) / 2));
+    const r = Math.min(0.08, (colFront + d / 2) / 2 - 0.01);
+    p.rod("satin", "x", w * 0.28 + 0.015, h * 0.5, zc, 0.03, 0.012);
+    handWheel(p, w * 0.28 + 0.035, h * 0.5, zc, r, 0.008, 1);
   }
 }
 

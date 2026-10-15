@@ -4,7 +4,7 @@ import { doorCount } from "../parts/elevation";
 import { doors } from "../parts/mesh";
 import { upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
-import { cabinetBody, cabinetFront, doorsFront, frontsPlan, tableTop, UPSTAND_RISE } from "./common";
+import { cabinetBody, cabinetFront, doorHinges, doorsFront, frontsPlan, tableTop, UPSTAND_RISE } from "./common";
 
 export const cabinet: KindDef = {
   kind: "cabinet",
@@ -20,6 +20,7 @@ export const cabinet: KindDef = {
   mesh(p, s, item) {
     const { y0, y1, zf } = cabinetBody(p, s);
     doors(p, -s.w / 2, s.w / 2, y0, y1, 2 * zf, doorCount(item.width), "vertical");
-    tableTop(p, s, { back: true });
+    doorHinges(p, -s.w / 2, s.w / 2, y0, y1, zf, doorCount(item.width));
+    tableTop(p, s, { back: true, solid: true });
   },
 };

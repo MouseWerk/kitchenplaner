@@ -3,14 +3,17 @@
 // heat lamps above it are their own unit.
 
 import { INSET as FRONT_INSET, TOP as FRONT_TOP, UNDERSHELF as FRONT_UNDERSHELF } from "../parts/elevation";
-import { HANDLE, openFrame, SHEET, TOP, UNDERSHELF, type Hole } from "../parts/mesh";
+import { BODY_RADIUS, HANDLE, openFrame, SHEET, TOP, UNDERSHELF, type Hole } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { PANEL_SHEET, pilotLamp, plateStack } from "./common";
 
 /** Margin of the heated plate from the edges of the top (mm). */
 const PLATE_MARGIN = 80;
 /** Plate stacks on the undershelf: pitch, plate radius and stack height (m). */
 const STACK_PITCH = 0.32;
+/** Most plate stacks on the undershelf, for the budget (a wide pass spaces them out). */
+const MAX_STACKS = 4;
 const PLATE_R = 0.135;
 const STACK_H = 0.16;
 /** One heat zone per this much of the plate's width (mm), the steel strip between two zones (m). */
@@ -64,30 +67,39 @@ export const passCounter: KindDef = {
     const hole: Hole = { x0: -s.w / 2 + m, x1: s.w / 2 - m, z0: -s.d / 2 + m, z1: s.d / 2 - m, r: 0 };
     openFrame(p, s, s.h - TOP);
     p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, [hole]);
-    // The heated plate lies flush in the top, one field per heat zone with a steel strip between
-    // them, the heating box under it.
+    // The heated plate lies flush in the top, one glass ceramic field per heat zone with a steel
+    // strip between them, the heating box under it.
     const zn = zones(item.width);
     const zw = (hole.x1 - hole.x0) / zn;
     for (let i = 0; i < zn; i++) {
       const a = hole.x0 + i * zw;
-      p.box("ceramic", a + (i > 0 ? DIVIDER / 2 : 0), a + zw - (i < zn - 1 ? DIVIDER / 2 : 0), s.h - 0.008, s.h, hole.z0, hole.z1);
-      if (i > 0) p.box("steel", a - DIVIDER / 2, a + DIVIDER / 2, s.h - 0.008, s.h, hole.z0, hole.z1);
+      const x0 = a + (i > 0 ? DIVIDER / 2 : 0);
+      const x1 = a + zw - (i < zn - 1 ? DIVIDER / 2 : 0);
+      p.roundedBox("ceramic", x0, x1, s.h - 0.008, s.h - 0.001, hole.z0, hole.z1, 0.002, "top");
+      // The printed mark of the heated field in each zone.
+      p.roundedBox("zone", x0 + 0.06, x1 - 0.06, s.h - 0.001, s.h, hole.z0 + 0.06, hole.z1 - 0.06, 0.02, "vertical");
+      if (i > 0) p.box("steel", a - DIVIDER / 2, a + DIVIDER / 2, s.h - 0.008, s.h - 0.001, hole.z0, hole.z1);
     }
     p.box("steelDark", hole.x0, hole.x1, s.h - TOP - 0.06, s.h - 0.008, hole.z0, hole.z1);
-    // Control box with a switch per zone at the right of the front.
-    const bx1 = s.w / 2 - FRONT_INSET * 1.5 / 1000;
+    // Control box with a switch and a pilot lamp per zone at the right of the front.
+    const bx1 = s.w / 2 - (FRONT_INSET * 1.5) / 1000;
     const bx0 = bx1 - controlWidth(zn);
-    p.box("panelDark", bx0, bx1, s.h - TOP - 0.12, s.h - TOP, s.d / 2 - 0.06, s.d / 2 - HANDLE);
-    for (let i = 0; i < zn; i++) p.knob(bx0 + 0.02 + SWITCH_PITCH * (i + 0.5), s.h - TOP - 0.06, s.d / 2 - HANDLE, s.d / 2, 0.018);
+    const zf = s.d / 2 - HANDLE;
+    p.roundedBox("steel", bx0, bx1, s.h - TOP - 0.12, s.h - TOP, s.d / 2 - 0.08, zf, BODY_RADIUS * 2);
+    p.plate("panelDark", bx0 + 0.005, bx1 - 0.005, s.h - TOP - 0.115, s.h - TOP - 0.005, zf, zf + PANEL_SHEET, 0.004);
+    for (let i = 0; i < zn; i++) {
+      const x = bx0 + 0.02 + SWITCH_PITCH * (i + 0.5);
+      p.knob(x, s.h - TOP - 0.07, zf + PANEL_SHEET, s.d / 2, 0.016);
+      pilotLamp(p, x, s.h - TOP - 0.025, zf + PANEL_SHEET, "oil", 0.005);
+    }
     // Plate stacks on the undershelf.
-    const n = Math.max(1, Math.floor((s.w - 0.08) / STACK_PITCH));
+    const n = Math.max(1, Math.min(MAX_STACKS, Math.floor((s.w - 0.08) / STACK_PITCH)));
     const pitch = (s.w - 0.08) / n;
     const y0 = UNDERSHELF + SHEET * 2;
     for (let i = 0; i < n; i++) {
       const x = -s.w / 2 + 0.04 + pitch * (i + 0.5);
       const r = Math.min(PLATE_R, pitch / 2 - 0.01, s.d / 2 - 0.06);
-      p.cyl("panel", x, 0, y0, y0 + STACK_H, r * 0.75);
-      p.cyl("panel", x, 0, y0 + STACK_H - 0.01, y0 + STACK_H, r);
+      plateStack(p, x, y0, 0, r, STACK_H);
     }
   },
 };

@@ -1,10 +1,11 @@
 // Chargrill (Lavasteingrill): cast grates over a bed of lava stones heated by gas burners or
 // electric elements, one grate per 400 mm, splash guards at the back and the sides; an open base.
 
-import { CONTROLS, SHEET } from "../parts/mesh";
+import { CONTROLS, SHEET, worktop } from "../parts/mesh";
 import { CONTROL_STRIP, controlStrip, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { columns, lineFront, lineModule } from "./common";
+import { splashGuards } from "./details";
 
 /** Height of the splash guards over the grates (m). */
 const GUARD = 0.06;
@@ -46,27 +47,42 @@ export const chargrill: KindDef = {
     p.tub("steel", -s.w / 2, s.w / 2, bedTop - SHEET, grate, -s.d / 2, z1 + m, SHEET);
     // The front edge (with the grease trough) stands over the grates, so from the front only
     // the splash guards show above it, not the ends of the bars.
-    p.box("steel", -s.w / 2, s.w / 2, bedTop - SHEET, grate + FRONT_LIP, z1 + m, s.d / 2);
-    if (item.energy === "gas") p.box("rubber", -s.w / 2 + SHEET, s.w / 2 - SHEET, bedTop, bedTop + 0.03, -s.d / 2 + SHEET, z1 + m - SHEET);
-    else {
-      p.box("steelDark", -s.w / 2 + SHEET, s.w / 2 - SHEET, bedTop, bedTop + SHEET, -s.d / 2 + SHEET, z1 + m - SHEET);
-      for (let i = 0; i < n * 2; i++) p.rod("zone", "z", -s.w / 2 + (s.w / (n * 2)) * (i + 0.5), bedTop + 0.04, (z0 + z1) / 2, z1 - z0 - 0.04, 0.006);
+    worktop(p, "steel", -s.w / 2, s.w / 2, bedTop - SHEET, grate + FRONT_LIP, z1 + m, s.d / 2);
+    p.roundedBox("slot", -s.w / 2 + 0.04, s.w / 2 - 0.04, grate + FRONT_LIP - 0.002, grate + FRONT_LIP + 0.0005, z1 + m + 0.015, z1 + m + 0.04, 0.012, "vertical");
+    const bx0 = -s.w / 2 + SHEET;
+    const bx1 = s.w / 2 - SHEET;
+    if (item.energy === "gas") {
+      // The bed of lava stones on its grid over the burners.
+      p.roundedBox("granite", bx0, bx1, bedTop, bedTop + 0.03, -s.d / 2 + SHEET, z1 + m - SHEET, 0.012, "top");
+    } else {
+      // Tubular heating elements in loops under the grates, on a dark reflector.
+      p.box("steelDark", bx0, bx1, bedTop, bedTop + SHEET, -s.d / 2 + SHEET, z1 + m - SHEET);
+      const loops = n * 2;
+      const lw = (bx1 - bx0) / loops;
+      const ey = bedTop + 0.045;
+      for (let i = 0; i < loops; i++) {
+        const xa = bx0 + lw * (i + 0.25);
+        const xb = bx0 + lw * (i + 0.75);
+        p.tube("steelDark", [
+          { x: xa, y: ey, z: z1 - 0.01 },
+          { x: xa, y: ey, z: z0 + 0.03 },
+          { x: xb, y: ey, z: z0 + 0.03 },
+          { x: xb, y: ey, z: z1 - 0.01 },
+        ], 0.005, { bend: Math.min(0.02, lw / 4) });
+      }
     }
     const gw = (s.w - m * (n + 1)) / n;
     for (let i = 0; i < n; i++) {
       const x0 = -s.w / 2 + m + i * (gw + m);
       const bars = Math.max(3, Math.floor(gw / BAR_PITCH));
+      // Cast grate bars with rounded tops, on cross bars at the back and the front.
       for (let k = 0; k < bars; k++) {
         const x = x0 + (gw / bars) * (k + 0.5);
-        p.box("knob", x - 0.005, x + 0.005, grate - 0.02, grate, z0, z1);
+        p.roundedBox("castIron", x - 0.005, x + 0.005, grate - 0.02, grate, z0, z1, 0.004, "top");
       }
-      // Cross bars at the back and the front carrying the grate.
-      p.box("knob", x0, x0 + gw, grate - 0.025, grate - 0.02, z0, z0 + 0.015);
-      p.box("knob", x0, x0 + gw, grate - 0.025, grate - 0.02, z1 - 0.015, z1);
+      p.roundedBox("castIron", x0, x0 + gw, grate - 0.028, grate - 0.019, z0, z0 + 0.015, 0.003);
+      p.roundedBox("castIron", x0, x0 + gw, grate - 0.028, grate - 0.019, z1 - 0.015, z1, 0.003);
     }
-    // Splash guards at the back and the sides.
-    p.box("steel", -s.w / 2, s.w / 2, grate, s.h, -s.d / 2, -s.d / 2 + SHEET);
-    p.box("steel", -s.w / 2, -s.w / 2 + SHEET, grate, s.h, -s.d / 2, 0);
-    p.box("steel", s.w / 2 - SHEET, s.w / 2, grate, s.h, -s.d / 2, 0);
+    splashGuards(p, s, grate - 0.005, s.h, 0);
   },
 };

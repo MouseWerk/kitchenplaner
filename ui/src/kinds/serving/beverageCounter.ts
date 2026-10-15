@@ -1,11 +1,11 @@
 // Beverage counter (Getränkeausgabe): a cupboard counter with cooled drink dispensers on the
-// top (a glass tank over a base with a tap and a drip tray each) and a stack of glasses.
+// top (a clear tank over a cooling base with a tap and a drip tray each) and stacks of glasses.
 
 import { doorCount, FEET, INSET as FRONT_INSET, TOP as FRONT_TOP } from "../parts/elevation";
-import { DOOR_WIDTH, doors, PLINTH, TOP } from "../parts/mesh";
+import { DOOR, DOOR_WIDTH, PLINTH, TOP } from "../parts/mesh";
 import { INSET, upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
-import { counterBody } from "./common";
+import { counterBody, drinkDispenser, leafDoors, tumbler } from "./common";
 
 /** Height of the dispensers over the top (mm). */
 const DISPENSER_RISE = 600;
@@ -55,29 +55,19 @@ export const beverageCounter: KindDef = {
     f.box("detail", gx - GLASS_R * 1000, gx + GLASS_R * 1000, top, top + GLASS_STACK * 1000);
   },
   mesh(p, s, item) {
-    counterBody(p, s);
-    doors(p, -s.w / 2, s.w / 2, PLINTH, s.h - TOP, s.d, Math.max(1, Math.round(s.w / DOOR_WIDTH)), "vertical");
+    const zBody = s.d / 2 - DOOR;
+    counterBody(p, s, [], "steel", zBody);
+    leafDoors(p, -s.w / 2, s.w / 2, PLINTH, s.h - TOP, zBody, s.d / 2 - DOOR / 2, s.d / 2, Math.max(1, Math.round(s.w / DOOR_WIDTH)));
     const rise = DISPENSER_RISE / 1000;
-    const dw = DISPENSER.w / 2000;
     const z0 = -s.d / 2 + (INSET * 2) / 1000;
-    const z1 = z0 + DISPENSER.d / 1000;
-    const base = DISPENSER.base / 1000;
-    for (const xm of dispenserXs(item.width)) {
-      const x = xm / 1000;
-      p.box("steelDark", x - dw, x + dw, s.h, s.h + base, z0, z1);
-      // Glass tank with the drink in it, and the lid sitting on the tank.
-      p.box("glass", x - dw * 0.9, x + dw * 0.9, s.h + base, s.h + rise - 0.03, z0 + 0.03, z1 - 0.06);
-      p.box("oil", x - dw * 0.8, x + dw * 0.8, s.h + base + 0.01, s.h + base + (rise - base) * 0.6, z0 + 0.05, z1 - 0.08);
-      p.box("panelDark", x - dw * 0.92, x + dw * 0.92, s.h + rise - 0.03, s.h + rise, z0 + 0.025, z1 - 0.055);
-      // Tap lever in front of the base, drip tray under it.
-      p.box("handle", x - 0.012, x + 0.012, s.h + base * 0.45, s.h + base * 0.85, z1, z1 + 0.025);
-      p.box("panelDark", x - dw * 0.7, x + dw * 0.7, s.h, s.h + 0.02, z1, Math.min(z1 + 0.12, s.d / 2 - 0.02));
-    }
-    // Stacks of upturned glasses at the left.
+    const z1 = Math.min(z0 + DISPENSER.d / 1000 + 0.12, s.d / 2 - 0.02);
+    const drinks = ["foodRed", "oil", "foodCream"] as const;
+    for (const [i, xm] of dispenserXs(item.width).entries()) drinkDispenser(p, xm / 1000, s.h, z0, z1, DISPENSER.w / 1000, rise, drinks[i % drinks.length]);
+    // Stacks of upturned glasses at the left, on a tray.
     const gx = -s.w / 2 + GLASSES / 2000;
+    p.roundedBox("panelDark", gx - 0.11, gx + 0.11, s.h, s.h + 0.012, -0.08, 0.08, 0.02, "vertical");
     for (const dx of GLASS_STACKS) {
-      p.cyl("glass", gx + dx, 0, s.h, s.h + GLASS_STACK, GLASS_R);
-      p.cyl("steel", gx + dx, 0, s.h, s.h + 0.008, GLASS_R * 1.3);
+      for (let k = 0; k < 3; k++) tumbler(p, gx + dx, s.h + 0.012 + k * 0.07, 0, GLASS_R, 0.09);
     }
   },
 };

@@ -6,6 +6,8 @@ import { FEET, INSET, PANEL } from "../parts/elevation";
 import { DOOR, doors, GAP, PLINTH, plinth } from "../parts/mesh";
 import { frontDoorSwing, INSET as PLAN_INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { pilot } from "./details";
+import { controlPanel, housing, ratingPlate } from "../parts/details";
 
 /** Compartments stacked over the base. */
 const COMPARTMENTS = 2;
@@ -42,7 +44,7 @@ export const steamer: KindDef = {
     const zf = s.d / 2;
     const base = Math.min(BASE, s.h - 0.2);
     plinth(p, s.w, s.d);
-    p.box("steel", -s.w / 2, s.w / 2, PLINTH, s.h, -s.d / 2, zf - DOOR);
+    housing(p, "steel", -s.w / 2, s.w / 2, PLINTH, s.h, -s.d / 2, zf - DOOR, 0.004);
     doors(p, -s.w / 2, s.w / 2, PLINTH, base, s.d, 1, "vertical");
     const panelW = Math.min(PANEL_W, s.w / 4);
     const dx1 = s.w / 2 - panelW;
@@ -51,16 +53,20 @@ export const steamer: KindDef = {
     for (let i = 0; i < COMPARTMENTS; i++) {
       const b = base + ch * i;
       const t = b + ch;
-      // A solid door, hinged at the left, with the locking lever at its free edge.
-      p.box("steel", -s.w / 2 + GAP, dx1 - GAP, b + GAP, t - GAP, zf - DOOR, zFace);
+      // A solid door, hinged at the left, with its gasket showing round it and the locking
+      // lever at its free edge.
+      p.plate("rubber", -s.w / 2 + GAP, dx1 - GAP, b + GAP, t - GAP, zf - DOOR, zf - DOOR + 0.002, 0.006);
+      p.roundedBox("steel", -s.w / 2 + GAP * 2, dx1 - GAP * 2, b + GAP * 2, t - GAP * 2, zf - DOOR, zFace, 0.005, "top", "z");
       const len = Math.min(0.2, ch * 0.5);
       p.barHandle("y", (b + t) / 2 - len / 2, (b + t) / 2 + len / 2, dx1 - 0.04, zFace, zf);
-      p.box("panelDark", dx1 + GAP, s.w / 2 - GAP, b + GAP * 2, t - GAP * 2, zf - DOOR, zFace);
+      // The panel: two knobs (timer and mode) and a pilot light.
+      controlPanel(p, dx1 + GAP, s.w / 2 - GAP, b + GAP * 2, t - GAP * 2, zf - DOOR, zFace);
       const px = (dx1 + s.w / 2) / 2;
       const kr = Math.min(0.022, panelW / 5);
-      p.knob(px, b + ch * 0.65, zFace, zf, kr);
-      p.knob(px, b + ch * 0.35, zFace, zf, kr);
-      p.rod("zone", "z", px, b + ch * 0.85, zFace + 0.004, 0.008, 0.006);
+      p.knob(px, b + ch * 0.6, zFace, zf, kr);
+      p.knob(px, b + ch * 0.32, zFace, zf, kr);
+      pilot(p, px, b + ch * 0.82, zFace);
     }
+    ratingPlate(p, -s.w / 2 + 0.075, base - 0.045, zFace, 0.07, 0.03);
   },
 };

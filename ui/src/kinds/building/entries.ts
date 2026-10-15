@@ -1,11 +1,16 @@
 // Building elements: parts of the building that stand in the room or are set into its floor,
-// walls and ceiling.
+// walls and ceiling: columns and shafts, drainage, supply points, safety signs and fittings,
+// wall protection and heating.
 
 import { FLUSH_HEIGHT } from "../parts/sizes";
 import type { CatalogEntry } from "../types";
 
 /** Lengths of drainage channels (mm). */
 const CHANNEL_LENGTHS = [500, 1000, 1500, 2000, 3000] as const;
+/** Lengths of wall protection rails (mm). */
+const RAIL_LENGTHS = [1000, 1500, 2000, 3000, 4000] as const;
+/** Lengths of panel radiators (mm). */
+const RADIATOR_LENGTHS = [600, 800, 1000, 1200, 1600, 2000] as const;
 
 export const entries: readonly CatalogEntry[] = [
   { id: "column", kind: "column", category: "building", name: "cat.column", description: "catDesc.column", tags: ["stütze", "pfeiler", "säule", "column", "pillar"], width: 400, depth: 400, height: 3000, elevation: 0, connections: {} },
@@ -19,4 +24,20 @@ export const entries: readonly CatalogEntry[] = [
   { id: "water-connection", kind: "waterConnection", category: "building", name: "cat.waterConnection", description: "catDesc.waterConnection", tags: ["wasseranschluss", "eckventil", "abfluss", "anschluss", "water connection", "valve"], width: 300, depth: 100, height: 200, elevation: 450, connections: { coldWater: true, hotWater: true, drain: true } },
   { id: "duct", kind: "duct", category: "building", name: "cat.duct", description: "catDesc.duct", tags: ["lüftungskanal", "kanal", "lüftung", "decke", "duct", "ventilation"], width: 2000, depth: 400, height: 300, elevation: 2500, connections: {}, widths: [1000, 1500, 2000, 3000, 4000] },
   { id: "platform", kind: "platform", category: "building", name: "cat.platform", description: "catDesc.platform", tags: ["podest", "sockel", "stufe", "platform", "plinth", "step"], width: 1200, depth: 800, height: 150, elevation: 0, connections: {}, widths: [800, 1000, 1200, 1600, 2000] },
+  { id: "floor-gully", kind: "floorGully", category: "building", name: "cat.floorGully", description: "catDesc.floorGully", tags: ["bodenablauf", "gully", "geruchsverschluss", "rund", "floor gully", "trap"], width: 200, depth: 200, height: FLUSH_HEIGHT, elevation: 0, connections: { drain: true } },
+  { id: "floor-gully-bucket", kind: "floorGullyBucket", category: "building", name: "cat.floorGullyBucket", description: "catDesc.floorGullyBucket", tags: ["bodenablauf", "schlammeimer", "schmutzfänger", "gully", "floor gully", "bucket"], width: 400, depth: 400, height: FLUSH_HEIGHT, elevation: 0, connections: { drain: true } },
+  { id: "grease-trap-compact", kind: "greaseTrapCompact", category: "building", name: "cat.greaseTrapCompact", description: "catDesc.greaseTrapCompact", tags: ["fettabscheider", "kleinabscheider", "unter spüle", "grease trap", "under sink"], width: 600, depth: 400, height: 350, elevation: 0, connections: { drain: true } },
+  { id: "lifting-station", kind: "liftingStation", category: "building", name: "cat.liftingStation", description: "catDesc.liftingStation", tags: ["hebeanlage", "abwasserhebeanlage", "pumpe", "pumpstation", "lifting station", "pump"], width: 700, depth: 600, height: 800, elevation: 0, connections: { electricKw: 1.1, voltage: 400, drain: true } },
+  { id: "distribution-board", kind: "distributionBoard", category: "building", name: "cat.distributionBoard", description: "catDesc.distributionBoard", tags: ["unterverteilung", "verteiler", "sicherungskasten", "elektro", "distribution board", "fuse box"], width: 600, depth: 200, height: 900, elevation: 1100, connections: {} },
+  { id: "gas-shutoff", kind: "gasShutoffBox", category: "building", name: "cat.gasShutoff", description: "catDesc.gasShutoff", tags: ["gas", "absperrung", "notabsperrung", "absperrhahn", "gas shut-off", "valve"], width: 300, depth: 120, height: 300, elevation: 1400, connections: {} },
+  { id: "fire-extinguisher", kind: "fireExtinguisher", category: "building", name: "cat.fireExtinguisher", description: "catDesc.fireExtinguisher", tags: ["feuerlöscher", "fettbrandlöscher", "brandschutz", "fire extinguisher", "fire safety"], width: 200, depth: 180, height: 650, elevation: 750, connections: {} },
+  { id: "fire-blanket", kind: "fireBlanket", category: "building", name: "cat.fireBlanket", description: "catDesc.fireBlanket", tags: ["löschdecke", "brandschutz", "fettbrand", "fire blanket", "fire safety"], width: 280, depth: 90, height: 350, elevation: 1500, connections: {} },
+  { id: "exit-sign", kind: "exitSign", category: "building", name: "cat.exitSign", description: "catDesc.exitSign", tags: ["notausgang", "rettungszeichen", "notbeleuchtung", "fluchtweg", "exit sign", "emergency light"], width: 400, depth: 60, height: 200, elevation: 2200, connections: { electricKw: 0.01, voltage: 230 } },
+  { id: "wall-guard-rail", kind: "wallGuardRail", category: "building", name: "cat.wallGuardRail", description: "catDesc.wallGuardRail", tags: ["rammschutz", "wandschutz", "stoßschutz", "abweisleiste", "wall guard", "bumper rail"], width: 2000, depth: 50, height: 200, elevation: 250, connections: {}, widths: RAIL_LENGTHS },
+  { id: "corner-guard", kind: "cornerGuard", category: "building", name: "cat.cornerGuard", description: "catDesc.cornerGuard", tags: ["kantenschutz", "eckschutz", "edelstahlwinkel", "corner guard", "angle"], width: 60, depth: 60, height: 1200, elevation: 100, connections: {} },
+  { id: "column-clad", kind: "columnClad", category: "building", name: "cat.columnClad", description: "catDesc.columnClad", tags: ["stütze", "verkleidung", "edelstahl", "pfeiler", "column", "cladding"], width: 400, depth: 400, height: 3000, elevation: 0, connections: {} },
+  { id: "media-column", kind: "mediaColumn", category: "building", name: "cat.mediaColumn", description: "catDesc.mediaColumn", tags: ["versorgungssäule", "medienkanal", "deckenanschluss", "steckdosen", "media column", "service pole"], width: 300, depth: 300, height: 2100, elevation: 900, connections: {} },
+  { id: "floor-box", kind: "floorBox", category: "building", name: "cat.floorBox", description: "catDesc.floorBox", tags: ["bodentank", "bodendose", "steckdose", "boden", "floor box", "floor socket"], width: 300, depth: 300, height: FLUSH_HEIGHT, elevation: 0, connections: {} },
+  { id: "radiator", kind: "radiator", category: "building", name: "cat.radiator", description: "catDesc.radiator", tags: ["heizkörper", "heizung", "plattenheizkörper", "radiator", "heating"], width: 1000, depth: 100, height: 600, elevation: 150, connections: {}, widths: RADIATOR_LENGTHS },
+  { id: "water-heater", kind: "waterHeater", category: "building", name: "cat.waterHeater", description: "catDesc.waterHeater", tags: ["warmwasserspeicher", "boiler", "wandspeicher", "warmwasser", "water heater", "hot water"], width: 450, depth: 450, height: 900, elevation: 1100, connections: { electricKw: 2, voltage: 230, coldWater: true } },
 ];

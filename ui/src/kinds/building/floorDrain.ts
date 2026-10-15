@@ -3,6 +3,7 @@
 // draws the same grate bars as 3D and the round body of the gully below it hidden.
 
 import type { KindDef } from "../types";
+import { flushFrame } from "./common";
 
 // Sizes (m).
 /** Width of the frame around the grate. */
@@ -33,11 +34,9 @@ export const floorDrain: KindDef = {
   mesh(p, s) {
     const W = s.w / 2;
     const D = s.d / 2;
-    p.box("steel", -W, W, 0, s.h, -D, -D + FRAME);
-    p.box("steel", -W, W, 0, s.h, D - FRAME, D);
-    p.box("steel", -W, -W + FRAME, 0, s.h, -D + FRAME, D - FRAME);
-    p.box("steel", W - FRAME, W, 0, s.h, -D + FRAME, D - FRAME);
-    p.box("plate", -W + FRAME, W - FRAME, 0, s.h * 0.3, -D + FRAME, D - FRAME);
-    for (const z of bars(s.d)) p.box("steel", -W + FRAME, W - FRAME, s.h * 0.6, s.h, z - BAR / 2, z + BAR / 2);
+    flushFrame(p, W, D, FRAME, s.h);
+    // The gully's dark body below the grate, and the bars with rounded tops over it.
+    p.box("slot", -W + FRAME, W - FRAME, 0, s.h * 0.3, -D + FRAME, D - FRAME);
+    for (const z of bars(s.d)) p.roundedBox("steel", -W + FRAME, W - FRAME, s.h * 0.4, s.h - 0.0005, z - BAR / 2, z + BAR / 2, 0.0015, "top");
   },
 };

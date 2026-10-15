@@ -4,7 +4,7 @@ import { DOOR_MODULE } from "../parts/elevation";
 import { doors } from "../parts/mesh";
 import { upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
-import { cabinetBody, cabinetFront, doorsFront, drawerFronts, drawersFront, frontsPlan, tableTop, UPSTAND_RISE } from "./common";
+import { cabinetBody, cabinetFront, doorHinges, doorsFront, drawerFronts, drawersFront, frontsPlan, tableTop, UPSTAND_RISE } from "./common";
 
 /** Width of the drawer block (mm) and its number of drawers. */
 const BLOCK = 500;
@@ -37,6 +37,7 @@ export const cabinetDrawers: KindDef = {
     const xb = -s.w / 2 + block / 1000;
     drawerFronts(p, -s.w / 2, xb, y0, y1, zf, DRAWERS);
     doors(p, xb, s.w / 2, y0, y1, 2 * zf, n, "vertical");
-    tableTop(p, s, { back: true });
+    doorHinges(p, xb, s.w / 2, y0, y1, zf, n);
+    tableTop(p, s, { back: true, solid: true });
   },
 };

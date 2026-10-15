@@ -1,19 +1,24 @@
 // Refrigerated food counter (Kühlausgabe): cooled Gastronorm wells under a glass display with a
-// middle shelf, the machine compartment at the left and cooled doors on the staff side (front).
+// middle shelf and a light, the machine compartment behind a louvre at the left and cooled doors
+// on the staff side (front).
 
 import { FEET, INSET as FRONT_INSET, TOP as FRONT_TOP } from "../parts/elevation";
-import { DOOR, DOOR_WIDTH, doors, GAP, HANDLE, PLINTH, SHEET, TOP } from "../parts/mesh";
+import { DOOR, DOOR_WIDTH, GAP, PLINTH, TOP } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { counterBody, GN_LONG, holesOf, planWells, sneezeGuard, sneezeGuardFront, wellPans, wellRow } from "./common";
+import { counterBody, dish, GLASS, GN_LONG, holesOf, leafDoors, pilotLamp, planWells, ratingPlate, sneezeGuard, sneezeGuardFront, wellPans, wellRow } from "./common";
+import { ventSlots } from "../parts/details";
 
 /** Height of the glass display over the top (mm). */
 const DISPLAY_RISE = 500;
 /** Space between the back edge and the wells, where the display's back pane stands (mm). */
 const BACK_SPACE = 100;
-/** Width of the machine compartment (m) and of the louvre slats in it. */
+/** Width of the machine compartment (m) and of the louvre slots in it. */
 const MACHINE = 0.4;
-const LOUVRES = 5;
+const LOUVRES = 7;
+/** Depth of the middle shelf from the back (m) and its height share of the display. */
+const SHELF_DEPTH = 0.3;
+const SHELF_LEVEL = 0.6;
 
 function wells(width: number, depth: number) {
   const y0 = -depth / 2 + BACK_SPACE;
@@ -44,27 +49,37 @@ export const coldCounter: KindDef = {
       f.line("detail", [a + dw / 4, top - FRONT_TOP - I * 2.5], [a + (dw * 3) / 4, top - FRONT_TOP - I * 2.5]);
     }
     sneezeGuardFront(f, DISPLAY_RISE);
-    f.line("detail", [l + I, top + DISPLAY_RISE * 0.6], [f.r - I, top + DISPLAY_RISE * 0.6]);
+    f.line("detail", [l + I, top + DISPLAY_RISE * SHELF_LEVEL], [f.r - I, top + DISPLAY_RISE * SHELF_LEVEL]);
   },
   mesh(p, s, item) {
     const ws = wells(item.width, item.depth);
     const holes = holesOf(ws);
-    counterBody(p, s, holes);
-    wellPans(p, holes, s.h, ["foodGreen", "foodCream", "foodRed", "foodCream"]);
-    // Machine compartment with a louvre at the left, cooled doors to its right.
+    const zBody = s.d / 2 - DOOR;
+    const zFace = s.d / 2 - DOOR / 2;
+    counterBody(p, s, holes, "steel", zBody);
+    wellPans(p, holes, s.h, ["foodGreen", "foodCream", "foodRed", "foodCream"], false);
+    // Machine compartment behind a louvre at the left, with the display and the pilot lamp.
     const machine = Math.min(MACHINE, s.w * 0.3);
     const x1 = -s.w / 2 + machine;
     const yt = s.h - TOP;
-    p.box("panelDark", -s.w / 2 + GAP, x1 - GAP, PLINTH + GAP, yt - GAP, s.d / 2 - DOOR, s.d / 2 - HANDLE);
-    for (let i = 1; i <= LOUVRES; i++) {
-      const y = PLINTH + ((yt - PLINTH) * i) / (LOUVRES + 1);
-      p.box("steelDark", -s.w / 2 + 0.04, x1 - 0.04, y - 0.006, y + 0.006, s.d / 2 - HANDLE, s.d / 2 - HANDLE + 0.004);
-    }
-    doors(p, x1, s.w / 2, PLINTH, yt, s.d, Math.max(1, Math.round((s.w - machine) / DOOR_WIDTH)), "top");
-    // The display: back pane and glass top as a guard, and a glass middle shelf on the posts.
+    p.roundedBox("panelDark", -s.w / 2 + GAP, x1 - GAP, PLINTH + GAP, yt - GAP, zBody, zFace, 0.002, "top", "z");
+    ventSlots(p, -s.w / 2 + 0.05, x1 - 0.05, PLINTH + 0.05, yt - 0.16, zFace, LOUVRES);
+    p.plate("glassDark", -s.w / 2 + 0.05, -s.w / 2 + 0.15, yt - 0.09, yt - 0.055, zFace, zFace + 0.001, 0.003);
+    pilotLamp(p, x1 - 0.06, yt - 0.072, zFace, "foodGreen");
+    leafDoors(p, x1, s.w / 2, PLINTH, yt, zBody, zFace, s.d / 2, Math.max(1, Math.round((s.w - machine) / DOOR_WIDTH)), "top", true);
+    ratingPlate(p, s.w / 2 - 0.08, PLINTH + 0.06, zFace);
+    // The display: back pane, glass top with the light under it, a glass middle shelf with
+    // desserts on it.
     const rise = DISPLAY_RISE / 1000;
     const zFront = ws[0].y1 / 1000;
-    sneezeGuard(p, s.w, s.h, rise, -s.d / 2 + 0.03, -s.d / 2 + GAP, zFront);
-    p.box("glass", -s.w / 2 + 0.06, s.w / 2 - 0.06, s.h + rise * 0.6, s.h + rise * 0.6 + SHEET, -s.d / 2 + 0.05, -s.d / 2 + 0.3);
+    sneezeGuard(p, s.w, s.h, rise, { zPost: -s.d / 2 + 0.03, z0: -s.d / 2 + GAP, z1: zFront, light: "light" });
+    const ys = s.h + rise * SHELF_LEVEL;
+    const sz1 = -s.d / 2 + SHELF_DEPTH;
+    p.roundedBox("glass", -s.w / 2 + 0.06, s.w / 2 - 0.06, ys, ys + GLASS, -s.d / 2 + 0.05, sz1, 0.002, "vertical");
+    const n = Math.max(1, Math.floor((s.w - 0.2) / 0.22));
+    for (let i = 0; i < n; i++) {
+      const x = -s.w / 2 + 0.1 + ((s.w - 0.2) / n) * (i + 0.5);
+      dish(p, x, ys + GLASS, (-s.d / 2 + 0.05 + sz1) / 2, 0.08, i % 2 === 0 ? "foodCream" : "foodRed");
+    }
   },
 };

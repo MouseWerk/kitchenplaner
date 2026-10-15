@@ -3,7 +3,7 @@
 // the grip along its front edge.
 
 import { INSET as FRONT_INSET, TOP as FRONT_TOP } from "../parts/elevation";
-import { TOP } from "../parts/mesh";
+import { TOP, TOP_RADIUS, worktop } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { m } from "./common";
@@ -19,10 +19,12 @@ const RAIL_D_MM = 360;
 const LID = 0.012;
 const BOARD = 0.015;
 const OVERHANG = 0.025;
-/** Radius of the hinge bar along the lid's back edge (m). */
+/** Radius and length of a hinge barrel along the lid's back edge (m). */
 const HINGE = 0.009;
-/** Steps of the housing under the sloping lid (its sides, set back under the lid). */
-const STEPS = 6;
+const HINGE_L = 0.06;
+/** Depth of the lid's folded front edge (the grip) and its sheet (m). */
+const LIP = 0.025;
+const LIP_T = 0.006;
 /** Width of a GN 1/3 pan across the rail (mm, 176 mm plus the bar between pans). */
 const PAN_MM = 185;
 
@@ -59,7 +61,7 @@ export const saladette: KindDef = {
   mesh(p, s) {
     const work = s.h - m(RAIL_MM);
     counterBase(p, s, "doors", work - TOP);
-    p.box("steel", -s.w / 2, s.w / 2, work - TOP, work, -s.d / 2, s.d / 2);
+    worktop(p, "steel", -s.w / 2, s.w / 2, work - TOP, work, -s.d / 2, s.d / 2);
     const zb = -s.d / 2;
     const rf = zb + m(railDepth(s.d * 1000));
     // The lid's underside runs from its front edge on the rail's front wall up to the back.
@@ -67,26 +69,48 @@ export const saladette: KindDef = {
     const yB = s.h - LID * 1.5;
     const zF = rf + OVERHANG;
     const zB = zb + LID;
-    // The housing under the lid: the front wall and steps rising to the back, set in at the ends.
+    const under = (z: number) => yF + ((yB - yF) * (zF - z)) / (zF - zB);
+    // The housing under the lid: the rail's front wall and its sloping top, set in at the ends
+    // and starting a hair inside the worktop's rounded edge.
     const ends = 0.015;
-    const run = rf - zb;
-    for (let i = 0; i < STEPS; i++) {
-      const z1 = rf - (run * i) / STEPS;
-      const z0 = rf - (run * (i + 1)) / STEPS;
-      const y = yF + ((yB - yF) * (zF - z1)) / (zF - zB) - LID / 2;
-      p.box("steel", -s.w / 2 + ends, s.w / 2 - ends, work, Math.max(work + 0.01, y), z0, z1);
+    const y0 = work - TOP_RADIUS;
+    p.extrude("steel", "x", -s.w / 2 + ends, s.w / 2 - ends, [
+      [zb + 0.002, y0],
+      [rf, y0],
+      [rf, under(rf) - 0.002],
+      [zb + 0.002, under(zb + 0.002) - 0.002],
+    ]);
+    // The lid: a sheet sloping from the hinge at the back down to the front, its front edge
+    // folded down into a grip.
+    p.extrude("steel", "x", -s.w / 2 + 0.004, s.w / 2 - 0.004, [
+      [zB, yB],
+      [zF - LIP_T, yF],
+      [zF - LIP_T, yF - LIP],
+      [zF - LIP_T / 3, yF - LIP],
+      [zF, yF - LIP + LIP_T],
+      [zF, yF + LID],
+      [zB, yB + LID],
+    ]);
+    // Hinge barrels along the back edge, and the grip recess under the lid's front edge.
+    for (const x of [-s.w / 2 + 0.08, s.w / 2 - 0.08 - HINGE_L]) {
+      p.lathe(
+        "satin",
+        x,
+        s.h - HINGE,
+        zb + HINGE,
+        [
+          [0, 0],
+          [HINGE * 0.8, 0],
+          [HINGE, HINGE * 0.3],
+          [HINGE, HINGE_L - HINGE * 0.3],
+          [HINGE * 0.8, HINGE_L],
+          [0, HINGE_L],
+        ],
+        { axis: "x" },
+      );
     }
-    // The lid: one sheet sloping from the back down to its front edge.
-    const dz = zF - zB;
-    const dy = yB - yF;
-    const len = Math.hypot(dz, dy);
-    const lid = p.box("steel", -s.w / 2 + 0.005, s.w / 2 - 0.005, -LID / 2, LID / 2, -len / 2, len / 2);
-    lid.rotation.x = Math.atan2(dy, dz);
-    lid.position.set(0, (yF + yB) / 2 + LID / 2, (zF + zB) / 2);
-    // Hinge along the back (the top of the unit) and the grip bar along the lid's front edge.
-    p.rod("steelDark", "x", 0, s.h - HINGE, zb + HINGE, s.w - 0.06, HINGE);
-    p.rod("handle", "x", 0, yF - 0.004, zF - 0.008, s.w * 0.8, 0.008);
+    p.box("slot", -s.w / 2 + 0.06, s.w / 2 - 0.06, yF - LIP + 0.004, yF - 0.002, zF - LIP_T - 0.001, zF - LIP_T);
     // Polyethylene cutting board on the worktop in front of the rail.
-    p.box("panel", -s.w / 2 + 0.025, s.w / 2 - 0.025, work, work + BOARD, zF + 0.02, s.d / 2 - 0.04);
+    p.roundedBox("panel", -s.w / 2 + 0.025, s.w / 2 - 0.025, work - 0.001, work + BOARD, zF + 0.02, s.d / 2 - 0.04, TOP_RADIUS);
   },
 };

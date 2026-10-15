@@ -19,7 +19,7 @@ einzelne Datei (`.kplan`). Für Windows, macOS und Linux, auf Deutsch und Englis
   Schnitttiefe wählst du: nur die Wand, der halbe oder der ganze Raum.
 - **3D**: die Küche räumlich, in Perspektive oder Parallelprojektion, mit Ansichtswürfel,
   Höhenschnitt und „Begehen“ auf Augenhöhe (W A S D).
-- **Katalog mit 165 Geräten** in acht Bereichen: Kochen, Kühlen, Spülen, Tische und Vorbereitung,
+- **Katalog mit 359 Geräten** in acht Bereichen: Kochen, Kühlen, Spülen, Tische und Vorbereitung,
   Ausgabe, Lagern, Lüftung und Bauteile (Stützen, Schächte, Bodenabläufe, Rinnen, Podeste), viele
   in mehreren Breiten und als Elektro- oder Gasgerät, jedes mit 3D-Vorschau.
 - **Bearbeiten wie in Blender**: Tab wechselt zwischen „Einrichten“ (Geräte anordnen) und „Raum“
@@ -182,7 +182,7 @@ runs entirely on your computer, without an account; a project is a single `.kpla
 
 - Floor plan to scale in millimetres, four dimensioned elevations with a selectable cut depth, and a
   3D view with a section height and a walk mode.
-- A catalog of 165 units in eight areas (cooking, cooling, washing, tables and preparation, serving,
+- A catalog of 359 units in eight areas (cooking, cooling, washing, tables and preparation, serving,
   storage, ventilation, building elements), many in several widths and as electric or gas units,
   each with a 3D preview.
 - Editing in two modes like Blender (Tab: arrange units or edit the room; G moves, R rotates, X/Y

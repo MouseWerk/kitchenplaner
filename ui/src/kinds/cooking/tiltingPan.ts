@@ -2,12 +2,17 @@
 // the front by a hand wheel; the controls in the right pedestal. The pressure braising pan
 // (`pressurePan`) has a heavy lid locked by a central wheel, a pressure gauge and a safety valve.
 
-import { CONTROLS, GAP, SHEET } from "../parts/mesh";
+import { BODY_RADIUS, CONTROLS, GAP, SHEET } from "../parts/mesh";
 import { CONTROL_STRIP, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { handWheel, hinges, pilot } from "./details";
+import { controlPanel, display, housing, ratingPlate } from "../parts/details";
 
 /** Depth of the pan (m). */
 const PAN = 0.3;
+/** Edge radius of the pedestals (m), and the half width of the pouring lip. */
+const PEDESTAL_RADIUS = 0.004;
+const LIP = 0.07;
 /** Thickness of the lid (m). */
 const LID = 0.02;
 
@@ -41,47 +46,116 @@ function makeTiltingPan(kind: string, pressure: boolean): KindDef {
       const ped = Math.min(0.2, s.w * 0.15);
       const panTop = s.h - LID;
       const panBottom = panTop - PAN;
+      const zf = s.d / 2;
       for (const sx of [-1, 1]) {
         const x0 = sx < 0 ? -s.w / 2 : s.w / 2 - ped;
-        p.box("steel", x0, x0 + ped, 0.012, s.h, -s.d / 2, s.d / 2 - 0.02);
-        p.box("rubber", x0 + 0.02, x0 + ped - 0.02, 0, 0.012, -s.d / 2 + 0.02, s.d / 2 - 0.04);
+        p.roundedBox("steel", x0, x0 + ped, 0.012, s.h, -s.d / 2, zf - 0.02, PEDESTAL_RADIUS);
+        p.roundedBox("rubber", x0 + 0.02, x0 + ped - 0.02, 0, 0.014, -s.d / 2 + 0.02, zf - 0.04, BODY_RADIUS, "vertical");
       }
-      // Control panel with knobs and a display on the right pedestal.
+      // Control panel with a display, two knobs and a pilot light on the right pedestal.
       const px0 = s.w / 2 - ped + GAP;
       const px1 = s.w / 2 - GAP;
-      const zFace = s.d / 2 - 0.02;
-      p.box("panelDark", px0, px1, s.h - CONTROLS * 2.5, s.h - 0.03, zFace, zFace + 0.002);
-      p.box("glassDark", px0 + 0.02, px1 - 0.02, s.h - 0.09, s.h - 0.05, zFace + 0.002, zFace + 0.004);
-      p.knob((px0 + px1) / 2 - ped * 0.2, s.h - CONTROLS * 1.3, zFace + 0.002, s.d / 2);
-      p.knob((px0 + px1) / 2 + ped * 0.2, s.h - CONTROLS * 1.3, zFace + 0.002, s.d / 2);
+      const pcx = (px0 + px1) / 2;
+      const zFace = zf - 0.018;
+      controlPanel(p, px0, px1, s.h - CONTROLS * 2.5, s.h - 0.03, zf - 0.022, zFace);
+      display(p, pcx, s.h - 0.07, px1 - px0 - 0.04, 0.04, zFace);
+      p.knob(pcx - ped * 0.2, s.h - CONTROLS * 1.4, zFace, zf);
+      p.knob(pcx + ped * 0.2, s.h - CONTROLS * 1.4, zFace, zf);
+      pilot(p, pcx, s.h - CONTROLS * 2.1, zFace);
+      ratingPlate(p, pcx, 0.125, zf - 0.02, 0.08, 0.05);
       // The hand wheel that tilts the pan, on the front of the right pedestal.
-      const wy = panBottom - 0.15;
-      p.rod("handle", "z", (px0 + px1) / 2, wy, s.d / 2 - 0.015, 0.03, 0.012);
-      p.rod("steelDark", "z", (px0 + px1) / 2, wy, s.d / 2 - 0.006, 0.012, Math.min(0.07, ped * 0.4));
-      p.rod("handle", "x", (px0 + px1) / 2 + Math.min(0.06, ped * 0.35), wy, s.d / 2 - 0.006, 0.012, 0.006);
-      // The pan, its pivots and the pouring lip.
-      const x0 = -s.w / 2 + ped + GAP * 2;
-      const x1 = s.w / 2 - ped - GAP * 2;
+      handWheel(p, pcx, panBottom - 0.15, zf - 0.02, Math.min(0.07, ped * 0.4), 0.02);
+      // The pan between the pedestals: a deep tub with a satin rim round its top and the heated
+      // floor under it, the pouring lip at the front.
+      const x0 = -s.w / 2 + ped + GAP * 3;
+      const x1 = s.w / 2 - ped - GAP * 3;
       const z0 = -s.d / 2 + 0.02;
-      const z1 = s.d / 2 - 0.08;
+      const z1 = zf - 0.08;
       p.tub("steel", x0, x1, panBottom, panTop, z0, z1);
-      p.box("steelDark", x0 + SHEET, x1 - SHEET, panBottom - 0.04, panBottom, z0 + SHEET, z1 - SHEET);
-      p.box("steel", -0.06, 0.06, panTop - 0.06, panTop - 0.02, z1, z1 + 0.04);
-      for (const x of [x0, x1]) p.rod("steelDark", "x", x + (x === x0 ? -GAP : GAP), panTop - 0.08, z1 - 0.04, GAP * 2 + 0.002, 0.03);
-      // The lid lies closed on the pan, its handle bar along the front edge.
-      const lidTop = pressure ? s.h - 0.006 : s.h;
-      p.box("steel", x0, x1, panTop, lidTop, z0, z1);
-      const hz = z1 + 0.02;
-      p.rod("handle", "x", (x0 + x1) / 2, panTop + 0.01, hz, (x1 - x0) * 0.7, 0.01);
-      for (const sx of [-1, 1]) p.box("handle", sx * (x1 - x0) * 0.33 - 0.008, sx * (x1 - x0) * 0.33 + 0.008, panTop + 0.004, panTop + 0.016, z1, hz);
+      p.roundedBox("steelDark", x0 + SHEET, x1 - SHEET, panBottom - 0.05, panBottom + 0.002, z0 + SHEET, z1 - SHEET, BODY_RADIUS);
+      p.lathe("satin", (x0 + x1) / 2, panTop - 0.012, (z0 + z1) / 2, [
+        [0.004, 0],
+        [0.012, 0],
+        [0.012, 0.012],
+        [0.004, 0.012],
+        [0.004, 0],
+      ], { rect: [(x1 - x0) / 2 - 0.012, (z1 - z0) / 2 - 0.012] });
+      p.extrude("steel", "x", -LIP, LIP, [
+        [z1 - 0.012, panTop - 0.09],
+        [z1 + 0.04, panTop - 0.012],
+        [z1 + 0.04, panTop - 0.002],
+        [z1 - 0.012, panTop - 0.002],
+      ]);
+      // The pivots of the tilting axis: turned hubs from the pan into the pedestals.
+      for (const [xa, xb] of [
+        [x0 - GAP * 3 - 0.004, x0],
+        [x1, x1 + GAP * 3 + 0.004],
+      ]) {
+        p.lathe("satin", xa, panTop - 0.08, z1 - 0.04, [
+          [0, 0],
+          [0.03, 0],
+          [0.034, 0.003],
+          [0.034, xb - xa - 0.003],
+          [0.03, xb - xa],
+          [0, xb - xa],
+        ], { axis: "x" });
+      }
+      // The lid lies closed on the pan inside its rim: rounded like a pressed cover, hinged at
+      // the back, with a handle bar along the front.
+      const lidTop = pressure ? s.h - 0.008 : s.h;
+      housing(p, "steel", x0 + 0.004, x1 - 0.004, panTop - 0.002, lidTop, z0 + 0.004, z1 - 0.004, 0.006);
+      hinges(p, x0 + 0.05, x1 - 0.05, panTop + 0.004, z0 - 0.002, 2, 0.012, 0.08);
+      const len = (x1 - x0) * 0.7;
+      p.tube("handle", [
+        { x: -len / 2, y: lidTop - 0.008, z: z1 - 0.03 },
+        { x: -len / 2, y: lidTop - 0.008, z: z1 + 0.025 },
+        { x: len / 2, y: lidTop - 0.008, z: z1 + 0.025 },
+        { x: len / 2, y: lidTop - 0.008, z: z1 - 0.03 },
+      ], 0.008, { bend: 0.02 });
       if (pressure) {
         // The locking wheel in the middle of the lid, the gauge and the safety valve beside it.
         const cz = (z0 + z1) / 2;
         const r = Math.min(0.12, (z1 - z0) * 0.18);
-        p.cyl("steelDark", 0, cz, lidTop, s.h - 0.003, r);
-        p.cyl("handle", 0, cz, lidTop, s.h, r * 0.3);
-        p.cyl("panel", (x1 - x0) * 0.3, cz, lidTop, s.h - 0.002, 0.035);
-        p.cyl("handle", -(x1 - x0) * 0.3, cz, lidTop, s.h - 0.001, 0.02);
+        p.lathe("steelDark", 0, lidTop - 0.002, cz, [
+          [0, 0],
+          [r * 0.35, 0],
+          [r * 0.35, 0.006],
+          [0, 0.006],
+        ]);
+        const ry = s.h - 0.004;
+        p.ring("satin", 0, cz, ry, r - 0.004, 0.004);
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+          p.bar("satin", { x: r * 0.3 * Math.cos(a), y: ry, z: cz + r * 0.3 * Math.sin(a) }, { x: (r - 0.006) * Math.cos(a), y: ry, z: cz + (r - 0.006) * Math.sin(a) }, 0.003);
+        }
+        p.lathe("handle", 0, lidTop - 0.002, cz, [
+          [0, 0],
+          [r * 0.3, 0],
+          [r * 0.3, 0.004],
+          [r * 0.2, 0.01],
+          [0, 0.01],
+        ]);
+        const gx = (x1 - x0) * 0.3;
+        p.lathe("satin", gx, lidTop - 0.002, cz, [
+          [0, 0],
+          [0.035, 0],
+          [0.035, 0.006],
+          [0, 0.006],
+        ]);
+        p.lathe("panel", gx, lidTop + 0.004, cz, [
+          [0, 0],
+          [0.03, 0],
+          [0.03, 0.0005],
+          [0, 0.0005],
+        ]);
+        p.lathe("handle", -gx, lidTop - 0.002, cz, [
+          [0, 0],
+          [0.02, 0],
+          [0.02, 0.003],
+          [0.012, 0.006],
+          [0.012, 0.008],
+          [0, 0.008],
+        ]);
       }
     },
   };

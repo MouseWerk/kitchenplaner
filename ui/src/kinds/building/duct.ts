@@ -1,6 +1,7 @@
 // Ventilation duct (Lüftungskanal): a rectangular galvanised duct under the ceiling, joined by
 // flanges about every metre.
 
+import { BODY_RADIUS } from "../parts/mesh";
 import { cross } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -31,7 +32,18 @@ export const duct: KindDef = {
     }
   },
   mesh(p, s) {
-    p.box("steelDark", -s.w / 2, s.w / 2, FLANGE, s.h - FLANGE, -s.d / 2 + FLANGE, s.d / 2 - FLANGE);
-    for (const x of flanges(s.w)) p.box("steel", x - FLANGE_L / 2, x + FLANGE_L / 2, 0, s.h, -s.d / 2, s.d / 2);
+    const hy = s.h / 2 - FLANGE;
+    const hz = s.d / 2 - FLANGE;
+    p.roundedBox("steelDark", -s.w / 2 + 0.001, s.w / 2 - 0.001, FLANGE, s.h - FLANGE, -hz, hz, BODY_RADIUS, "all", "x");
+    // The flanges: a band of angle round the duct at every joint, turned round its section.
+    for (const x of flanges(s.w)) {
+      p.lathe("satin", x - FLANGE_L / 2, s.h / 2, 0, [
+        [0, 0],
+        [FLANGE, 0],
+        [FLANGE, FLANGE_L],
+        [0, FLANGE_L],
+        [0, 0],
+      ], { axis: "x", rect: [hy, hz] });
+    }
   },
 };

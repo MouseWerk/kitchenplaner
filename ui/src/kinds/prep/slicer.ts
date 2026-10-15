@@ -6,9 +6,11 @@
 // three views agree.
 
 import { discFrame, discOutline, type V3 } from "../parts/disc";
-import type { Size } from "../parts/mesh";
+import { TOP_RADIUS, type Size } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { machineFeet, MACHINE_FOOT, mBox, mCircle, metres, mLine, pRect } from "./common";
+import { pushButton, sideSlots } from "./machine";
+import { housing, ratingPlate } from "../parts/details";
 
 /** Inclination of the blade from upright and its turn towards the front (radians). */
 const TILT = (40 * Math.PI) / 180;
@@ -45,8 +47,8 @@ function layout({ w, d, h }: Size) {
   const tray = { x0: -w / 2 + 0.03, x1: tx1, y: ty, z0: -ring * 0.9, z1: ring * 0.9 };
   const hy1 = c[1] - 0.015;
   const hx0 = Math.max(c[0] + 0.01, ...rim.filter((p) => p[1] < hy1 + 0.01).map((p) => p[0] + 0.01));
-  const housing = { x0: hx0, x1: w / 2 - 0.02, y1: hy1, z0: -ring, z1: ring * 0.5 };
-  return { baseTop, baseFront, r, ring, c, tray, housing };
+  const motor = { x0: hx0, x1: w / 2 - 0.02, y1: hy1, z0: -ring, z1: ring * 0.5 };
+  return { baseTop, baseFront, r, ring, c, tray, motor };
 }
 
 export const slicer: KindDef = {
@@ -54,18 +56,18 @@ export const slicer: KindDef = {
   placement: "tableTop",
   plan(s) {
     const { w, d } = metres(s.item);
-    const { ring, c, tray, housing } = layout(metres(s.item));
+    const { ring, c, tray, motor } = layout(metres(s.item));
     // The inclined blade seen from above, the motor housing under it, the carriage at the left.
     s.line("detail", ...disc(c, ring).map(([x, , z]): [number, number] => [x * 1000, z * 1000]));
-    pRect(s, "detail", housing.x0, housing.z0, housing.x1, housing.z1);
+    pRect(s, "detail", motor.x0, motor.z0, motor.x1, motor.z1);
     pRect(s, "detail", tray.x0, tray.z0, tray.x1, tray.z1);
     pRect(s, "detail", -w / 2 + 0.05, d / 2 - 0.025, -w / 2 + 0.11, d / 2);
   },
   elevation(f) {
     const s = metres(f.item);
-    const { baseTop, ring, c, r, tray, housing } = layout(s);
+    const { baseTop, ring, c, r, tray, motor } = layout(s);
     mBox(f, "detail", -s.w / 2, s.w / 2, MACHINE_FOOT, baseTop);
-    mBox(f, "detail", housing.x0, housing.x1, baseTop, housing.y1);
+    mBox(f, "detail", motor.x0, motor.x1, baseTop, motor.y1);
     // The blade seen from the front: the guard ring and the centre cover as ellipses.
     mLine(f, ...disc(c, ring).map(([x, y]): [number, number] => [x, y]));
     mLine(f, ...disc(c, r * 0.45, BLADE_T).map(([x, y]): [number, number] => [x, y]));
@@ -75,11 +77,12 @@ export const slicer: KindDef = {
   },
   mesh(p, s) {
     const { w, d } = s;
-    const { baseTop, baseFront, r, ring, c, tray, housing } = layout(s);
+    const { baseTop, baseFront, r, ring, c, tray, motor } = layout(s);
     machineFeet(p, -w / 2, w / 2, -d / 2, baseFront);
-    p.box("steel", -w / 2, w / 2, MACHINE_FOOT, baseTop, -d / 2, baseFront);
+    housing(p, "steel", -w / 2, w / 2, MACHINE_FOOT, baseTop, -d / 2, baseFront, 0.012);
     // Motor housing under the blade, and the hub carrying the blade out of it.
-    p.box("steel", housing.x0, housing.x1, baseTop, housing.y1, housing.z0, housing.z1);
+    housing(p, "steel", motor.x0, motor.x1, baseTop - 0.01, motor.y1, motor.z0, motor.z1, 0.02);
+    sideSlots(p, motor.x1, 1, baseTop + 0.03, motor.y1 - 0.03, motor.z0 + 0.04, motor.z1 - 0.04, 4);
     const at = (t: number) => ({ x: c[0] + N[0] * t, y: c[1] + N[1] * t, z: c[2] + N[2] * t });
     p.bar("steelDark", at(-RING_T), at(-RING_T - 0.05), HUB);
     // Guard ring, the bright blade in front of it and the centre cover, all in the blade's
@@ -89,15 +92,25 @@ export const slicer: KindDef = {
     p.bar("steelDark", at(BLADE_T), at(BLADE_T + COVER_T), r * 0.45);
     // Carriage: a slide column, the tray, the side plate and the pusher with its knob.
     const cx = (tray.x0 + tray.x1) / 2;
-    p.box("steelDark", cx - 0.03, cx + 0.03, baseTop, tray.y, -0.03, 0.03);
-    p.box("steel", tray.x0, tray.x1, tray.y, tray.y + 0.008, tray.z0, tray.z1);
-    p.box("steel", tray.x0, tray.x1, tray.y, tray.y + r * 0.35, tray.z0, tray.z0 + 0.006);
-    p.box("steelDark", tray.x0 + 0.02, tray.x1 - 0.02, tray.y + r * 0.55, tray.y + r * 0.6, -0.015, 0.015);
-    p.cyl("knob", tray.x0 + 0.04, 0, tray.y + r * 0.6, tray.y + r * 0.6 + 0.05, 0.018);
+    p.roundedBox("steelDark", cx - 0.03, cx + 0.03, baseTop - 0.005, tray.y, -0.03, 0.03, 0.006, "vertical");
+    p.roundedBox("steel", tray.x0, tray.x1, tray.y, tray.y + 0.008, tray.z0, tray.z1, TOP_RADIUS);
+    p.roundedBox("steel", tray.x0, tray.x1, tray.y + 0.004, tray.y + r * 0.35, tray.z0, tray.z0 + 0.006, TOP_RADIUS);
+    // The pusher on its rod across the tray, the knob to hold the product with.
+    p.rod("satin", "x", (tray.x0 + tray.x1) / 2, tray.y + r * 0.575, 0, tray.x1 - tray.x0 - 0.04, 0.008);
+    p.roundedBox("steelDark", tray.x0 + 0.03, tray.x0 + 0.05, tray.y + 0.012, tray.y + r * 0.6, -r * 0.5, r * 0.5, 0.004);
+    p.lathe("knob", tray.x0 + 0.04, tray.y + r * 0.6, 0, [
+      [0, 0],
+      [0.012, 0],
+      [0.012, 0.015],
+      [0.02, 0.035],
+      [0.017, 0.048],
+      [0, 0.05],
+    ]);
     // Thickness knob at the front left, start and stop buttons at the front right.
     p.knob(-w / 2 + 0.08, (MACHINE_FOOT + baseTop) / 2, baseFront, d / 2, 0.03);
     const yb = (MACHINE_FOOT + baseTop) / 2;
-    p.box("handle", w / 2 - 0.13, w / 2 - 0.1, yb - 0.012, yb + 0.012, baseFront, baseFront + 0.008);
-    p.box("knob", w / 2 - 0.09, w / 2 - 0.06, yb - 0.012, yb + 0.012, baseFront, baseFront + 0.008);
+    pushButton(p, w / 2 - 0.115, yb, baseFront, 0.011, "panel");
+    pushButton(p, w / 2 - 0.075, yb, baseFront, 0.011, "knob");
+    ratingPlate(p, 0, yb, baseFront);
   },
 };

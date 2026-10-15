@@ -3,6 +3,7 @@
 
 import { INSET } from "../parts/elevation";
 import type { KindDef } from "../types";
+import { socket230, socket400 } from "./sockets";
 
 // Sizes (m).
 /** Width of one socket place. */
@@ -52,23 +53,15 @@ export const socketPanel: KindDef = {
   mesh(p, s) {
     const B = -s.d / 2;
     const zf = s.d / 2 - PROUD;
-    p.box("panel", -s.w / 2, s.w / 2, 0, s.h, B, zf);
+    // The surface-mounted housing, pressed plastic with round corners.
+    p.roundedBox("panel", -s.w / 2, s.w / 2, 0, s.h, B, zf, 0.006);
     const yc = s.h / 2;
     const { xs, cee } = places(s.w);
     xs.forEach((x, i) => {
-      if (cee && i === xs.length - 1) {
-        // 400 V socket: a round housing pointing slightly down, its lid on top.
-        p.rod("panelDark", "z", x, yc, (zf + s.d / 2) / 2, s.d / 2 - zf, CEE);
-        p.box("knob", x - CEE * 0.6, x + CEE * 0.6, yc + CEE * 0.6, yc + CEE, zf, s.d / 2);
-      } else {
-        // 230 V socket: a flat base, the flip lid with its round cap, hinged at the top.
-        p.box("panelDark", x - LID / 2, x + LID / 2, yc - LID / 2, yc + LID / 2, zf, zf + PROUD * 0.4);
-        p.box("panelDark", x - LID * 0.42, x + LID * 0.42, yc - LID * 0.42, yc + LID * 0.42, zf + PROUD * 0.4, s.d / 2 - 0.004);
-        p.rod("knob", "z", x, yc, s.d / 2 - 0.002, 0.004, LID * 0.25);
-        p.rod("knob", "x", x, yc + LID * 0.42, zf + PROUD * 0.55, LID * 0.7, 0.004);
-      }
+      if (cee && i === xs.length - 1) socket400(p, x, yc, zf, s.d / 2, CEE);
+      else socket230(p, x, yc, zf, s.d / 2, LID);
     });
     // A small indicator light under the sockets.
-    p.box("glassDark", -0.01, 0.01, 0.015, 0.025, zf, zf + 0.002);
+    p.plate("glassDark", -0.01, 0.01, 0.012, 0.024, zf - 0.001, zf + 0.002, 0.003);
   },
 };

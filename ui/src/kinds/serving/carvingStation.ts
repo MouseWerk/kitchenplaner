@@ -2,11 +2,13 @@
 // gantry over it, the gantry's posts at the back (guest side), the carver at the front.
 
 import { doorCount, FEET, INSET as FRONT_INSET, TOP as FRONT_TOP } from "../parts/elevation";
-import { DOOR_WIDTH, doors, PLINTH, TOP } from "../parts/mesh";
+import { DOOR, DOOR_WIDTH, GAP, LEG_RADIUS, PLINTH, TOP } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { counterBody } from "./common";
+import { controlPanel, counterBody, leafDoors } from "./common";
 
+/** Height of the control panel under the top (mm). */
+const PANEL_MM = 130;
 /** Height of the heat lamp gantry over the top (mm). */
 const GANTRY_RISE = 650;
 /** Cutting board: margin from the edges and thickness (mm). */
@@ -30,7 +32,8 @@ export const carvingStation: KindDef = {
     const { l, r, top } = f;
     const I = FRONT_INSET;
     f.worktop();
-    f.doors(doorCount(f.w), f.z0 + FEET, top - FRONT_TOP - I);
+    f.panel(top - FRONT_TOP - PANEL_MM, top - FRONT_TOP, 2);
+    f.doors(doorCount(f.w), f.z0 + FEET, top - FRONT_TOP - PANEL_MM - I / 2);
     f.box("detail", l + BOARD_MARGIN, r - BOARD_MARGIN, top, top + BOARD);
     // Gantry: two posts and the lamp housing across the top.
     f.box("detail", l + I / 2, l + I / 2 + POST * 1000, top, top + GANTRY_RISE - LAMP_H * 1000);
@@ -38,20 +41,68 @@ export const carvingStation: KindDef = {
     f.box("detail", l + I / 2, r - I / 2, top + GANTRY_RISE - LAMP_H * 1000, top + GANTRY_RISE);
   },
   mesh(p, s) {
-    counterBody(p, s);
-    doors(p, -s.w / 2, s.w / 2, PLINTH, s.h - TOP, s.d, Math.max(1, Math.round(s.w / DOOR_WIDTH)), "vertical");
-    // Cutting board with a juice groove round it.
+    const zBody = s.d / 2 - DOOR;
+    counterBody(p, s, [], "steel", zBody);
+    leafDoors(p, -s.w / 2, s.w / 2, PLINTH, s.h - TOP - PANEL_MM / 1000, zBody, s.d / 2 - DOOR / 2, s.d / 2, Math.max(1, Math.round(s.w / DOOR_WIDTH)));
+    controlPanel(p, -s.w / 2 + GAP, s.w / 2 - GAP, s.h - TOP - PANEL_MM / 1000 + GAP, s.h - TOP - GAP, zBody, s.d / 2, { knobs: 2, pilots: true, rocker: true });
+    // Cutting board with a juice groove round it, a roast on it, the carving knife and fork.
     const m = BOARD_MARGIN / 1000;
     const b = BOARD / 1000;
-    p.box("panel", -s.w / 2 + m, s.w / 2 - m, s.h, s.h + b, -s.d / 2 + m, s.d / 2 - m);
-    p.box("steelDark", -s.w / 2 + m + 0.02, s.w / 2 - m - 0.02, s.h + b, s.h + b + 0.001, -s.d / 2 + m + 0.02, -s.d / 2 + m + 0.026);
-    // Gantry with the lamp housing; the heating rods in its underside.
+    const x0 = -s.w / 2 + m;
+    const x1 = s.w / 2 - m;
+    const z0 = -s.d / 2 + m;
+    const z1 = s.d / 2 - m;
+    p.roundedBox("wood", x0, x1, s.h - 0.001, s.h + b, z0, z1, 0.008);
+    p.lathe(
+      "slot",
+      (x0 + x1) / 2,
+      s.h + b,
+      (z0 + z1) / 2,
+      [
+        [0, 0],
+        [0.006, 0],
+        [0.006, 0.0006],
+        [0, 0.0006],
+        [0, 0],
+      ],
+      { rect: [(x1 - x0) / 2 - 0.035, (z1 - z0) / 2 - 0.035] },
+    );
+    const rx = (x0 + x1) / 2 - Math.min(0.1, (x1 - x0) / 6);
+    const rz = (z0 + z1) / 2;
+    p.lathe(
+      "foodBrown",
+      rx - 0.09,
+      s.h + b + 0.05,
+      rz,
+      [
+        [0, 0],
+        [0.045, 0.002],
+        [0.06, 0.03],
+        [0.065, 0.09],
+        [0.06, 0.15],
+        [0.045, 0.178],
+        [0, 0.18],
+      ],
+      { axis: "x" },
+    );
+    const kx = rx + 0.16;
+    if (kx + 0.03 < x1) {
+      p.roundedBox("handle", kx - 0.012, kx + 0.012, s.h + b, s.h + b + 0.003, rz - 0.15, rz + 0.06, 0.0015, "all", "z");
+      p.roundedBox("knob", kx - 0.011, kx + 0.011, s.h + b, s.h + b + 0.018, rz + 0.06, rz + 0.17, 0.006, "all", "z");
+    }
+    // Gantry: two square posts at the back and the lamp housing across them, its heating
+    // elements and a light in the underside.
     const rise = GANTRY_RISE / 1000;
     const zb = -s.d / 2 + 0.025;
-    for (const x of [-s.w / 2 + 0.025, s.w / 2 - 0.025 - POST]) p.box("steel", x, x + POST, s.h, s.h + rise - LAMP_H, zb, zb + POST);
-    const z1 = zb + LAMP_DEPTH;
-    p.box("steel", -s.w / 2 + 0.025, s.w / 2 - 0.025, s.h + rise - LAMP_H, s.h + rise, zb, z1);
-    p.box("steelDark", -s.w / 2 + 0.04, s.w / 2 - 0.04, s.h + rise - LAMP_H - 0.004, s.h + rise - LAMP_H, zb + 0.02, z1 - 0.02);
-    for (const f of [0.35, 0.65]) p.rod("ceramic", "x", 0, s.h + rise - LAMP_H - 0.012, zb + LAMP_DEPTH * f, s.w - 0.14, 0.008);
+    const yl = s.h + rise - LAMP_H;
+    for (const x of [-s.w / 2 + 0.025, s.w / 2 - 0.025 - POST]) {
+      p.roundedBox("steel", x, x + POST, s.h, yl, zb, zb + POST, LEG_RADIUS, "vertical");
+      p.roundedBox("steelDark", x - 0.008, x + POST + 0.008, s.h, s.h + 0.006, zb - 0.008, zb + POST + 0.008, 0.002);
+    }
+    const z1l = zb + LAMP_DEPTH;
+    p.roundedBox("steel", -s.w / 2 + 0.025, s.w / 2 - 0.025, yl, s.h + rise, zb - 0.02, z1l, 0.015, "all", "x");
+    p.box("satin", -s.w / 2 + 0.05, s.w / 2 - 0.05, yl - 0.002, yl + 0.002, zb, z1l - 0.02);
+    for (const f of [0.3, 0.7]) p.rod("ceramic", "x", 0, yl - 0.012, zb - 0.02 + (LAMP_DEPTH + 0.02) * f, s.w - 0.14, 0.008);
+    p.roundedBox("panel", -s.w / 2 + 0.1, s.w / 2 - 0.1, yl - 0.004, yl - 0.002, zb + LAMP_DEPTH / 2 - 0.012, zb + LAMP_DEPTH / 2 + 0.012, 0.006, "vertical");
   },
 };

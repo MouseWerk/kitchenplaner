@@ -385,10 +385,11 @@ export class Parts {
 
   /**
    * A wire basket or cage filling the box (a fryer basket, a dish rack, a guard): rods along the
-   * top and bottom edges and at the four corners, upright wires every `pitch` in the four walls,
-   * and a grid across the bottom and, if asked, across the top.
+   * top and bottom edges and at the four corners, upright wires every `pitch` in the four walls
+   * (every `wallPitch` if given: a basket seen from above shows its walls end-on), and a grid
+   * across the bottom and, if asked, across the top.
    */
-  wireBox(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, pitch: number, faces: { bottom?: boolean; top?: boolean } = {}): void {
+  wireBox(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, pitch: number, faces: { bottom?: boolean; top?: boolean; wallPitch?: number } = {}): void {
     const rf = Math.min(WIRE_FRAME, (x1 - x0) / 4, (y1 - y0) / 4, (z1 - z0) / 4);
     const rw = Math.min(WIRE, rf);
     const cx = (x0 + x1) / 2;
@@ -402,10 +403,11 @@ export class Parts {
     // Upright wires in the walls, between the rims.
     const yc = (y0 + y1) / 2;
     const hw = y1 - y0 - 4 * rf;
-    for (const x of wirePositions(x0 + rf * 2, x1 - rf * 2, pitch)) {
+    const wp = faces.wallPitch ?? pitch;
+    for (const x of wirePositions(x0 + rf * 2, x1 - rf * 2, wp)) {
       for (const z of [z0 + rf, z1 - rf]) this.rod("wire", "y", x, yc, z, hw, rw);
     }
-    for (const z of wirePositions(z0 + rf * 2, z1 - rf * 2, pitch)) {
+    for (const z of wirePositions(z0 + rf * 2, z1 - rf * 2, wp)) {
       for (const x of [x0 + rf, x1 - rf]) this.rod("wire", "y", x, yc, z, hw, rw);
     }
     // Wires across the bottom and the top, front to back, inside the rims.

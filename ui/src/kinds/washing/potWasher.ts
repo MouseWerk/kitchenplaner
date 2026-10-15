@@ -4,9 +4,11 @@
 // steam condenser behind the grille at the top. In the plan the dropped door lies in front.
 
 import { FEET, INSET as FRONT_INSET } from "../parts/elevation";
-import { CONTROLS, DOOR, GAP, PLINTH, plinth, SHEET } from "../parts/mesh";
+import { CONTROLS, DOOR, DOOR_RADIUS, GAP, PLINTH } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { machineFeet, machinePanel } from "./details";
+import { housing, ratingPlate } from "../parts/details";
 
 /** Height of the condenser section with its grille at the top (m). */
 const CONDENSER = 0.14;
@@ -57,30 +59,34 @@ export const potWasher: KindDef = {
     const grille = s.h - CONDENSER;
     const { sill, top: panel } = doorSpan(s.h);
     const zFace = zf - GRIP_REACH;
-    plinth(p, s.w, s.d);
-    p.box("steel", -s.w / 2, s.w / 2, PLINTH, s.h - SHEET, -s.d / 2, zFace - DOOR);
-    p.box("steelDark", -s.w / 2, s.w / 2, s.h - SHEET, s.h, -s.d / 2, zFace - DOOR);
-    // The fixed panel in front of the tank.
-    p.box("steel", -s.w / 2 + GAP, s.w / 2 - GAP, PLINTH + GAP, sill - GAP, zFace - DOOR, zFace - DOOR / 2);
-    // The door: hinged at the bottom (the hinge pins show at its lower corners), a gasket line
-    // round it and the grip bar on two arms along its top.
-    p.box("rubber", -s.w / 2 + GAP / 2, s.w / 2 - GAP / 2, sill, panel, zFace - DOOR, zFace - DOOR + 0.002);
-    p.box("steel", -s.w / 2 + GAP, s.w / 2 - GAP, sill + GAP, panel - GAP, zFace - DOOR, zFace);
-    for (const sx of [-1, 1]) p.rod("steelDark", "x", sx * (s.w / 2 - 0.03), sill + 0.025, zFace - DOOR / 2, 0.04, 0.012);
-    const gy = panel - GRIP_DROP;
-    const gx = s.w / 2 - 0.08;
-    p.rod("handle", "x", 0, gy, zf - 0.012, 2 * gx, 0.012);
-    for (const sx of [-1, 1]) p.rod("handle", "z", sx * gx, gy, (zFace + zf - 0.012) / 2, zf - 0.012 - zFace, 0.01);
-    // Control panel: display and two buttons.
-    p.box("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, panel + GAP, grille - GAP, zFace - DOOR, zFace);
-    const yc = (panel + grille) / 2;
-    p.box("glassDark", -s.w / 2 + 0.05, -s.w / 2 + 0.25, yc - 0.025, yc + 0.025, zFace, zFace + 0.003);
-    for (let i = 0; i < 2; i++) p.rod("knob", "z", s.w / 2 - 0.06 - i * 0.07, yc, zFace + 0.005, 0.01, 0.018);
+    const zLeaf = zFace - DOOR / 2;
+    machineFeet(p, s.w, s.d, zFace - DOOR);
+    housing(p, "steel", -s.w / 2, s.w / 2, PLINTH, s.h, -s.d / 2, zFace - DOOR);
+    // The fixed panel in front of the tank with the rating plate.
+    p.roundedBox("steel", -s.w / 2 + GAP, s.w / 2 - GAP, PLINTH + GAP, sill - GAP, zFace - DOOR, zLeaf, DOOR_RADIUS, "top", "z");
+    ratingPlate(p, s.w / 2 - 0.08, PLINTH + 0.06, zLeaf);
+    // The door: hinged at the bottom (the hinge barrels show at its lower corners), its gasket
+    // dark in the gap round it and the grip bar on two arms along its top.
+    p.plate("rubber", -s.w / 2 + GAP / 2, s.w / 2 - GAP / 2, sill - GAP / 2, panel - GAP / 2, zFace - DOOR - 0.001, zFace - DOOR + 0.002, 0.004);
+    p.roundedBox("steel", -s.w / 2 + GAP, s.w / 2 - GAP, sill + GAP, panel - GAP, zFace - DOOR, zFace, DOOR_RADIUS * 2, "top", "z");
+    for (const sx of [-1, 1]) {
+      p.lathe("satin", sx * (s.w / 2 - 0.05) - 0.02, sill + 0.02, zFace - DOOR / 2, [
+        [0, 0],
+        [0.009, 0],
+        [0.012, 0.004],
+        [0.012, 0.036],
+        [0.009, 0.04],
+        [0, 0.04],
+      ], { axis: "x" });
+    }
+    p.barHandle("x", -s.w / 2 + 0.08, s.w / 2 - 0.08, panel - GRIP_DROP, zFace, zf);
+    // Control panel: display and buttons.
+    machinePanel(p, -s.w / 2 + GAP, s.w / 2 - GAP, panel + GAP, grille - GAP, zFace - DOOR, zFace, 4);
     // Condenser grille: slats over a dark opening.
-    p.box("panelDark", -s.w / 2 + 0.03, s.w / 2 - 0.03, grille + 0.02, s.h - 0.02, zFace - DOOR, zFace - DOOR + 0.002);
+    p.plate("slot", -s.w / 2 + 0.03, s.w / 2 - 0.03, grille + 0.02, s.h - 0.02, zFace - DOOR - 0.0005, zFace - DOOR + 0.001, 0.006);
     for (let i = 1; i <= SLATS; i++) {
       const y = grille + ((s.h - grille) * i) / (SLATS + 1);
-      p.box("steel", -s.w / 2 + 0.03, s.w / 2 - 0.03, y - 0.005, y + 0.005, zFace - DOOR, zFace - DOOR / 2);
+      p.roundedBox("steel", -s.w / 2 + 0.03, s.w / 2 - 0.03, y - 0.006, y + 0.006, zFace - DOOR, zLeaf, 0.003, "top", "z");
     }
   },
 };

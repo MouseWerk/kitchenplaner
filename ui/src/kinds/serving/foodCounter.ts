@@ -1,11 +1,12 @@
 // Hot food counter (Speisenausgabe, Bain-Marie): heated Gastronorm wells in the top, a sneeze
-// guard on the guest side (the back), the controls and a cupboard on the staff side (the front).
+// guard on the guest side (the back), the control panel and a cupboard on the staff side (the
+// front).
 
 import { doorCount, FEET, INSET as FRONT_INSET, PANEL, TOP as FRONT_TOP } from "../parts/elevation";
-import { CONTROLS, controlKnobs, DOOR, DOOR_WIDTH, doors, GAP, HANDLE, PLINTH, TOP } from "../parts/mesh";
+import { CONTROLS, DOOR, DOOR_WIDTH, GAP, PLINTH, TOP } from "../parts/mesh";
 import { CONTROL_STRIP, controlStrip, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { counterBody, GN_LONG, holesOf, planWells, sneezeGuard, sneezeGuardFront, wellCount, wellPans, wellRow } from "./common";
+import { controlPanel, counterBody, GN_LONG, holesOf, leafDoors, planWells, ratingPlate, sneezeGuard, sneezeGuardFront, wellCount, wellPans, wellRow } from "./common";
 
 /** Height of the sneeze guard over the top (mm). */
 export const GUARD_RISE = 450;
@@ -36,13 +37,14 @@ export const foodCounter: KindDef = {
   },
   mesh(p, s, item) {
     const holes = holesOf(wells(item.width, item.depth));
-    counterBody(p, s, holes);
-    wellPans(p, holes, s.h, ["foodBrown", "foodCream", "foodRed", "foodGreen"]);
-    // One thermostat knob per well on the control strip under the top.
+    const zBody = s.d / 2 - DOOR;
+    counterBody(p, s, holes, "steel", zBody);
+    wellPans(p, holes, s.h, ["foodBrown", "foodCream", "foodRed", "foodGreen"], true, true);
+    // A thermostat knob and pilot lamp per well on the control panel under the top.
     const yc = s.h - TOP - CONTROLS;
-    p.box("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, yc, s.h - TOP - GAP, s.d / 2 - DOOR, s.d / 2 - HANDLE);
-    controlKnobs(p, s.w, (yc + s.h - TOP) / 2, s.d / 2 - HANDLE, s.d / 2, holes.length);
-    doors(p, -s.w / 2, s.w / 2, PLINTH, yc, s.d, Math.max(1, Math.round(s.w / DOOR_WIDTH)), "vertical");
-    sneezeGuard(p, s.w, s.h, GUARD_RISE / 1000, -s.d / 2 + 0.03, -s.d / 2 + GAP, -s.d / 2 + GUARD_SHELF);
+    controlPanel(p, -s.w / 2 + GAP, s.w / 2 - GAP, yc + GAP, s.h - TOP - GAP, zBody, s.d / 2, { knobs: holes.length, pilots: true, rocker: true });
+    leafDoors(p, -s.w / 2, s.w / 2, PLINTH, yc, zBody, s.d / 2 - DOOR / 2, s.d / 2, Math.max(1, Math.round(s.w / DOOR_WIDTH)));
+    ratingPlate(p, -s.w / 2 + 0.08, PLINTH + 0.06, s.d / 2 - DOOR / 2);
+    sneezeGuard(p, s.w, s.h, GUARD_RISE / 1000, { zPost: -s.d / 2 + 0.03, z0: -s.d / 2 + GAP, z1: -s.d / 2 + GUARD_SHELF, light: "heat" });
   },
 };

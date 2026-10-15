@@ -1,9 +1,12 @@
 // Heated cabinet (Wärmeschrank) as a table base: a work cabinet with sliding doors, heated by a
 // fan heater, with the thermostat and a thermometer in a strip under the top.
 
+import { BODY_RADIUS, DOOR, GAP } from "../parts/mesh";
 import { upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
 import { cabinetBody, cabinetFront, slidingDoors, slidingFront, slidingPlan, tableTop, UPSTAND_RISE } from "./common";
+import { displayWindow, pilotLamp } from "./machine";
+import { ventSlots } from "../parts/details";
 
 /** Height of the control strip under the top (mm). */
 const CONTROLS = 100;
@@ -27,12 +30,16 @@ export const heatedCabinet: KindDef = {
     const { y0, y1, zf } = cabinetBody(p, s);
     const c = CONTROLS / 1000;
     const yc = y1 - c;
-    p.box("panelDark", -s.w / 2, s.w / 2, yc, y1, zf - 0.02, zf - 0.008);
-    // Thermostat dial, thermometer display and the pilot light at the right.
-    p.knob(s.w / 2 - 0.12, (yc + y1) / 2, zf - 0.008, zf, 0.02);
-    p.box("glassDark", s.w / 2 - 0.26, s.w / 2 - 0.18, yc + c * 0.3, y1 - c * 0.3, zf - 0.008, zf - 0.005);
-    p.cyl("handle", s.w / 2 - 0.31, zf - 0.006, (yc + y1) / 2 - 0.006, (yc + y1) / 2 + 0.006, 0.006);
+    const face = zf - 0.008;
+    const ym = (yc + y1) / 2;
+    p.roundedBox("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, yc + GAP, y1 - GAP, zf - DOOR, face, BODY_RADIUS, "top", "z");
+    // Thermostat dial, thermometer display and the pilot light at the right; the fan heater's
+    // intake slots at the left.
+    p.knob(s.w / 2 - 0.12, ym, face, zf, 0.02);
+    displayWindow(p, s.w / 2 - 0.27, s.w / 2 - 0.17, yc + c * 0.3, y1 - c * 0.3, face);
+    pilotLamp(p, s.w / 2 - 0.31, ym, face);
+    ventSlots(p, -s.w / 2 + 0.06, -s.w / 2 + 0.06 + Math.min(0.3, s.w * 0.25), yc + c * 0.3, y1 - c * 0.3, face, 3, "x");
     slidingDoors(p, -s.w / 2, s.w / 2, y0, yc, zf);
-    tableTop(p, s, { back: true });
+    tableTop(p, s, { back: true, solid: true });
   },
 };

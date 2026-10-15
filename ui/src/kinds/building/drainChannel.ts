@@ -3,6 +3,7 @@
 // cross ties where 3D has them and the outlet below the grate hidden.
 
 import type { KindDef } from "../types";
+import { flushFrame } from "./common";
 
 // Sizes (m).
 /** Width of the channel's rim. */
@@ -36,21 +37,18 @@ export const drainChannel: KindDef = {
   mesh(p, s) {
     const W = s.w / 2;
     const D = s.d / 2;
-    p.box("steel", -W, W, 0, s.h, -D, -D + RIM);
-    p.box("steel", -W, W, 0, s.h, D - RIM, D);
-    p.box("steel", -W, -W + RIM, 0, s.h, -D + RIM, D - RIM);
-    p.box("steel", W - RIM, W, 0, s.h, -D + RIM, D - RIM);
-    p.box("plate", -W + RIM, W - RIM, 0, s.h * 0.3, -D + RIM, D - RIM);
-    // The outlet shows as a darker round at the right end.
+    flushFrame(p, W, D, RIM, s.h);
+    // The channel's dark inside, the outlet at the right end lower still.
+    p.box("slot", -W + RIM, W - RIM, 0, s.h * 0.3, -D + RIM, D - RIM);
     const o = Math.min(OUTLET, D - RIM);
-    p.cyl("rubber", W - RIM - o - 0.02, 0, s.h * 0.3, s.h * 0.35, o);
+    p.lathe("rubber", W - RIM - o - 0.02, s.h * 0.3, 0, [[0, 0], [o, 0], [o, s.h * 0.05], [o * 0.8, s.h * 0.08], [0, s.h * 0.08]]);
     const inner = s.d - 2 * RIM;
     const n = Math.max(2, Math.floor(inner / BAR_PITCH));
     const pitch = inner / n;
     for (let i = 0; i < n; i++) {
       const z = -D + RIM + pitch * (i + 0.5);
-      p.box("steel", -W + RIM, W - RIM, s.h * 0.7, s.h, z - BAR / 2, z + BAR / 2);
+      p.roundedBox("steel", -W + RIM, W - RIM, s.h * 0.7, s.h - 0.0005, z - BAR / 2, z + BAR / 2, 0.0015, "top");
     }
-    for (const x of ties(s.w)) p.box("steelDark", x - BAR / 2, x + BAR / 2, s.h * 0.5, s.h * 0.7, -D + RIM, D - RIM);
+    for (const x of ties(s.w)) p.box("steelDark", x - BAR / 2, x + BAR / 2, s.h * 0.4, s.h * 0.7, -D + RIM, D - RIM);
   },
 };

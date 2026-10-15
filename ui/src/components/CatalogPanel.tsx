@@ -5,7 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight, Search } from "lucide-react";
-import { CATALOG, CATEGORIES, kindOf, placementOf, wallSnapReach, type CatalogEntry } from "../kinds/registry";
+import { CATALOG, CATEGORIES, kindOf, placementOf, SUBGROUPS, wallSnapReach, type CatalogEntry, type CategoryId, type GroupId } from "../kinds/registry";
 import { drainText, waterText } from "../model/equipment";
 import { bounds, convexOverlap, footprint, snapItem } from "../model/geometry";
 import { itemFromCatalog } from "../model/project";
@@ -31,14 +31,26 @@ const PREFETCH_DELAY_MS = 150;
 const dims = (e: CatalogEntry) => `${e.width} × ${e.depth} × ${e.height}`;
 
 /**
- * True when every word of the query occurs in the entry's name, category, dimensions or tags. "x" and
- * "×" are the same, so "800x900" finds 800 × 900 × 900.
+ * True when every word of the query occurs in the entry's name, category, sub-group, dimensions or
+ * tags. "x" and "×" are the same, so "800x900" finds 800 × 900 × 900.
  */
 export function matchesQuery(entry: CatalogEntry, query: string, t: typeof translate = translate): boolean {
   const words = query.toLocaleLowerCase().replace(/×/g, "x").split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const hay = [t(entry.name), t(`category.${entry.category}` as const), `${entry.width}x${entry.depth}x${entry.height}`, ...(entry.tags ?? [])].join(" ").toLocaleLowerCase();
+  const hay = [t(entry.name), t(`category.${entry.category}` as const), ...(entry.group ? [t(`group.${entry.group}` as const)] : []), `${entry.width}x${entry.depth}x${entry.height}`, ...(entry.tags ?? [])]
+    .join(" ")
+    .toLocaleLowerCase();
   return words.every((w) => hay.includes(w));
+}
+
+/**
+ * The entries of a sidebar group split into its sub-groups (in their order, empty ones left out),
+ * or one part without a heading for a group without sub-groups.
+ */
+export function subgroupsOf(category: CategoryId, entries: readonly CatalogEntry[]): { id: GroupId | null; entries: CatalogEntry[] }[] {
+  const order = SUBGROUPS[category];
+  if (!order) return [{ id: null, entries: [...entries] }];
+  return order.map((id) => ({ id, entries: entries.filter((e) => e.group === id) })).filter((p) => p.entries.length > 0);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -182,15 +194,24 @@ export function CatalogPanel() {
                   <span>{t(`category.${g.id}` as const)}</span>
                   <span className="count">{g.entries.length}</span>
                 </button>
-                {open && (
-                  <ul className="cat-list">
-                    {g.entries.map((e) => (
-                      <li key={e.id}>
-                        <CatalogRow entry={e} events={rowEvents} described={preview?.entry.id === e.id} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {open &&
+                  subgroupsOf(g.id, g.entries).map((part) => (
+                    <div key={part.id ?? "all"} className="cat-part" role={part.id ? "group" : undefined} aria-label={part.id ? t(`group.${part.id}` as const) : undefined}>
+                      {part.id && (
+                        <h3 className="cat-subhead" aria-hidden>
+                          <span>{t(`group.${part.id}` as const)}</span>
+                          <span className="count">{part.entries.length}</span>
+                        </h3>
+                      )}
+                      <ul className="cat-list">
+                        {part.entries.map((e) => (
+                          <li key={e.id}>
+                            <CatalogRow entry={e} events={rowEvents} described={preview?.entry.id === e.id} />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
               </section>
             );
           })}

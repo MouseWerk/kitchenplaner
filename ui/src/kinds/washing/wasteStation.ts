@@ -3,9 +3,10 @@
 // (one bin per 400 mm of width, for food waste, packaging and residual waste).
 
 import { FEET, INSET as FRONT_INSET, LEG as FRONT_LEG, TOP as FRONT_TOP } from "../parts/elevation";
-import { DOOR, SHEET, TOP, type Hole } from "../parts/mesh";
+import { BODY_RADIUS, BOWL_RADIUS, DOOR, foot, SHEET, TOP, TOP_RADIUS, type Hole } from "../parts/mesh";
 import { upstandLine } from "../parts/plan";
 import type { KindDef } from "../types";
+import { funnel, wasteBin } from "./details";
 
 /** Width each bin takes (mm). */
 const BIN_PITCH = 400;
@@ -64,26 +65,26 @@ export const wasteStation: KindDef = {
       [-s.w / 2, -s.w / 2 + SHEET * 2],
       [s.w / 2 - SHEET * 2, s.w / 2],
     ]) {
-      p.box("steel", a, b, FOOT_H, s.h - TOP, zb, zf - DOOR);
-      for (const z of [zb + 0.03, zf - DOOR - 0.03]) p.cyl("rubber", (a + b) / 2, z, 0, FOOT_H, SHEET);
+      p.roundedBox("steel", a, b, FOOT_H, s.h - TOP, zb, zf - DOOR, BODY_RADIUS, "vertical");
+      for (const z of [zb + 0.03, zf - DOOR - 0.03]) foot(p, (a + b) / 2, z, FOOT_H, SHEET);
     }
-    p.box("steel", -s.w / 2, s.w / 2, FOOT_H, s.h - TOP, zb, zb + SHEET);
+    p.roundedBox("steel", -s.w / 2 + SHEET * 2, s.w / 2 - SHEET * 2, FOOT_H, s.h - TOP, zb, zb + SHEET, BODY_RADIUS, "vertical");
     p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, holes);
-    p.box("steel", -s.w / 2, s.w / 2, s.h - TOP - 0.06, s.h - TOP, zf - DOOR, zf - DOOR + SHEET);
+    // The apron under the top at the front, rounded over its lower edge.
+    p.roundedBox("steel", -s.w / 2, s.w / 2, s.h - TOP - 0.06, s.h - TOP + TOP_RADIUS, zf - DOOR, zf - DOOR + SHEET, BODY_RADIUS);
     const r = Math.min(BIN_R / 1000, s.w / n / 2 - 0.03, s.d / 2 - 0.05);
     const binTop = Math.min(BIN_H / 1000, s.h - TOP - FUNNEL - 0.02);
     for (const h of holes) {
       const x = (h.x0 + h.x1) / 2;
-      const y0 = s.h - TOP - FUNNEL;
-      p.box("steel", h.x0, h.x1, y0, s.h - TOP, h.z0, h.z0 + SHEET);
-      p.box("steel", h.x0, h.x1, y0, s.h - TOP, h.z1 - SHEET, h.z1);
-      p.box("steel", h.x0, h.x0 + SHEET, y0, s.h - TOP, h.z0, h.z1);
-      p.box("steel", h.x1 - SHEET, h.x1, y0, s.h - TOP, h.z0, h.z1);
-      // The bin on castors, its rim and a grip at the front.
-      p.cyl("panelDark", x, 0, 0.04, binTop - 0.02, r);
-      p.cyl("rubber", x, 0, binTop - 0.02, binTop, r + 0.008);
-      p.box("rubber", x - 0.05, x + 0.05, binTop - 0.08, binTop - 0.06, r - 0.01, r + 0.02);
-      for (const dx of [-r * 0.6, r * 0.6]) p.cyl("rubber", x + dx, r * 0.4, 0, 0.04, 0.02);
+      funnel(p, h.x0, h.x1, h.z0, h.z1, s.h - TOP - FUNNEL, s.h, BOWL_RADIUS);
+      // The bin on castors with a grip at the front.
+      wasteBin(p, x, 0, binTop, r);
+      p.tube("knob", [
+        { x: x - 0.05, y: binTop - 0.07, z: r * 0.92 },
+        { x: x - 0.05, y: binTop - 0.07, z: r + 0.015 },
+        { x: x + 0.05, y: binTop - 0.07, z: r + 0.015 },
+        { x: x + 0.05, y: binTop - 0.07, z: r * 0.92 },
+      ], 0.007, { bend: 0.012 });
     }
   },
 };

@@ -2,11 +2,13 @@
 // drop-down door with a window and a bar handle, and its own thermostats at the right.
 
 import { INSET, PANEL } from "../parts/elevation";
-import { DOOR, GAP } from "../parts/mesh";
+import { DOOR, DOOR_RADIUS, GAP } from "../parts/mesh";
 import { INSET as PLAN_INSET } from "../parts/plan";
 import { MM_PER_UNIT } from "../../three/shared";
 import type { KindDef } from "../types";
 import { standFront, standMesh, unitFeet } from "./common";
+import { doorWindow, pilot } from "./details";
+import { controlPanel, housing } from "../parts/details";
 
 /** Width of the thermostat panel at the right (m). */
 const PANEL_W = 0.2;
@@ -42,29 +44,52 @@ function makeDeckOven(kind: string, decks: number): KindDef {
       standMesh(p, s, elev);
       const y0 = unitFeet(p, s, elev > 0);
       const zf = s.d / 2;
-      p.box("steel", -s.w / 2, s.w / 2, y0, s.h, -s.d / 2, zf - DOOR);
+      housing(p, "steel", -s.w / 2, s.w / 2, y0, s.h, -s.d / 2, zf - DOOR);
       const panelW = Math.min(PANEL_W, s.w / 4);
       const dx1 = s.w / 2 - panelW;
       const ch = (s.h - y0) / decks;
+      const zFace = zf - DOOR / 2;
       for (let i = 0; i < decks; i++) {
         const b = y0 + ch * i;
         const t = b + ch;
         // Drop-down door with a wide window and the handle bar along its top.
-        p.box("steel", -s.w / 2 + GAP, dx1 - GAP, b + GAP, t - GAP, zf - DOOR, zf - DOOR / 2);
+        p.roundedBox("steel", -s.w / 2 + GAP * 2, dx1 - GAP, b + GAP * 2, t - GAP * 2, zf - DOOR, zFace, DOOR_RADIUS * 2, "top", "z");
         const wy0 = b + Math.min(0.08, ch * 0.2);
         const wy1 = t - Math.min(0.11, ch * 0.3);
-        if (wy1 > wy0) p.box("glassDark", -s.w / 2 + 0.08, dx1 - 0.08, wy0, wy1, zf - DOOR / 2, zf - DOOR / 2 + 0.002);
+        if (wy1 > wy0) doorWindow(p, -s.w / 2 + 0.08, dx1 - 0.08, wy0, wy1, zFace);
         const len = (dx1 + s.w / 2) * 0.7;
-        p.barHandle("x", (-s.w / 2 + dx1) / 2 - len / 2, (-s.w / 2 + dx1) / 2 + len / 2, t - Math.min(0.05, ch * 0.15), zf - DOOR / 2, zf);
-        // The panel with the thermostats for the top and the bottom heat, and a thermometer.
-        const zFace = zf - DOOR / 2;
-        p.box("panelDark", dx1 + GAP, s.w / 2 - GAP, b + GAP * 2, t - GAP * 2, zf - DOOR, zFace);
+        p.barHandle("x", (-s.w / 2 + dx1) / 2 - len / 2, (-s.w / 2 + dx1) / 2 + len / 2, t - Math.min(0.05, ch * 0.15), zFace, zf);
+        // The panel with the thermostats for the top and the bottom heat, a thermometer and a
+        // pilot light.
+        controlPanel(p, dx1 + GAP, s.w / 2 - GAP * 2, b + GAP * 2, t - GAP * 2, zf - DOOR, zFace);
         const px = (dx1 + s.w / 2) / 2;
         const kr = Math.min(0.022, ch * 0.08, panelW / 6);
-        p.knob(px - panelW * 0.22, b + ch * 0.4, zFace, zf, kr);
-        p.knob(px + panelW * 0.22, b + ch * 0.4, zFace, zf, kr);
-        p.box("glassDark", px - panelW * 0.3, px + panelW * 0.3, b + ch * 0.62, b + ch * 0.8, zFace, zFace + 0.003);
+        p.knob(px - panelW * 0.22, b + ch * 0.35, zFace, zf, kr);
+        p.knob(px + panelW * 0.22, b + ch * 0.35, zFace, zf, kr);
+        const gr = Math.min(0.035, ch * 0.12, panelW * 0.25);
+        p.lathe("satin", px, b + ch * 0.68, zFace, [
+          [0, 0],
+          [gr, 0],
+          [gr, 0.005],
+          [gr * 0.88, 0.006],
+          [0, 0.006],
+        ], { axis: "z" });
+        p.lathe("panel", px, b + ch * 0.68, zFace + 0.006, [
+          [0, 0],
+          [gr * 0.82, 0],
+          [gr * 0.82, 0.0008],
+          [0, 0.0008],
+        ], { axis: "z" });
+        pilot(p, px, b + ch * 0.15, zFace);
       }
+      // The steam vent of each chamber on the top at the back.
+      p.lathe("satin", -s.w / 4, s.h - 0.004, -s.d / 2 + 0.08, [
+        [0, 0],
+        [0.03, 0],
+        [0.03, 0.002],
+        [0.022, 0.004],
+        [0, 0.004],
+      ]);
     },
   };
 }

@@ -22,6 +22,34 @@ import { vegCutter } from "./vegCutter";
 import { wallTable } from "./wallTable";
 import { wallTableOpen } from "./wallTableOpen";
 import { worktable } from "./worktable";
+import { stickBlender } from "./stickBlender";
+import { bowlCutter } from "./bowlCutter";
+import { spiralMixer } from "./spiralMixer";
+import { dividerRounder } from "./dividerRounder";
+import { breadSlicer } from "./breadSlicer";
+import { proofer } from "./proofer";
+import { tenderiser } from "./tenderiser";
+import { boneSaw } from "./boneSaw";
+import { burgerPress } from "./burgerPress";
+import { vacuumTumbler } from "./vacuumTumbler";
+import { sauceDispenser } from "./sauceDispenser";
+import { cookingBlender } from "./cookingBlender";
+import { juicer } from "./juicer";
+import { iceShaver } from "./iceShaver";
+import { temperingMachine } from "./temperingMachine";
+import { pastaMachine } from "./pastaMachine";
+import { labelScale } from "./labelScale";
+import { labelPrinter } from "./labelPrinter";
+import { stoneTable } from "./stoneTable";
+import { pastryTable } from "./pastryTable";
+import { butcherBlock } from "./butcherBlock";
+import { cuttingTable } from "./cuttingTable";
+import { gnTable } from "./gnTable";
+import { tableHandwash } from "./tableHandwash";
+import { mobileGnTable } from "./mobileGnTable";
+import { prepTrolley } from "./prepTrolley";
+import { machineStand } from "./machineStand";
+import { boardRack } from "./boardRack";
 
 export const prep: Area = {
   entries,
@@ -40,6 +68,16 @@ export const prep: Area = {
     cabinetDrawers,
     drawers,
     heatedCabinet,
+    stoneTable,
+    pastryTable,
+    butcherBlock,
+    cuttingTable,
+    gnTable,
+    tableHandwash,
+    mobileGnTable,
+    prepTrolley,
+    machineStand,
+    boardRack,
     vegCutter,
     slicer,
     mixerTable,
@@ -52,5 +90,23 @@ export const prep: Area = {
     platformScale,
     doughSheeter,
     peeler,
+    stickBlender,
+    bowlCutter,
+    spiralMixer,
+    dividerRounder,
+    breadSlicer,
+    proofer,
+    tenderiser,
+    boneSaw,
+    burgerPress,
+    vacuumTumbler,
+    sauceDispenser,
+    cookingBlender,
+    juicer,
+    iceShaver,
+    temperingMachine,
+    pastaMachine,
+    labelScale,
+    labelPrinter,
   ],
 };

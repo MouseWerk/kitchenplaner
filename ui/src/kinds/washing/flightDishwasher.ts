@@ -4,7 +4,7 @@
 // of the unit, so it is one long item.
 
 import { LEG as FRONT_LEG } from "../parts/elevation";
-import { LEG, SHEET } from "../parts/mesh";
+import { BODY_RADIUS, LEG, LEG_RADIUS, SHEET, TOP_RADIUS } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { Parts, Size } from "../parts/mesh";
 import type { KindDef } from "../types";
@@ -42,26 +42,43 @@ function beltSection(p: Parts, s: Size, span: Span, endAt: number): void {
   for (const x of [span.x0 + 0.06, span.x1 - 0.06]) {
     if (x < span.x0 || x > span.x1) continue;
     for (const z of [z0 + LEG / 2, z1 - LEG / 2]) {
-      p.box("steelDark", x - LEG / 2, x + LEG / 2, 0, frameTop, z - LEG / 2, z + LEG / 2);
-      p.cyl("rubber", x, z, 0, 0.012, LEG * 0.6);
+      // Legs on plain rubber pads: the tunnel's adjustable feet are enough detail down there.
+      p.roundedBox("steelDark", x - LEG / 2, x + LEG / 2, 0.012, frameTop - 0.12, z - LEG / 2, z + LEG / 2, LEG_RADIUS, "vertical");
+      p.lathe("rubber", x, 0, z, [
+        [0, 0],
+        [LEG * 0.55, 0],
+        [LEG * 0.6, 0.006],
+        [LEG * 0.6, 0.012],
+        [0, 0.012],
+      ]);
     }
   }
-  // Frame with the returning belt below and the belt on top.
-  p.box("steel", span.x0, span.x1, frameTop - 0.12, frameTop, z0, z1);
-  p.box("plate", span.x0, span.x1, frameTop, CONVEYOR, z0 + SHEET, z1 - SHEET);
+  // Frame with the returning belt below and the belt on top: dark slats with a joint between.
+  p.roundedBox("steel", span.x0, span.x1, frameTop - 0.12, frameTop, z0, z1, BODY_RADIUS);
+  p.box("plate", span.x0, span.x1, frameTop, CONVEYOR - 0.001, z0 + SHEET, z1 - SHEET);
   const n = Math.floor((span.x1 - span.x0) / FINGER_PITCH);
   for (let i = 1; i <= n; i++) {
     const x = span.x0 + ((span.x1 - span.x0) * i) / (n + 1);
-    p.box("rubber", x - 0.006, x + 0.006, CONVEYOR, CONVEYOR + 0.035, z0 + SHEET * 3, z1 - SHEET * 3);
+    // A row of fingers standing on the belt: one rounded comb across it.
+    p.roundedBox("rubber", x - 0.006, x + 0.006, CONVEYOR - 0.002, CONVEYOR + 0.035, z0 + SHEET * 3, z1 - SHEET * 3, 0.004, "top");
+    p.box("slot", x + FINGER_PITCH / 2 - 0.002, x + FINGER_PITCH / 2 + 0.002, CONVEYOR - 0.0015, CONVEYOR, z0 + SHEET, z1 - SHEET);
   }
-  // Side guards along the front and the back, the turning roller at the open end.
+  // Side guards along the front and the back, their top edges rounded; the turning roller at the
+  // open end.
   for (const [a, b] of [
     [-s.d / 2, z0 + SHEET],
     [z1 - SHEET, s.d / 2],
   ]) {
-    p.box("steel", span.x0, span.x1, frameTop - 0.12, CONVEYOR + GUARD, a, b);
+    p.roundedBox("steel", span.x0, span.x1, frameTop - 0.12, CONVEYOR + GUARD, a, b, TOP_RADIUS, "top");
   }
-  p.rod("steelDark", "z", endAt, frameTop - 0.06, 0, z1 - z0, 0.06);
+  p.lathe("steelDark", endAt, frameTop - 0.06, z0 + SHEET, [
+    [0, 0],
+    [0.055, 0],
+    [0.06, 0.005],
+    [0.06, z1 - z0 - SHEET * 2 - 0.005],
+    [0.055, z1 - z0 - SHEET * 2],
+    [0, z1 - z0 - SHEET * 2],
+  ], { axis: "z" });
 }
 
 export const flightDishwasher: KindDef = {

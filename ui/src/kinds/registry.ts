@@ -14,16 +14,27 @@ import { prep } from "./prep";
 import { worktable } from "./prep/worktable";
 import { serving } from "./serving";
 import { storage } from "./storage";
-import type { Area, CatalogEntry, CategoryId, KindDef, Placement, Variant } from "./types";
+import type { Area, CatalogEntry, CategoryId, GroupId, KindDef, Placement, Variant } from "./types";
 import { ventilation } from "./ventilation";
 import { washing } from "./washing";
 
-export type { Area, CatalogEntry, CategoryId, Energy, KindDef, Placement, Variant } from "./types";
+export type { Area, CatalogEntry, CategoryId, Energy, GroupId, KindDef, Placement, Variant } from "./types";
 
 export const AREAS: readonly Area[] = [cooking, cooling, washing, prep, serving, storage, ventilation, building];
 
 /** The sidebar groups in their order; groups without entries are not shown. */
 export const CATEGORIES: readonly CategoryId[] = ["cooking", "cooling", "washing", "tables", "prep", "serving", "storage", "ventilation", "building"];
+
+/**
+ * The sub-groups of the large sidebar groups in their order there. Every entry of such a group
+ * names one of them (`CatalogEntry.group`); the other groups have none.
+ */
+export const SUBGROUPS: Partial<Record<CategoryId, readonly GroupId[]>> = {
+  cooking: ["line900", "line700", "lineAccessories", "bulkCooking", "ovens", "specialities", "tableTop"],
+  cooling: ["coolCabinets", "coolCounters", "blastChillers", "coolDisplays", "ice", "coldRooms"],
+  washing: ["sinks", "hygiene", "dishMachines", "dishLine", "cleaning"],
+  serving: ["serveCounters", "selfService", "coffee", "bar"],
+};
 
 export const CATALOG: readonly CatalogEntry[] = AREAS.flatMap((a) => a.entries);
 

@@ -2,9 +2,10 @@
 // both sides at every level, for dish racks and GN trays between the dish line and the stores.
 
 import { INSET as FRONT_INSET, LEG as FRONT_LEG } from "../parts/elevation";
-import { LEG } from "../parts/mesh";
+import { BODY_RADIUS, castor, LEG, LEG_RADIUS, TOP_RADIUS } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
+import { plasticRack } from "./details";
 
 /** Levels of runners, from this height above the floor to this distance below the top (m). */
 const LEVELS = 7;
@@ -17,8 +18,6 @@ const BASE = 0.14;
 const RACK = 0.5;
 const RACK_H = 0.1;
 const LOADED = 2;
-/** Wire distance of a dish rack as drawn (m). */
-const RACK_PITCH = 0.04;
 /** How far a runner reaches into the trolley from its post (m). */
 const RUNNER = 0.02;
 
@@ -53,32 +52,37 @@ export const rackTrolley: KindDef = {
     const x1 = s.w / 2;
     const z0 = -s.d / 2;
     const z1 = s.d / 2;
-    // Castors under the corners: a fork and a wheel.
-    for (const x of [x0 + WHEEL, x1 - WHEEL]) {
-      for (const z of [z0 + LEG, z1 - LEG]) {
-        p.box("handle", x - 0.025, x + 0.025, WHEEL, BASE - 0.03, z - 0.02, z + 0.02);
-        p.rod("rubber", "z", x, WHEEL, z, 0.03, WHEEL);
-      }
-    }
-    // Base frame, corner posts and top frame.
-    p.box("steel", x0, x1, BASE - 0.03, BASE, z0, z0 + LEG);
-    p.box("steel", x0, x1, BASE - 0.03, BASE, z1 - LEG, z1);
-    p.box("steel", x0, x0 + LEG, BASE - 0.03, BASE, z0 + LEG, z1 - LEG);
-    p.box("steel", x1 - LEG, x1, BASE - 0.03, BASE, z0 + LEG, z1 - LEG);
-    for (const x of [x0, x1 - LEG]) for (const z of [z0, z1 - LEG]) p.box("steel", x, x + LEG, BASE, s.h, z, z + LEG);
-    p.box("steel", x0, x1, s.h - 0.03, s.h, z0, z0 + LEG);
-    p.box("steel", x0, x1, s.h - 0.03, s.h, z1 - LEG, z1);
-    // Push bar along the back, between the posts.
-    p.rod("handle", "x", 0, s.h - 0.15, z0 + LEG / 2, s.w - 2 * LEG, 0.014);
+    // Swivel castors under the corners.
+    for (const x of [x0 + WHEEL, x1 - WHEEL]) for (const z of [z0 + WHEEL, z1 - WHEEL]) castor(p, x, z, WHEEL, BASE - 0.03);
+    // Base frame, corner posts and top frame of square tube, the corners rounded.
+    const tube = (a: number, b: number, c: number, d: number, e: number, f: number) => p.roundedBox("steel", a, b, c, d, e, f, BODY_RADIUS);
+    tube(x0, x1, BASE - 0.03, BASE, z0, z0 + LEG);
+    tube(x0, x1, BASE - 0.03, BASE, z1 - LEG, z1);
+    tube(x0 + 0.001, x0 + LEG, BASE - 0.03, BASE - 0.001, z0 + LEG, z1 - LEG);
+    tube(x1 - LEG, x1 - 0.001, BASE - 0.03, BASE - 0.001, z0 + LEG, z1 - LEG);
+    for (const x of [x0, x1 - LEG]) for (const z of [z0, z1 - LEG]) p.roundedBox("steel", x, x + LEG, BASE, s.h - 0.03, z, z + LEG, LEG_RADIUS, "vertical");
+    p.roundedBox("steel", x0, x1, s.h - 0.03, s.h, z0, z0 + LEG, TOP_RADIUS);
+    p.roundedBox("steel", x0, x1, s.h - 0.03, s.h, z1 - LEG, z1, TOP_RADIUS);
+    // Push handle along the back, between the posts, on bent ends.
+    p.tube(
+      "handle",
+      [
+        { x: x0 + LEG, y: s.h - 0.15, z: z0 + LEG / 2 },
+        { x: x0 + LEG + 0.03, y: s.h - 0.15, z: z0 + LEG / 2 },
+        { x: x1 - LEG - 0.03, y: s.h - 0.15, z: z0 + LEG / 2 },
+        { x: x1 - LEG, y: s.h - 0.15, z: z0 + LEG / 2 },
+      ],
+      0.014,
+    );
     // Side rails that carry the runners, and the runners at every level.
     for (const [a, b] of [
       [x0 + LEG / 2, x0 + LEG + RUNNER],
       [x1 - LEG - RUNNER, x1 - LEG / 2],
     ]) {
-      for (const y of levels(s.h)) p.box("steelDark", a, b, y - 0.004, y + 0.004, z0 + LEG, z1 - LEG);
+      for (const y of levels(s.h)) p.roundedBox("steelDark", a, b, y - 0.004, y + 0.004, z0 + LEG, z1 - LEG, 0.002, "vertical", "z");
     }
     // Dish racks on the lowest levels.
     const rack = Math.min(RACK, s.w - 2 * LEG - 0.02, s.d - 2 * LEG);
-    for (const y of levels(s.h).slice(0, LOADED)) p.wireBox(-rack / 2, rack / 2, y + 0.004, y + 0.004 + RACK_H, -rack / 2, rack / 2, RACK_PITCH);
+    for (const y of levels(s.h).slice(0, LOADED)) plasticRack(p, 0, 0, y + 0.004, rack, RACK_H);
   },
 };

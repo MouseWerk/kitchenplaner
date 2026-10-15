@@ -2,10 +2,10 @@
 // doors below (the oil drain container behind them). `fryer` has two tanks from 380 mm width,
 // `fryerSingle` one tank over the whole width with two baskets.
 
-import { BASKET_PITCH, BOWL_RADIUS, CONTROLS, SHEET } from "../parts/mesh";
+import { BOWL_RADIUS, CONTROLS, SHEET } from "../parts/mesh";
 import { CONTROL_STRIP, controlStrip, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
-import { lineFront, lineModule } from "./common";
+import { basketPitch, lineFront, lineModule } from "./common";
 
 /** From this width the twin fryer has two tanks (m). */
 const FRYER_TWIN_WIDTH = 0.38;
@@ -60,9 +60,10 @@ function makeFryer(kind: string, twin: boolean): KindDef {
         const inset = 0.02;
         const kw = (x1 - x0 - inset * (k + 1)) / k;
         const kz1 = z1 - 0.07;
+        const { pitch, wallPitch } = basketPitch(n * k, kw, kz1 - z0 - 0.05);
         for (let j = 0; j < k; j++) {
           const kx = x0 + inset + j * (kw + inset);
-          p.wireBox(kx, kx + kw, s.h - 0.15, s.h - 0.03, z0 + 0.05, kz1, BASKET_PITCH);
+          p.wireBox(kx, kx + kw, s.h - 0.15, s.h - 0.03, z0 + 0.05, kz1, pitch, { wallPitch });
           // Handle: a bent bracket up from the basket's front and a black grip towards the front.
           const cx = kx + kw / 2;
           const gy = s.h - 0.02;

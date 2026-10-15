@@ -3,7 +3,9 @@
 // a sight glass and the disposal connection at the front.
 
 import { FEET } from "../parts/elevation";
+import { foot } from "../parts/mesh";
 import type { KindDef } from "../types";
+import { flangedPipe, manholeCover, valveLever } from "./pipes";
 
 // Sizes (m).
 /** Height of the feet. */
@@ -62,33 +64,30 @@ export const greaseSeparator: KindDef = {
     const zt = D - DISPOSAL;
     const top = s.h - COVER;
     for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const x = sx * (W - 0.06);
-        const z = sz * (sz > 0 ? zt - 0.06 : D - 0.06);
-        p.box("steelDark", x - 0.025, x + 0.025, 0.012, LEGS, z - 0.025, z + 0.025);
-        p.cyl("rubber", x, z, 0, 0.012, 0.03);
-      }
+      for (const sz of [-1, 1]) foot(p, sx * (W - 0.06), sz > 0 ? zt - 0.06 : -D + 0.06, LEGS + 0.01, 0.03);
     }
-    p.box("steel", -W, W, LEGS, top, -D, zt);
-    // A welded seam around the tank's top edge.
-    p.box("steelDark", -W - 0.004, W + 0.004, top - 0.03, top - 0.02, -D, zt + 0.004);
+    // The tank: a welded stainless box with rounded upright corners and a folded top edge.
+    p.roundedBox("steel", -W, W, LEGS, top - 0.03, -D, zt, 0.008, "vertical");
+    p.roundedBox("steel", -W - 0.004, W + 0.004, top - 0.03, top, -D, zt + 0.004, 0.003);
     const { xs, r: cr } = covers(s.w, s.d);
-    for (const x of xs) {
-      p.cyl("steelDark", x, 0, top, top + COVER * 0.4, cr);
-      p.cyl("steel", x, 0, top + COVER * 0.4, top + COVER * 0.6, cr * 0.85);
-      p.rod("handle", "x", x, s.h - 0.01, 0, cr, 0.01);
-    }
-    // Inlet (left, higher) and outlet (right, lower) with flanges at the tank.
-    const yIn = top - 0.2;
-    const yOut = top - 0.26;
-    p.rod("panelDark", "x", -s.w / 2 + PIPE_OUT / 2, yIn, 0, PIPE_OUT, PIPE);
-    p.rod("steelDark", "x", -W - 0.01, yIn, 0, 0.02, PIPE * 1.4);
-    p.rod("panelDark", "x", s.w / 2 - PIPE_OUT / 2, yOut, 0, PIPE_OUT, PIPE);
-    p.rod("steelDark", "x", W + 0.01, yOut, 0, 0.02, PIPE * 1.4);
-    // Sight glass and the disposal connection with its valve lever.
-    p.box("glassDark", -0.025, 0.025, LEGS + 0.15, top - 0.25, zt, zt + 0.003);
+    for (const x of xs) manholeCover(p, x, top, 0, cr, COVER);
+    // Inlet (left, higher) and outlet (right, lower), each a pipe with a flange at the tank.
+    flangedPipe(p, -s.w / 2, -W, top - 0.2, 0, PIPE);
+    flangedPipe(p, s.w / 2, W, top - 0.26, 0, PIPE);
+    // Sight glass in a turned frame, and the disposal connection with its valve lever.
+    p.plate("satin", -0.035, 0.035, LEGS + 0.14, top - 0.24, zt - 0.001, zt + 0.004, 0.012);
+    p.plate("glassDark", -0.025, 0.025, LEGS + 0.15, top - 0.25, zt + 0.004, zt + 0.006, 0.008);
     const xd = -W + 0.2;
-    p.rod("steelDark", "z", xd, LEGS + 0.12, zt + DISPOSAL / 2, DISPOSAL, 0.04);
-    p.box("knob", xd - 0.012, xd + 0.012, LEGS + 0.16, LEGS + 0.26, D - 0.02, D);
+    p.lathe("satin", xd, LEGS + 0.12, zt - 0.001, [
+      [0, 0],
+      [0.045, 0],
+      [0.045, 0.012],
+      [0.032, 0.014],
+      [0.032, DISPOSAL - 0.012],
+      [0.04, DISPOSAL - 0.01],
+      [0.04, DISPOSAL - 0.001],
+      [0, DISPOSAL - 0.001],
+    ], { axis: "z" });
+    valveLever(p, xd, LEGS + 0.12, D - 0.02, D, 0.12);
   },
 };
