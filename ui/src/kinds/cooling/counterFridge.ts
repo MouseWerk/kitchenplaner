@@ -4,6 +4,7 @@
 // The freezer counter carries the frost strip under the handle of every door.
 
 import { INSET as FRONT_INSET, TOP as FRONT_TOP, type Front } from "../parts/elevation";
+import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
 import { PLINTH, plinth, TOP, type Parts, type Size } from "../parts/mesh";
 import { INSET, upstandLine, type PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
@@ -13,10 +14,6 @@ import {
   coolDrawer,
   counterSections,
   FRONT,
-  FROST_STRIP,
-  frostFront,
-  frostMark,
-  frostPlan,
   grille,
   grilleFront,
   hingeLeft,

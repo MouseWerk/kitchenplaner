@@ -37,7 +37,7 @@ export const foodCounter: KindDef = {
   mesh(p, s, item) {
     const holes = holesOf(wells(item.width, item.depth));
     counterBody(p, s, holes);
-    wellPans(p, holes, s.h, ["water", "plate", "water", "steelDark"]);
+    wellPans(p, holes, s.h, ["foodBrown", "foodCream", "foodRed", "foodGreen"]);
     // One thermostat knob per well on the control strip under the top.
     const yc = s.h - TOP - CONTROLS;
     p.box("panelDark", -s.w / 2 + GAP, s.w / 2 - GAP, yc, s.h - TOP - GAP, s.d / 2 - DOOR, s.d / 2 - HANDLE);

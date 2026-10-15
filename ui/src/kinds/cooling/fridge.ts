@@ -3,6 +3,7 @@
 // the display on top. A single door is hinged on the left, a pair opens from the middle. A freezer
 // carries the frost strip with the snowflake on every door, and the snowflake in the plan.
 
+import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
 import { GAP, PLINTH, type Parts, type Size } from "../parts/mesh";
 import type { KindDef } from "../types";
 import {
@@ -15,10 +16,6 @@ import {
   FASCIA_MM,
   fasciaFront,
   FRONT,
-  FROST_STRIP,
-  frostFront,
-  frostMark,
-  frostPlan,
   GLASS_FRAME_MM,
   GRIP_HEIGHT_MM,
   hingeLeft,

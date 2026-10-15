@@ -139,7 +139,7 @@ export function bowlDrain(p: Parts, cx: number, cz: number, yFloor: number, zBac
 
 /** Overflow slot in the back wall of a bowl (m), just under the rim. */
 export function overflow(p: Parts, cx: number, zWall: number, yRim: number): void {
-  p.box("steelDark", cx - 0.03, cx + 0.03, yRim - 0.06, yRim - 0.045, zWall, zWall + 0.002);
+  p.box("slot", cx - 0.03, cx + 0.03, yRim - 0.06, yRim - 0.045, zWall, zWall + 0.002);
 }
 
 /** Pressed grooves in a drainer that lead the water to the bowls (m), along the width. */

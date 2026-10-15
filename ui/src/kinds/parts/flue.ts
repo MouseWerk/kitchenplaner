@@ -23,8 +23,18 @@ const COLLAR_DROP = 0.002;
 const SLOT = 0.008;
 const SLOT_PITCH = 0.016;
 
+/** Where an outlet lies in the item frame (m). */
+export interface FlueBox {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+  y0: number;
+  y1: number;
+}
+
 /** The outlet's extent in the item frame (m): x centred, z from the back, y down from the top. */
-export function flueBox(s: Size): { x0: number; x1: number; z0: number; z1: number; y0: number; y1: number } {
+export function flueBox(s: Size): FlueBox {
   const half = Math.min(FLUE_WIDTH, s.w * FLUE_WIDTH_SHARE) / 2;
   const z0 = -s.d / 2 + Math.min(FLUE_BACK, s.d / 4);
   const z1 = Math.min(z0 + FLUE_DEPTH, 0);
@@ -32,19 +42,19 @@ export function flueBox(s: Size): { x0: number; x1: number; z0: number; z1: numb
 }
 
 /**
- * The outlet in 3D, its parts named "flue": dark slots across it, set into the back of the top,
- * in a steel collar. The collar stops just under the top, so where the outlet is set into a
- * worktop only the slots show, and where the top lies lower (a gas range's burner tray) the
- * outlet stands as a steel block with dark slots.
+ * The outlet in 3D, its parts named "flue": dark slots across it in a steel collar, at the back
+ * of the top (`flueBox`) or, for a kind that draws its own outlet (`flue: false`), in the box
+ * `b`. The collar stops just under the top, so where the outlet is set into a worktop only the
+ * slots show, and where the top lies lower (a gas range's burner tray) the outlet stands as a
+ * steel block with dark slots.
  */
-export function flueMesh(p: Parts, s: Size): void {
-  const b = flueBox(s);
+export function flueMesh(p: Parts, s: Size, b: FlueBox = flueBox(s)): void {
   p.box("steel", b.x0, b.x1, b.y0, b.y1 - COLLAR_DROP, b.z0, b.z1).name = "flue";
   const n = Math.max(1, Math.floor((b.x1 - b.x0) / SLOT_PITCH));
   const pitch = (b.x1 - b.x0) / n;
   for (let i = 0; i < n; i++) {
     const x = b.x0 + pitch * (i + 0.5);
-    p.box("flue", x - SLOT / 2, x + SLOT / 2, b.y0, b.y1, b.z0, b.z1).name = "flue";
+    p.box("slot", x - SLOT / 2, x + SLOT / 2, b.y0, b.y1, b.z0, b.z1).name = "flue";
   }
 }
 

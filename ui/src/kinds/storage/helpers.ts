@@ -44,7 +44,7 @@ export function shelf(p: Parts, deck: Deck, x0: number, x1: number, z0: number, 
   }
   if (deck === "perforated") {
     // A closed sheet punched with staggered rows of short slots: dark marks set into the top
-    // (the `flue` material lies over the face it shares), so it reads as a perforated sheet and
+    // (the `slot` material lies over the face it shares), so it reads as a perforated sheet and
     // never as the open slats of an aluminium shelf.
     p.box("steel", x0 + DECK, x1 - DECK, top - DECK, top, inner0, inner1);
     const rows = Math.max(2, Math.round((inner1 - inner0) / HOLE_ROW));
@@ -58,7 +58,7 @@ export function shelf(p: Parts, deck: Deck, x0: number, x1: number, z0: number, 
       const n = r % 2 === 1 ? cols - 1 : cols;
       for (let c = 0; c < n; c++) {
         const xc = x0 + DECK + colPitch * (c + 0.5) + shift;
-        p.box("flue", xc - colPitch * 0.3, xc + colPitch * 0.3, top - DECK, top, zc - HOLE / 2, zc + HOLE / 2);
+        p.box("slot", xc - colPitch * 0.3, xc + colPitch * 0.3, top - DECK, top, zc - HOLE / 2, zc + HOLE / 2);
       }
     }
     return;

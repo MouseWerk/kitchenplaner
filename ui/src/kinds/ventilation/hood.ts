@@ -5,9 +5,8 @@
 // seams between its sections and the exhaust collars on the plenum, which rise above the canopy
 // into the duct. The filters face down, so they show from below in 3D.
 
-import type * as THREE from "three";
 import { INSET } from "../parts/elevation";
-import { GAP, SHEET, type MaterialId, type Parts, type Size } from "../parts/mesh";
+import { GAP, SHEET, type Parts, type Size } from "../parts/mesh";
 import { cross, INSET as PLAN_INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -69,31 +68,6 @@ function collarZ(d: number, island: boolean): number {
 }
 
 /**
- * A sheet across the width on the 45° fold: its outer face runs from the top at `zTop` down by
- * `run` towards the front (dir 1, +z) or the back (dir -1).
- */
-function foldSheet(p: Parts, mat: MaterialId, x0: number, x1: number, zTop: number, yTop: number, run: number, dir: 1 | -1, t = SHEET): THREE.Mesh {
-  const len = run * Math.SQRT2;
-  const m = p.box(mat, x0, x1, -t / 2, t / 2, -len / 2, len / 2);
-  m.rotation.x = (dir * Math.PI) / 4;
-  const n = Math.SQRT1_2 * (t / 2);
-  m.position.set((x0 + x1) / 2, yTop - run / 2 - n, zTop + (dir * run) / 2 - dir * n);
-  return m;
-}
-
-/**
- * The triangle of a side panel under the fold, as a square turned 45° whose outer edge is the
- * fold; the rest of the square hides in the panel's straight parts. Slightly thinner than the
- * panel so their faces do not fight.
- */
-function sideCorner(p: Parts, x0: number, x1: number, zEdge: number, yTop: number, run: number, dir: 1 | -1): void {
-  const a = run * Math.SQRT2;
-  const m = p.box("steel", x0 + 0.001, x1 - 0.001, -a / 2, a / 2, -a / 2, a / 2);
-  m.rotation.x = Math.PI / 4;
-  m.position.set((x0 + x1) / 2, yTop - run, zEdge - dir * run);
-}
-
-/**
  * A bank of grease filters facing down, from z0 to z1 at height y (m): a frame cassette per
  * filter with two baffles under it.
  */
@@ -122,14 +96,14 @@ function canopy(p: Parts, { w, d, h }: Size, island: boolean): void {
   p.box("steel", -w / 2, w / 2, h - SHEET, h, topZ0, zf - sl);
   const ends: [number, 1 | -1][] = island ? [[zf, 1], [zb, -1]] : [[zf, 1]];
   for (const [z, dir] of ends) {
-    foldSheet(p, "steel", -w / 2, w / 2, z - dir * sl, h, sl, dir);
+    p.slope("steel", -w / 2, w / 2, z - dir * sl, h, sl, dir);
     p.box("steel", -w / 2, w / 2, 0, h - sl, Math.min(z, z - dir * SHEET), Math.max(z, z - dir * SHEET));
     // The crease of the fold and the rolled lower edge catch the light along the skirt.
     p.rod("steelDark", "x", 0, h - sl, z - dir * ROLL * 0.3, w, ROLL * 0.6);
     p.rod("steelDark", "x", 0, ROLL, z + dir * (EDGE - ROLL), w, ROLL);
     for (const x of xs) {
       p.box("steel", x, x + SHEET, 0, h - sl, Math.min(z, z - dir * sl), Math.max(z, z - dir * sl));
-      sideCorner(p, x, x + SHEET, z, h, sl, dir);
+      p.chamferCorner("steel", x, x + SHEET, z, h, sl, dir);
     }
   }
   if (!island) p.box("steel", -w / 2, w / 2, 0, h, -d / 2, -d / 2 + SHEET);
@@ -142,7 +116,7 @@ function canopy(p: Parts, { w, d, h }: Size, island: boolean): void {
   for (const x of seamXs(w)) {
     p.box("steelDark", x - sw, x + sw, h - 0.001, h + SEAM, topZ0, zf - sl);
     for (const [z, dir] of ends) {
-      const m = foldSheet(p, "steelDark", x - sw, x + sw, z - dir * sl, h, sl, dir, 0.002);
+      const m = p.slope("steelDark", x - sw, x + sw, z - dir * sl, h, sl, dir, 0.002);
       m.position.y += Math.SQRT1_2 * SEAM;
       m.position.z += dir * Math.SQRT1_2 * SEAM;
       p.box("steelDark", x - sw, x + sw, ROLL * 2, h - sl, Math.min(z - dir * 0.001, z + dir * SEAM), Math.max(z - dir * 0.001, z + dir * SEAM));
@@ -231,7 +205,7 @@ function makeHood(kind: string, island: boolean): KindDef {
       for (const x of collarXs(w)) {
         p.cyl("steelDark", x, zc, h, h + 0.01, COLLAR_R + 0.02);
         p.cyl("steel", x, zc, h, h + rise - 0.002, COLLAR_R);
-        p.cyl("flue", x, zc, h + rise - 0.03, h + rise, COLLAR_R - 0.01);
+        p.cyl("slot", x, zc, h + rise - 0.03, h + rise, COLLAR_R - 0.01);
       }
       // Switch panel for the lights and the fan on the front skirt, right.
       const sx1 = w / 2 - SWITCHES.inset;

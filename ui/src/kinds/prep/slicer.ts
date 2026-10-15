@@ -5,26 +5,17 @@
 // elevation draw the blade as the 3D model's disc seen from above and from the front, so all
 // three views agree.
 
+import { discFrame, discOutline, type V3 } from "../parts/disc";
 import type { Size } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { machineFeet, MACHINE_FOOT, mBox, mCircle, metres, mLine, pRect } from "./common";
 
-type V3 = readonly [number, number, number];
-
 /** Inclination of the blade from upright and its turn towards the front (radians). */
 const TILT = (40 * Math.PI) / 180;
 const TURN = (25 * Math.PI) / 180;
-/** The blade's normal: to the carriage at the left, up, and a little to the front. */
-const N: V3 = [-Math.cos(TILT) * Math.cos(TURN), Math.sin(TILT), Math.cos(TILT) * Math.sin(TURN)];
-/**
- * Two directions in the blade's plane, as `Parts.bar` lays a disc: `ACROSS` level, `SLOPE` the
- * line of steepest slope. The disc's outline is centre + r (cos a ACROSS + sin a SLOPE).
- */
-const ACROSS: V3 = (() => {
-  const l = Math.hypot(N[0], N[2]);
-  return [N[2] / l, 0, -N[0] / l];
-})();
-const SLOPE: V3 = [ACROSS[1] * N[2] - ACROSS[2] * N[1], ACROSS[2] * N[0] - ACROSS[0] * N[2], ACROSS[0] * N[1] - ACROSS[1] * N[0]];
+/** The blade's plane: its normal points to the carriage at the left, up, and a little to the front. */
+const BLADE = discFrame([-Math.cos(TILT) * Math.cos(TURN), Math.sin(TILT), Math.cos(TILT) * Math.sin(TURN)]);
+const N = BLADE.n;
 /** Thickness of the guard ring, the blade and the centre cover along the normal (m). */
 const RING_T = 0.012;
 const BLADE_T = 0.004;
@@ -32,13 +23,9 @@ const COVER_T = 0.008;
 /** Radius of the hub that carries the blade out of the motor housing (m). */
 const HUB = 0.035;
 
-/** Points of the outline of a disc of radius `r` round `c`, shifted by `t` along the normal. */
-function disc(c: V3, r: number, t = 0, n = 32): V3[] {
-  return Array.from({ length: n + 1 }, (_, i) => {
-    const a = (i / n) * Math.PI * 2;
-    const [ca, sa] = [Math.cos(a) * r, Math.sin(a) * r];
-    return [0, 1, 2].map((k) => c[k] + ca * ACROSS[k] + sa * SLOPE[k] + t * N[k]) as unknown as V3;
-  });
+/** The outline of a disc of radius `r` round `c` in the blade's plane, `t` along the normal. */
+function disc(c: V3, r: number, t = 0): V3[] {
+  return discOutline(BLADE, c, r, t);
 }
 
 /** Where the parts of a slicer of the given size lie (m, item frame). */
@@ -49,7 +36,7 @@ function layout({ w, d, h }: Size) {
   const r = ring - 0.012;
   // The guard ring's highest point is the unit's height: the disc reaches its radius times the
   // slope's rise above the centre (as the bounding box of `Parts.bar` counts it).
-  const c: V3 = [w * 0.12, h - Math.abs(SLOPE[1]) * ring, 0];
+  const c: V3 = [w * 0.12, h - Math.abs(BLADE.slope[1]) * ring, 0];
   // Both faces of the guard ring and the blade: the tray stays left of them, the housing right
   // of and below them.
   const rim = [...disc(c, ring, -RING_T), ...disc(c, ring, BLADE_T)];

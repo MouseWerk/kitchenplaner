@@ -15,9 +15,13 @@ kinds/
     plan.ts         PlanSketch (line, rect, circle, quarter) + hob, controlStrip, upstandLine, frontDoorSwing, cross
     elevation.ts    Front (box, line, circle, doors, drawers, panel, worktop, legsAndUndershelf) + doorCount
     mesh.ts         Parts (box, cyl, rod, bar, knob, barHandle, tub, topWithHoles, grid, wireBox,
-                    wireCage) + body, plinth, doors, castor, openFrame, tap, cookingBody,
-                    controlKnobs, ovenWindow, wirePositions
-    flue.ts         the flue outlet of gas variants (flueMesh, fluePlan, flueFront, withGasFlue)
+                    wireCage, slope, chamferCorner, roundOpening, ring) + body, plinth, doors,
+                    castor, openFrame, tap, cookingBody, controlKnobs, ovenWindow, roundBowl,
+                    wirePositions
+    flue.ts         the flue outlet of gas variants (flueBox, flueMesh, fluePlan, flueFront,
+                    withGasFlue); flueMesh takes a box for an outlet elsewhere (kettle)
+    frost.ts        the freezer mark in every view (frostMark, frostFront, frostPlan, FROST_STRIP)
+    disc.ts         a tilted disc (discFrame, discOutline): its outline as Parts.bar lays it
     entries.ts      withVariants (an entry whose connection values come from its variants)
     sizes.ts        WORK_HEIGHT, TABLE_WIDTHS, HOOD_ELEVATION, WALL_SHELF_ELEVATION, FLUSH_HEIGHT
   <area>/           cooking, cooling, washing, prep, serving, storage, ventilation, building
@@ -56,12 +60,22 @@ Shared looks in 3D:
   rod between two points. Each fills the box (or circle) it is given; `BASKET_PITCH` (20 mm) and
   `SHELF_PITCH` (30 mm) are the usual wire distances. The 3D view merges all rods of an item into
   one draw call.
+- Shaped sheet metal: `p.slope(mat, x0, x1, zTop, yTop, run, dir)` for a sheet on a 45° fold
+  (a hood's inclined front) with `p.chamferCorner` for the side panel's triangle under it;
+  `p.roundOpening(mat, x, z, r, y0, y1)` makes a square hole in a top read round, `p.ring` lays a
+  ring of straight bars over its edge (a wok ring); `roundBowl` is a round bowl pressed into a
+  deck (a hand wash basin).
 - Water in basins, bain-marie wells and pans is `water` (light, glossy, see-through); `oil` is
-  for fryers and dark drinks only.
+  for fryers and dark drinks only. Food in wells, pans and displays is `foodRed`, `foodGreen`,
+  `foodCream` or `foodBrown` (muted), never a steel, panel or hob material.
+- Slots, holes and perforations drawn flush on a face (flue outlets, vents, a perforated shelf,
+  an overflow) are `slot`: dark, and drawn over the face they lie in. Polished chrome (a chromed
+  griddle plate) is `chrome`; `handle` is for handles, index marks and small bright trim.
 - Gas variants get the flue outlet (Abgasstutzen) at the back of the top from the registry
-  (`withGasFlue` in parts/flue.ts): dark slots named `flue` in 3D, a crossed rectangle in the
-  plan, a hidden outline in the front elevation. A kind does nothing for it; one that draws its
-  own outlet sets `flue: false` and must still look different from its electric variant.
+  (`withGasFlue` in parts/flue.ts): dark `slot` parts named `flue` in 3D, a crossed rectangle in
+  the plan, a hidden outline in the front elevation. A kind does nothing for it; one that draws
+  its own outlet sets `flue: false`, places it with `flueMesh(p, s, box)` and must still look
+  different from its electric variant.
 
 Every view fills exactly width × depth × height. Only these may stick out, and only declared:
 `rise` (mm above the height, for taps), door swings in the plan (arcs, an open leaf with the

@@ -8,6 +8,7 @@
 // is nothing there to carry it), so the kind draws it itself (`flue: false`).
 
 import type { Front } from "../parts/elevation";
+import { flueMesh } from "../parts/flue";
 import type { Parts, Size } from "../parts/mesh";
 import type { PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
@@ -36,11 +37,9 @@ const RIM = 0.015;
 const FILL_RISE = 250;
 /** Radius of the fill tap's pipe (m). */
 const FILL_PIPE = 0.011;
-/** The gas flue outlet on the column top: depth, distance from the back and slot pitch (m). */
+/** The gas flue outlet on the column top: depth, distance from the back and height (m). */
 const FLUE_DEPTH = 0.06;
 const FLUE_BACK = 0.03;
-const FLUE_SLOT = 0.008;
-const FLUE_PITCH = 0.016;
 const FLUE_HEIGHT = 0.03;
 
 /** Where the parts of a kettle go, from its size (m). */
@@ -208,14 +207,7 @@ function makeKettle(kind: string, indirect: boolean): KindDef {
       fillTap(p, px, m.fillZ, s.h, m.fillTo);
       if (item.energy === "gas") {
         // The flue outlet on the column top: dark slots across a steel collar.
-        const f = flue(s);
-        p.box("steel", f.x0, f.x1, s.h - FLUE_HEIGHT, s.h - 0.002, f.z0, f.z1).name = "flue";
-        const n = Math.max(1, Math.floor((f.x1 - f.x0) / FLUE_PITCH));
-        const pitch = (f.x1 - f.x0) / n;
-        for (let i = 0; i < n; i++) {
-          const x = f.x0 + pitch * (i + 0.5);
-          p.box("flue", x - FLUE_SLOT / 2, x + FLUE_SLOT / 2, s.h - FLUE_HEIGHT, s.h, f.z0, f.z1).name = "flue";
-        }
+        flueMesh(p, s, { ...flue(s), y0: s.h - FLUE_HEIGHT, y1: s.h });
       }
     },
   };

@@ -23,7 +23,7 @@ const FILL_DROP = 0.045;
 /** Bars between the containers that carry their rims (m). */
 const BAR = 0.012;
 /** Food in the containers, in turn (potato salad, yoghurt dressing, olives). */
-const FOOD: readonly MaterialId[] = ["concrete", "panel", "zone"];
+const FOOD: readonly MaterialId[] = ["foodGreen", "foodCream", "foodRed"];
 
 const gnCount = (width: number) => Math.max(1, Math.floor((width - 2 * MARGIN_MM) / GN_MM));
 

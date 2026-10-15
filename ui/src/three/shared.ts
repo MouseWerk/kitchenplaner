@@ -32,6 +32,7 @@ export type MaterialId =
   | "steel"
   | "steelDark"
   | "handle"
+  | "chrome"
   | "top"
   | "ceramic"
   | "zone"
@@ -42,11 +43,15 @@ export type MaterialId =
   | "oil"
   | "water"
   | "wire"
-  | "flue"
+  | "slot"
   | "concrete"
   | "knob"
   | "glassDark"
-  | "rubber";
+  | "rubber"
+  | "foodRed"
+  | "foodGreen"
+  | "foodCream"
+  | "foodBrown";
 
 /** Materials that should not darken what is behind them in shadows. */
 export const NO_SHADOW: ReadonlySet<MaterialId> = new Set<MaterialId>(["glass", "water", "wire"]);
@@ -79,6 +84,10 @@ export function getShared(): Shared {
     steel: std(0xc9cdd1, 0.9, 0.7, { roughnessMap: brushed }),
     steelDark: std(0x9a9fa5, 0.85, 0.85, { roughnessMap: brushed }),
     handle: std(0xe4e7ea, 1, 0.22),
+    // Polished chrome (a chromed griddle plate): a bright, near-mirror metal that reads apart from
+    // the brushed body around it. A pure mirror would only show the gray room it reflects and
+    // look like more steel; half of it diffuse white lifts it in every light.
+    chrome: std(0xffffff, 0.5, 0.1),
     top: std(0x2c2e31, 0.35, 0.5),
     // Black glass ceramic: almost no diffuse light, a sharp reflection on top.
     ceramic: std(0x0b0c0e, 0, 0.06),
@@ -94,12 +103,19 @@ export function getShared(): Shared {
     water: std(0x9fbfcc, 0, 0.04, { transparent: true, opacity: 0.55, depthWrite: false }),
     // Wires of baskets, grids and guards (`Parts.grid`, `wireBox`, `wireCage`): solid thin rods.
     wire: std(0xb4b9be, 0.8, 0.35),
-    // The dark slots of a gas unit's flue outlet (kinds/parts/flue.ts). They lie in the plane of
-    // the top they are set into; the polygon offset draws them over it instead of flickering.
-    flue: std(0x1b1c1e, 0.2, 0.6, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    // Dark slots, holes and perforations drawn flush on a face (a flue outlet, the punched slots
+    // of a perforated shelf, vents). They lie in the plane of the face they are set into; the
+    // polygon offset draws them over it instead of flickering.
+    slot: std(0x1b1c1e, 0.2, 0.6, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     concrete: std(0xbab7b1, 0, 0.9),
     knob: std(0x1b1c1e, 0, 0.45),
     rubber: std(0x222325, 0, 0.9),
+    // Food in wells, pans and displays: muted, moist tones that tell a filled counter from an
+    // empty one without turning it into a colour chart.
+    foodRed: std(0x94493a, 0, 0.6),
+    foodGreen: std(0x6c7d4e, 0, 0.65),
+    foodCream: std(0xd9ccad, 0, 0.7),
+    foodBrown: std(0x765236, 0, 0.6),
   };
   // Named after their id so tests and debugging can tell the parts apart.
   for (const [id, m] of Object.entries(mat)) m.name = id;

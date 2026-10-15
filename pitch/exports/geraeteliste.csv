@@ -23,7 +23,7 @@
 22;Handwaschstation mit Sensorarmatur;500 × 400 × 900;;;;KW, WW;Abwasser;;Kochwand
 23;Kippbratpfanne;1200 × 900 × 900;15;400;;KW;Bodenablauf;;Kochwand
 24;Kochkessel 100 l;800 × 900 × 900;15;400;;KW, WW;Bodenablauf;;Kochwand
-25;Entwässerungsrinne, 300 mm breit;2000 × 300 × 30;;;;;Abwasser;;Kochwand
+25;Entwässerungsrinne, 300 mm breit;2000 × 300 × 5;;;;;Abwasser;;Kochwand
 26;Wandhaube;2400 × 1100 × 450;0,1;230;;;;2600;Kochwand
 27;Kühlunterbau mit Schubladen;1600 × 800 × 650;0,45;230;;;;;Kochwand
 28;Salamander;800 × 500 × 500;5,3;400;;;;;Kochwand
@@ -62,6 +62,6 @@
 61;Ablauftisch;1200 × 750 × 900;;;;;Abwasser;;Spülküche
 62;Regal, 4 Böden;1400 × 500 × 1800;;;;;;;Spülküche
 63;Regal, 4 Böden;1400 × 500 × 1800;;;;;;;Spülküche
-64;Bodenablauf;300 × 300 × 20;;;;;Abwasser;;Spülküche
+64;Bodenablauf;300 × 300 × 5;;;;;Abwasser;;Spülküche
 65;Stütze;400 × 400 × 3000;;;;;;;Gebäude
 ;Summe;;283,45;;0;15 × KW, 11 × WW;20 × Abwasser, 2 × Bodenablauf;11600;

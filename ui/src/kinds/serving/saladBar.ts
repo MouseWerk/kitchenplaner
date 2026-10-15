@@ -62,7 +62,7 @@ export const saladBar: KindDef = {
     p.topWithHoles("steel", s.w, s.d, s.h - TOP, s.h, holes);
     // The web between the two rows, which the cut-out top leaves open.
     p.box("steel", -s.w / 2, s.w / 2, s.h - TOP, s.h, -ROW_GAP / 2000, ROW_GAP / 2000);
-    wellPans(p, holes, s.h, ["panel", "zone", "oil", "panel", "plate"]);
+    wellPans(p, holes, s.h, ["foodGreen", "foodRed", "foodCream", "foodGreen", "foodBrown"]);
     // Glass roof on a post at either end, in the middle of the depth.
     const rise = ROOF_RISE / 1000;
     const rd = (s.d * ROOF_SHARE) / 2;

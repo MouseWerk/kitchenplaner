@@ -265,6 +265,114 @@ export class Parts {
     }
     if (x < w / 2) this.box(mat, x, w / 2, y0, y1, hz0, hz1);
   }
+
+  /**
+   * A sheet across the width (x0 to x1) on a 45° fold: its outer face runs from the top edge at
+   * (`yTop`, `zTop`) down by `run` towards the front (dir 1, +z) or the back (dir -1). A hood's
+   * inclined front and back.
+   */
+  slope(mat: MaterialId, x0: number, x1: number, zTop: number, yTop: number, run: number, dir: 1 | -1, t = SHEET): THREE.Mesh {
+    const len = run * Math.SQRT2;
+    const m = this.box(mat, x0, x1, -t / 2, t / 2, -len / 2, len / 2);
+    m.rotation.x = (dir * Math.PI) / 4;
+    const n = Math.SQRT1_2 * (t / 2);
+    m.position.set((x0 + x1) / 2, yTop - run / 2 - n, zTop + (dir * run) / 2 - dir * n);
+    return m;
+  }
+
+  /**
+   * The triangle of a side panel (x0 to x1) under a `slope`, as a square turned 45° whose outer
+   * edge is the fold from (`yTop`, `zEdge`) down by `run`; the rest of the square has to hide in
+   * the panel's straight parts. Slightly thinner than the panel so their faces do not fight.
+   */
+  chamferCorner(mat: MaterialId, x0: number, x1: number, zEdge: number, yTop: number, run: number, dir: 1 | -1): THREE.Mesh {
+    const a = run * Math.SQRT2;
+    const m = this.box(mat, x0 + 0.001, x1 - 0.001, -a / 2, a / 2, -a / 2, a / 2);
+    m.rotation.x = Math.PI / 4;
+    m.position.set((x0 + x1) / 2, yTop - run, zEdge - dir * run);
+    return m;
+  }
+
+  /**
+   * Fills the corners of a square opening of half width `r` round (x, z) in a top from `y0` to
+   * `y1`, so the opening reads round (a wok pit, a round well); a `ring` over the edge covers
+   * the steps that are left inside the circle.
+   */
+  roundOpening(mat: MaterialId, x: number, z: number, r: number, y0: number, y1: number): void {
+    for (const [a, b] of ROUND_BANDS) {
+      const xb = r * Math.sqrt(Math.max(0, 1 - b * b));
+      for (const sz of [-1, 1]) {
+        const za = z + sz * a * r;
+        const zb = z + sz * b * r;
+        const [z0, z1] = sz > 0 ? [za, zb] : [zb, za];
+        if (xb <= 0) this.box(mat, x - r, x + r, y0, y1, z0, z1);
+        else for (const sx of [-1, 1]) this.box(mat, sx > 0 ? x + xb : x - r, sx > 0 ? x + r : x - xb, y0, y1, z0, z1);
+      }
+    }
+  }
+
+  /**
+   * A level ring of `bars` straight bars of radius `rb` round (x, z) at height y, its centre line
+   * at radius `rc` (a wok ring, a trim ring).
+   */
+  ring(mat: MaterialId, x: number, z: number, y: number, rc: number, rb: number, bars = RING_BARS): void {
+    const at = (i: number) => {
+      const a = (i / bars) * Math.PI * 2;
+      return { x: x + rc * Math.cos(a), y, z: z + rc * Math.sin(a) };
+    };
+    for (let i = 0; i < bars; i++) this.bar(mat, at(i), at(i + 1), rb);
+  }
+}
+
+/**
+ * The steel `Parts.roundOpening` leaves in each corner of a square opening: bands from the centre
+ * line outwards (shares of the radius), each filled outside the circle's chord at its outer edge.
+ */
+const ROUND_BANDS: readonly [number, number][] = [
+  [0, 0.5],
+  [0.5, 0.75],
+  [0.75, 0.9],
+  [0.9, 1],
+];
+/** Straight bars of a `Parts.ring`. */
+const RING_BARS = 12;
+/** Sides of the polygon a `roundBowl` is built from (its wall panels); a multiple of 8. */
+const BOWL_SIDES = 16;
+
+/**
+ * A round bowl let into a deck from x -w/2 to w/2 and z from `z0` to `z1` (m), its centre at
+ * (0, cz), radius `r`, the deck's top at `rim` and `deck` thick, the bowl's floor at `floor`:
+ * the deck around a polygonal hole (strips beside the hole's square, and pieces along the
+ * polygon's sides in the corners), the bowl's wall panels on the polygon down to the floor, and
+ * the floor. A hand wash basin's bowl.
+ */
+export function roundBowl(p: Parts, mat: MaterialId, w: number, z0: number, z1: number, cz: number, r: number, rim: number, floor: number, deck: number): void {
+  const y0 = rim - deck;
+  p.box(mat, -w / 2, -r, y0, rim, z0, z1);
+  p.box(mat, r, w / 2, y0, rim, z0, z1);
+  p.box(mat, -r, r, y0, rim, z0, cz - r);
+  p.box(mat, -r, r, y0, rim, cz + r, z1);
+  // Corner pieces along the slanted sides of the polygon; a hair lower than the deck so their
+  // faces do not fight with the strips they overlap.
+  const step = (2 * Math.PI) / BOWL_SIDES;
+  const half = r * Math.tan(step / 2);
+  for (let k = 0; k < BOWL_SIDES; k++) {
+    const a = k * step;
+    const diagonal = k % (BOWL_SIDES / 4) === BOWL_SIDES / 8;
+    const straight = k % (BOWL_SIDES / 4) === 0;
+    if (!straight) {
+      const depth = r * (diagonal ? 0.43 : 0.25);
+      const len = half + r * (diagonal ? 0.06 : 0.1);
+      const piece = p.box(mat, -len, len, y0 - 0.0005, rim - 0.0005, -depth / 2, depth / 2);
+      piece.rotation.y = Math.PI / 2 - a;
+      piece.position.set((r + depth / 2) * Math.cos(a), (y0 + rim) / 2 - 0.0005, cz + (r + depth / 2) * Math.sin(a));
+    }
+    // The bowl's wall panel on this side, from the floor up to the deck.
+    const wall = p.box(mat, -half - 0.001, half + 0.001, floor, rim - 0.001, -SHEET / 2, SHEET / 2);
+    wall.rotation.y = Math.PI / 2 - a;
+    wall.position.set((r + SHEET / 2) * Math.cos(a), (floor + rim - 0.001) / 2, cz + (r + SHEET / 2) * Math.sin(a));
+  }
+  p.cyl(mat, 0, cz, floor, floor + SHEET, r + SHEET);
 }
 
 // ---------------------------------------------------------------------------------------------

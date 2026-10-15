@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { brushedSteelPixels, floorTilePixels, GROUT, MAX_ANISOTROPY, periodicNoise, random, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels, type Pixels } from "./textures";
+import { BRUSH_LEVEL_ROWS, brushedSteelPixels, floorTilePixels, GROUT, MAX_ANISOTROPY, periodicNoise, random, TILE, TILES_PER_TEXTURE, toTexture, wallPaintPixels, type Pixels } from "./textures";
 
 const at = (p: Pixels, x: number, y: number, ch = 1) => p.data[(y * p.width + x) * 4 + ch];
 
@@ -61,6 +61,27 @@ describe("procedural textures", () => {
     // The hairlines themselves stay faint: no row far from the mean roughness.
     const mean = rowMean.reduce((a, v) => a + v, 0) / size;
     for (const m of rowMean) expect(Math.abs(m - mean)).toBeLessThan(255 * 0.15);
+  });
+
+  it("brushed steel averages to an even value at every mip level a front is seen at from afar", () => {
+    // The GPU's mipmaps box-filter 2^k × 2^k texels. Variation that neighbouring rows share (a 2D
+    // noise across the stroke) survives that and shows as broad horizontal bands on a front seen
+    // straight on; variation that is each row's own averages away.
+    const size = 256;
+    const p = brushedSteelPixels(size);
+    for (let n = BRUSH_LEVEL_ROWS; n <= size / 4; n *= 2) {
+      const level: number[] = [];
+      for (let ty = 0; ty < size; ty += n) {
+        for (let tx = 0; tx < size; tx += n) {
+          let sum = 0;
+          for (let y = ty; y < ty + n; y++) for (let x = tx; x < tx + n; x++) sum += at(p, x, y);
+          level.push(sum / (n * n));
+        }
+      }
+      // One level of 255 in the map is a roughness change of under 0.003; a grain with a 2D noise
+      // across the stroke spreads 4 to 6 levels here.
+      expect(Math.max(...level) - Math.min(...level), `${n} rows per texel`).toBeLessThan(3);
+    }
   });
 
   it("floor tiles are 300 mm with darker grout lines on the tile grid", () => {

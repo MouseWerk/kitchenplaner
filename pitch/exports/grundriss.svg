@@ -83,6 +83,9 @@
 <polyline points="6250,1200 6400,1200" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="4250,2100 4250,2900" fill="none" stroke="#000" stroke-width="18.75" stroke-linejoin="round" stroke-linecap="round"/>
 <path d="M5050 2100A800 800 0 0 1 4250 2900" fill="none" stroke="#000" stroke-width="9.75" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="5200,765 5200,1265" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="5416.506,890 4983.494,1140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="5416.506,1140 4983.494,890" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="1200,6400 0,6400 0,5700 1200,5700" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="1200,6350 0,6350" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="500,6225 100,6225 100,5825 500,5825" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -108,9 +111,11 @@
 <circle cx="8750" cy="750" r="25" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="8100,700 8150,725 8250,725 8300,700" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="8800,0 9600,0 9600,900 8800,900" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="8800,220 9600,220" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="9200" cy="515" r="285" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="9180,800 9220,800 9220,900 9180,900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="9440,0 9600,0 9600,450 9440,450" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="9120" cy="420" r="300" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="9100,720 9140,720 9140,900 9100,900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="9520" cy="300" r="20" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="9520,300 9225,300" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="9700,0 11300,0 11300,800 9700,800" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="10100,50 10100,750" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polyline points="10125,775 10491.667,775" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -141,8 +146,8 @@
 <polyline points="8400,2500 8000,2500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="9200,3300 8400,3300 8400,2400 9200,2400" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="9150,3250 8450,3250 8450,2550 9150,2550" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="8800" cy="2900" r="87.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="8800" cy="2900" r="210" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="8800,3250 8800,2550" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="9150,2900 8450,2900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="9200,2500 8400,2500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="10400,3300 9200,3300 9200,2400 10400,2400" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="10166.667" cy="3075" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -182,17 +187,19 @@
 <polyline points="9650,4025 10350,4025" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="9600,4100 10400,4100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="10400,3300 11200,3300 11200,4200 10400,4200" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="10485,3385 10765,3385 10765,3665 10485,3665" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="10485,3735 10765,3735 10765,4015 10485,4015" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="10835,3385 11115,3385 11115,3665 10835,3665" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="10835,3735 11115,3735 11115,4015 10835,4015" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="10625" cy="3525" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="10625" cy="3875" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="10975" cy="3525" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="10975" cy="3875" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="10400,4100 11200,4100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="10430,3330 11170,3330 11170,4100 10430,4100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="11200,3300 12000,3300 12000,4200 11200,4200" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="11285,3385 11565,3385 11565,3665 11285,3665" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="11285,3735 11565,3735 11565,4015 11285,4015" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="11635,3385 11915,3385 11915,3665 11635,3665" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="11635,3735 11915,3735 11915,4015 11635,4015" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="11425" cy="3525" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="11425" cy="3875" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="11775" cy="3525" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="11775" cy="3875" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="11200,4100 12000,4100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="11230,3330 11970,3330 11970,4100 11230,4100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="8565,6400 7725,6400 7725,5930 8565,5930" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="8355" cy="6145" r="160" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="8355" cy="6145" r="96" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -214,7 +221,7 @@
 <polyline points="12775,5725 12343.333,5725" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="12318.333,5725 11886.667,5725" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="11861.667,5725 11430,5725" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="13200,6040 11405,6040" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="13200,6015 11405,6015" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="13140,6350 12971.667,6350 12971.667,6065 13140,6065" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polygon points="12951.667,6350 12783.333,6350 12783.333,6065 12951.667,6065" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polygon points="12763.333,6350 12595,6350 12595,6065 12763.333,6065" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
@@ -224,7 +231,7 @@
 <polygon points="12010,6350 11841.667,6350 11841.667,6065 12010,6065" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polygon points="11821.667,6350 11653.333,6350 11653.333,6065 11821.667,6065" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polygon points="11633.333,6350 11465,6350 11465,6065 11633.333,6065" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
-<polygon points="13175,6015 11430,6015 11430,5750 13175,5750" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="13175,5990 11430,5990 11430,5750 13175,5750" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="0,7050 0,6550 500,6550 500,7050" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="70,7000 70,6600 450,6600 450,7000" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="210" cy="6800" r="25" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -263,6 +270,7 @@
 <polyline points="6300,9550 4500,9550" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="4500,9600 2700,9600 2700,8800 4500,8800" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="4500,9575 2700,9575 2700,8825 4500,8825" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="4500,8970 2700,8970" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="3960,9575 3960,8825" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polyline points="3240,9575 3240,8825" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="4230" cy="9400" r="80" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -291,16 +299,25 @@
 <polygon points="6450,0 6850,0 6850,400 6450,400" fill="#bdbdbd" stroke="#000" stroke-width="37.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="7600,900 9600,900 9600,1200 7600,1200" fill="none" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="7620,920 9580,920 9580,1180 7620,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="7620,1050 9580,1050" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="9510" cy="1050" r="50" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="7865,920 7865,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="8110,920 8110,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="8355,920 8355,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="8600,920 8600,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="8845,920 8845,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="9090,920 9090,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="9335,920 9335,1180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="9510" cy="1050" r="50" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polygon points="3450,8300 3750,8300 3750,8600 3450,8600" fill="none" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="3475,8325 3725,8325 3725,8575 3475,8575" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="3500,8366.667 3700,8366.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="3500,8408.333 3700,8408.333" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="3500,8450 3700,8450" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="3500,8491.667 3700,8491.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polyline points="3500,8533.333 3700,8533.333" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="3600" cy="8450" r="100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8340.625 3725,8340.625" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8371.875 3725,8371.875" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8403.125 3725,8403.125" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8434.375 3725,8434.375" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8465.625 3725,8465.625" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8496.875 3725,8496.875" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8528.125 3725,8528.125" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3475,8559.375 3725,8559.375" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="3600" cy="8450" r="100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <polygon points="1800,6350 1400,6350 1400,5750 1800,5750" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="1800,6350 1400,6350 1400,6020 1800,6020" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="112.5 75"/>
 <circle cx="1600" cy="6062" r="180" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -308,9 +325,9 @@
 <circle cx="1501" cy="6017" r="30" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="1699,5990 1501,5990 1501,5750 1699,5750" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="4700,6350 4150,6350 4150,5750 4700,5750" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="4385,6219.5 4369,6219.5 4369,5880.5 4385,5880.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="4369,6219.5 4170,6219.5 4170,5987 4369,5987" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<polygon points="4670,6191.75 4396,6191.75 4396,5908.25 4670,5908.25" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="4286.732,5895.021 4307.555,5888.937 4330.356,5889.042 4354.257,5895.332 4378.34,5907.566 4401.68,5925.274 4423.38,5947.775 4442.605,5974.205 4458.618,6003.547 4470.803,6034.675 4478.691,6066.391 4481.979,6097.477 4480.542,6126.739 4474.433,6153.052 4463.889,6175.405 4449.314,6192.938 4431.268,6204.979 4410.445,6211.063 4387.644,6210.958 4363.743,6204.668 4339.66,6192.434 4316.32,6174.726 4294.62,6152.225 4275.395,6125.795 4259.382,6096.453 4247.197,6065.325 4239.309,6033.609 4236.021,6002.523 4237.458,5973.261 4243.567,5946.948 4254.111,5924.595 4268.686,5907.062 4286.732,5895.021" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="4268.401,6221 4170,6221 4170,5964.5 4268.401,5964.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polygon points="4670,6203.9 4503.319,6203.9 4503.319,5896.1 4670,5896.1" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="4650,5775 4590,5775 4590,5750 4650,5750" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="5250,6350 4750,6350 4750,5750 5250,5750" fill="#fff" stroke="#000" stroke-width="26.25" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="5220,6320 4780,6320 4780,5800 5220,5800" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
@@ -323,38 +340,42 @@
 <polygon points="4010,3560 4340,3560 4340,3862 4010,3862" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="4035,3870 4315,3870 4315,3950 4035,3950" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="1200,6400 0,6400 0,6050 1200,6050" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="1200,6400 0,6050" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="1200,6075 0,6075" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="1100,6400 1100,6155" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="600,6400 600,6155" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="100,6400 100,6155" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="1200,6080 0,6080" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="1200,6370 0,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="1104,6400 1096,6400 1096,6370 1104,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="604,6400 596,6400 596,6370 604,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="104,6400 96,6400 96,6370 104,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="2500,6400 2200,6400 2200,6310 2500,6310" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="2500,6350 2200,6350" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="2440" cy="6340" r="30" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="2350" cy="6340" r="30" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="2260" cy="6340" r="30" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="2500,6332 2200,6332" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="2468,6332 2412,6332 2412,6310 2468,6310" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="2378,6332 2322,6332 2322,6310 2378,6310" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="2290,6332 2230,6332 2230,6310 2290,6310" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="3050,6400 2650,6400 2650,6050 3050,6050" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="2850" cy="6200" r="122.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="2850" cy="6200" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="2850" cy="6375" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="2850" cy="6215" r="115.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="2850" cy="6215" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="2850" cy="6350" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3050,6380 2650,6380" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="4100,6400 3100,6400 3100,6050 4100,6050" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="4100,6400 3100,6050" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="4100,6075 3100,6075" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="4000,6400 4000,6155" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="3200,6400 3200,6155" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="4100,6080 3100,6080" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="4100,6370 3100,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="4004,6400 3996,6400 3996,6370 4004,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="3204,6400 3196,6400 3196,6370 3204,6370" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="6900,0 7400,0 7400,400 6900,400" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="7150" cy="225" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="7150" cy="225" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="7150" cy="25" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="7150" cy="210" r="133" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="7150" cy="210" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="7150" cy="50" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="6900,20 7400,20" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="6925,0 7015,0 7015,100 6925,100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="7095,0 7375,0 7375,120 7095,120" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="7400,0 9800,0 9800,1100 7400,1100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="7400,0 9800,1100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="9800,0 7400,1100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="7400,920 9800,920" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="7450,350 9750,350" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<circle cx="8600" cy="175" r="125" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="10100,0 10900,0 10900,500 10100,500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polygon points="10140,80 10760,80 10760,480 10140,480" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="10780,40 10780,500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="10140,90 10760,90 10760,480 10140,480" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="10780,50 10780,500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="11375,0 12275,0 12275,1100 11375,1100" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="11425,25 12225,25 12225,770 11425,770" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="11475,100 12175,100 12175,950 11475,950" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
@@ -362,36 +383,44 @@
 <polygon points="12350,25 13150,25 13150,770 12350,770" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="12400,100 13100,100 13100,950 12400,950" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="13200,1150 13200,1650 12800,1650 12800,1150" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="12975" cy="1400" r="140" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="12975" cy="1400" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="13175" cy="1400" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="12990" cy="1400" r="133" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="12990" cy="1400" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="13150" cy="1400" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="13180,1150 13180,1650" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="13200,1175 13200,1265 13100,1265 13100,1175" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="13200,1345 13200,1625 13080,1625 13080,1345" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <polygon points="7400,2100 9800,2100 9800,4500 7400,4500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="7400,2100 9800,4500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="9800,2100 7400,4500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="7400,4320 9800,4320" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="7400,2280 9800,2280" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="7450,2950 9750,2950" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="7450,3650 9750,3650" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<circle cx="8600" cy="3300" r="125" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="9800,2100 12200,2100 12200,4500 9800,4500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="9800,2100 12200,4500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="12200,2100 9800,4500" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="9800,4320 12200,4320" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="9800,2280 12200,2280" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="9850,2950 12150,2950" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="9850,3650 12150,3650" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<circle cx="11000" cy="3300" r="125" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="10465,6200 8665,6200 8665,5900 10465,5900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="10415,6125 8715,6125" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polyline points="10415,5975 8715,5975" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <circle cx="10365" cy="6050" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <circle cx="8765" cy="6050" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="1900,6550 3300,6550 3300,6900 1900,6900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="1900,6550 3300,6900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="1900,6875 3300,6875" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="2000,6550 2000,6795" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="2600,6550 2600,6795" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<polyline points="3200,6550 3200,6795" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="1900,6870 3300,6870" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polyline points="1900,6580 3300,6580" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="1996,6550 2004,6550 2004,6580 1996,6580" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="2596,6550 2604,6550 2604,6580 2596,6580" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
+<polygon points="3196,6550 3204,6550 3204,6580 3196,6580" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
 <polygon points="3400,6550 3800,6550 3800,6900 3400,6900" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="225 112.5"/>
-<circle cx="3600" cy="6750" r="122.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="3600" cy="6750" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="3600" cy="6575" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="3600" cy="6735" r="115.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="3600" cy="6735" r="12.5" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="3600" cy="6600" r="16.667" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="3400,6570 3800,6570" fill="none" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="600" cy="250" r="178.125" fill="#fff" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/><text x="600" y="317.5" font-size="187.5" text-anchor="middle" fill="#000">1</text>
 <circle cx="1800" cy="250" r="178.125" fill="#fff" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/><text x="1800" y="317.5" font-size="187.5" text-anchor="middle" fill="#000">2</text>
 <circle cx="250" cy="1400" r="178.125" fill="#fff" stroke="#000" stroke-width="13.5" stroke-linejoin="round" stroke-linecap="round"/><text x="250" y="1467.5" font-size="187.5" text-anchor="middle" fill="#000">3</text>

@@ -65,6 +65,8 @@ function pixels(width: number, height: number, f: (x: number, y: number) => [num
 export const BRUSH_CONTRAST = 0.05;
 /** Rows per block of the stratified grain (see `brushedSteelPixels`). */
 const STRATA = 16;
+/** From this many rows per texel on (a mip level), the brushed grain averages to an even value. */
+export const BRUSH_LEVEL_ROWS = STRATA;
 
 /**
  * Brushed stainless steel as a roughness map (three reads the green channel): fine streaks
@@ -75,6 +77,11 @@ const STRATA = 16;
  * row contrast stays very low: the width of a light's reflection on metal goes with the square
  * of the roughness and its brightness with the inverse, so a step of 0.05 in roughness already
  * changes a highlight by half and every hairline shows as a stripe.
+ *
+ * Every variation is a property of its own row. The mipmaps average whole rows at a distance;
+ * anything that is the same over neighbouring rows (a 2D noise, clumps of rough rows) survives
+ * that averaging and shows as broad horizontal bands on a front seen straight on, so the
+ * texture must average to an even value at every mip level of `BRUSH_LEVEL_ROWS` rows or more.
  */
 export function brushedSteelPixels(size = 256, seed = 7): Pixels {
   const rnd = random(seed);
@@ -90,10 +97,22 @@ export function brushedSteelPixels(size = 256, seed = 7): Pixels {
     }
     rows.push(...block);
   }
-  const along = periodicNoise(8, seed + 1);
+  // The gentle variation along the stroke: a smooth 1D noise of its own for every row (8 cells
+  // across the map, repeating), so it averages away across rows like the hairlines do.
+  const cells = 8;
+  const along = random(seed + 1);
+  const lattice = Array.from({ length: size * cells }, () => along());
+  const smooth = (t: number) => t * t * (3 - 2 * t);
+  const alongAt = (x: number, y: number) => {
+    const u = (x / size) * cells;
+    const i = Math.floor(u);
+    const a = lattice[y * cells + (i % cells)];
+    const b = lattice[y * cells + ((i + 1) % cells)];
+    return a + (b - a) * smooth(u - i);
+  };
   return pixels(size, size, (x, y) => {
     const streak = rows[y] * 0.6 + rows[(y + 1) % size] * 0.4;
-    const v = 0.5 + (streak - 0.5) * BRUSH_CONTRAST + (along((x / size) * 8, (y / size) * 8) - 0.5) * 0.03;
+    const v = 0.5 + (streak - 0.5) * BRUSH_CONTRAST + (alongAt(x, y) - 0.5) * 0.03;
     const g = 255 * v;
     return [g, g, g];
   });

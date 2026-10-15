@@ -50,7 +50,7 @@ export const coldCounter: KindDef = {
     const ws = wells(item.width, item.depth);
     const holes = holesOf(ws);
     counterBody(p, s, holes);
-    wellPans(p, holes, s.h, ["panel", "oil", "zone", "panel"]);
+    wellPans(p, holes, s.h, ["foodGreen", "foodCream", "foodRed", "foodCream"]);
     // Machine compartment with a louvre at the left, cooled doors to its right.
     const machine = Math.min(MACHINE, s.w * 0.3);
     const x1 = -s.w / 2 + machine;

@@ -62,7 +62,7 @@ export const salamander: KindDef = {
     const slots = Math.max(3, Math.floor((s.w - panelW) / VENT_PITCH));
     for (let i = 0; i < slots; i++) {
       const x = -s.w / 2 + VENT_PITCH * (i + 0.5);
-      p.box("flue", x - VENT_SLOT / 2, x + VENT_SLOT / 2, s.h - 0.004, s.h, zb + 0.03, zb + 0.09);
+      p.box("slot", x - VENT_SLOT / 2, x + VENT_SLOT / 2, s.h - 0.004, s.h, zb + 0.03, zb + 0.09);
     }
     // The heater under the top of the cavity.
     p.box("zone", -s.w / 2 + SHEET * 2, s.w / 2 - panelW - SHEET * 2, cavity - 0.015, cavity - 0.002, zb + SHEET, zf - 0.03);

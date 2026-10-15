@@ -6,7 +6,7 @@
 // the dispensers). The bowl is round in the plan, the elevations and 3D.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { SHEET, tap, type Parts } from "../parts/mesh";
+import { roundBowl, SHEET, tap } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { bowlDrain } from "./common";
@@ -25,8 +25,6 @@ const APRON = 0.05;
 const PLATE = SHEET * 2;
 /** The bowl's radius as a share of the deck's smaller side. */
 const BOWL_SHARE = 0.35;
-/** Sides of the polygon the round bowl is built from (its wall panels). */
-const SIDES = 16;
 /** Bottle trap under a wall basin (m): radius, and the height of its arm to the wall. */
 const TRAP_R = 0.022;
 const TRAP_ARM = 0.025;
@@ -61,40 +59,6 @@ function basin(spec: HandwashSpec, h: number): { rim: number; floor: number } {
 /** The bowl in the item frame (mm or m alike): centre across the depth and radius. */
 function bowl(w: number, d: number, plate: number): { cz: number; r: number } {
   return { cz: plate / 2, r: Math.min(w, d - plate) * BOWL_SHARE };
-}
-
-/**
- * A round bowl let into a deck from x -w/2 to w/2 and z from `z0` to `z1` (m): the deck around a
- * polygonal hole (strips beside the hole's square, and pieces along the polygon's sides in the
- * corners), the bowl's wall panels on the polygon down to the floor, and the floor.
- */
-function roundBowl(p: Parts, w: number, z0: number, z1: number, cz: number, r: number, rim: number, floor: number): void {
-  const y0 = rim - DECK;
-  p.box("steel", -w / 2, -r, y0, rim, z0, z1);
-  p.box("steel", r, w / 2, y0, rim, z0, z1);
-  p.box("steel", -r, r, y0, rim, z0, cz - r);
-  p.box("steel", -r, r, y0, rim, cz + r, z1);
-  // Corner pieces along the slanted sides of the polygon; a hair lower than the deck so their
-  // faces do not fight with the strips they overlap.
-  const step = (2 * Math.PI) / SIDES;
-  const half = r * Math.tan(step / 2);
-  for (let k = 0; k < SIDES; k++) {
-    const a = k * step;
-    const diagonal = k % (SIDES / 4) === SIDES / 8;
-    const straight = k % (SIDES / 4) === 0;
-    if (!straight) {
-      const depth = r * (diagonal ? 0.43 : 0.25);
-      const len = half + r * (diagonal ? 0.06 : 0.1);
-      const piece = p.box("steel", -len, len, y0 - 0.0005, rim - 0.0005, -depth / 2, depth / 2);
-      piece.rotation.y = Math.PI / 2 - a;
-      piece.position.set((r + depth / 2) * Math.cos(a), (y0 + rim) / 2 - 0.0005, cz + (r + depth / 2) * Math.sin(a));
-    }
-    // The bowl's wall panel on this side, from the floor up to the deck.
-    const wall = p.box("steel", -half - 0.001, half + 0.001, floor, rim - 0.001, -SHEET / 2, SHEET / 2);
-    wall.rotation.y = Math.PI / 2 - a;
-    wall.position.set((r + SHEET / 2) * Math.cos(a), (floor + rim - 0.001) / 2, cz + (r + SHEET / 2) * Math.sin(a));
-  }
-  p.cyl("steel", 0, cz, floor, floor + SHEET, r + SHEET);
 }
 
 export function makeHandwash(spec: HandwashSpec): KindDef {
@@ -152,7 +116,7 @@ export function makeHandwash(spec: HandwashSpec): KindDef {
       // Wall plate behind the basin, up to the top of the unit.
       p.box("steel", -s.w / 2, s.w / 2, 0, s.h, zb, zb + PLATE);
       // The deck with the bowl, and its apron at the front and the sides.
-      roundBowl(p, s.w, zb + PLATE, zf - SHEET, cz, r, rim, floor);
+      roundBowl(p, "steel", s.w, zb + PLATE, zf - SHEET, cz, r, rim, floor, DECK);
       p.box("steel", -s.w / 2, s.w / 2, rim - APRON, rim, zf - SHEET, zf);
       for (const sx of [-1, 1]) p.box("steel", sx > 0 ? s.w / 2 - SHEET : -s.w / 2, sx > 0 ? s.w / 2 : -s.w / 2 + SHEET, rim - APRON, rim - 0.0005, zb + PLATE, zf - SHEET);
       if (spec.operation === "knee") {

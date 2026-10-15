@@ -5,10 +5,11 @@
 // elevation and 3D place the door with `doorSpan`, so the views agree.
 
 import type { Front } from "../parts/elevation";
+import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
 import type { Parts, Size } from "../parts/mesh";
 import type { PlanSketch } from "../parts/plan";
 import type { KindDef } from "../types";
-import { FROST_STRIP, frostFront, frostMark, frostPlan, m } from "./common";
+import { m } from "./common";
 
 /** Panel thickness of a cold room and of a freezer room (mm, common PU sandwich panels). */
 export const COLD_PANEL_MM = 100;

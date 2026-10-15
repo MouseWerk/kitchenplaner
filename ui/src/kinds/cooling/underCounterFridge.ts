@@ -3,6 +3,7 @@
 // strip under the top and one door per 600 mm. The freezer carries the frost strip on its doors.
 
 import { TOP as FRONT_TOP } from "../parts/elevation";
+import { FROST_STRIP, frostFront, frostMark, frostPlan } from "../parts/frost";
 import { PLINTH, plinth, TOP } from "../parts/mesh";
 import type { KindDef } from "../types";
 import {
@@ -13,10 +14,6 @@ import {
   doorFront,
   doorSwings,
   FRONT,
-  FROST_STRIP,
-  frostFront,
-  frostMark,
-  frostPlan,
   grille,
   grilleFront,
   hingeLeft,
