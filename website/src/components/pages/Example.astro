@@ -1,0 +1,89 @@
+---
+import Base from '../../layouts/Base.astro';
+import Shot from '../Shot.astro';
+import { dicts, type Lang } from '../../i18n';
+import { getDownloads, button, formatSize } from '../../data/release.mjs';
+import { ROUTES, absolute } from '../../data/site.mjs';
+import { EXPORTS } from '../../data/exports.mjs';
+import type { ShotName } from '../../data/shots';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = dicts[lang];
+const e = t.example;
+const d = await getDownloads();
+const fileDe = button(d, 'example-de');
+const fileEn = button(d, 'example-en');
+
+const GALLERY: ShotName[] = [
+  '03-grundriss-kochinsel-auswahl', '04-3d-uebersicht', '05-3d-kochinsel', '06-3d-begehen',
+  '07-3d-von-oben', '09-ansicht-nord', '13-inspektor-kombidaempfer', '16-ansicht-schnitttiefe',
+];
+const SIZES = '(min-width: 1244px) 574px, (min-width: 860px) calc(50vw - 44px), calc(100vw - 32px)';
+const plan = EXPORTS.find((x) => x.name === 'grundriss.svg')!;
+const crumbs = {
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Kitchenplaner', item: absolute(ROUTES.home[lang]) },
+    { '@type': 'ListItem', position: 2, name: e.title, item: absolute(ROUTES.example[lang]) },
+  ],
+};
+---
+<Base lang={lang} page="example" title={t.meta.example.title} description={t.meta.example.description} schema={[crumbs]}>
+  <div class="wrap page-head">
+    <h1>{e.title}</h1>
+    <p class="lead">{e.lead}</p>
+  </div>
+  <div class="page-body">
+    <div class="wrap">
+      <div class="split">
+        <section class="block" aria-labelledby="kennzahlen">
+          <h2 id="kennzahlen">{e.factsTitle}</h2>
+          <dl class="kv">
+            {e.facts.map(([k, v]) => (<><dt>{k}</dt><dd>{v}</dd></>))}
+          </dl>
+        </section>
+        <section class="block" aria-labelledby="oeffnen">
+          <h2 id="oeffnen">{e.openTitle}</h2>
+          <p class="muted">{e.openText}</p>
+          <div class="buttons">
+            <a class="btn btn-primary" href={lang === 'de' ? fileDe.href : fileEn.href} rel="noopener">
+              {lang === 'de' ? e.fileDe : e.fileEn}
+              {(lang === 'de' ? fileDe : fileEn).size && <small>.kplan, {formatSize((lang === 'de' ? fileDe : fileEn).size, lang)}</small>}
+            </a>
+            <a class="btn btn-secondary" href={lang === 'de' ? fileEn.href : fileDe.href} rel="noopener">{lang === 'de' ? e.fileEn : e.fileDe}</a>
+          </div>
+          <p class="muted">{e.noApp} <a href={ROUTES.download[lang]}>{e.noAppLink}</a></p>
+        </section>
+      </div>
+
+      <section class="block" aria-labelledby="bilder">
+        <h2 id="bilder">{e.galleryTitle}</h2>
+        <div class="figures">
+          {GALLERY.map((name, i) => (
+            <figure>
+              <Shot name={name} alt={e.gallery[i]} sizes={SIZES} />
+              <figcaption aria-hidden="true">{e.gallery[i]}</figcaption>
+            </figure>
+          ))}
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="exporte">
+        <h2 id="exporte">{e.exportsTitle}</h2>
+        <p class="muted measure">{e.exportsText}</p>
+        <figure>
+          <a href={`/beispiel/${plan.name}`} class="paper">
+            <img src={`/beispiel/${plan.name}`} width={plan.width} height={plan.height} alt={e.planAlt} loading="lazy" decoding="async" />
+          </a>
+        </figure>
+        <ul class="files">
+          {e.exports.map(([file, text]) => {
+            const x = EXPORTS.find((f) => f.name === file)!;
+            return <li><a href={`/beispiel/${file}`}>{file}</a> <span class="muted">{text}, {formatSize(x.size, lang)}</span></li>;
+          })}
+        </ul>
+      </section>
+    </div>
+  </div>
+</Base>

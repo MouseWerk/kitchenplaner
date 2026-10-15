@@ -2,10 +2,13 @@
 
 import { catalogEntry } from "../kinds/registry";
 import { rectRoom } from "./geometry";
-import { FORMAT_VERSION } from "./project";
+import { DEFAULT_SETTINGS, FORMAT_VERSION } from "./project";
 import type { Item, Project } from "./types";
 
-/** An 8 × 6 m room, 3 m high, 240 mm walls, a 1010 mm door in the south wall near the west end. */
+/**
+ * An 8 × 6 m room, 3 m high, 240 mm walls, a 1010 mm door in the south wall near the west end.
+ * Items without a position number (0, as `testItem` makes them) get their place in the list.
+ */
 export function testProject(items: Item[] = []): Project {
   return {
     format: "kitchenplaner",
@@ -19,11 +22,12 @@ export function testProject(items: Item[] = []): Project {
       openings: [{ id: "door1", kind: "door", wall: 2, offset: 6800, width: 1010, height: 2135, sill: 0 }],
       partitions: [],
     },
-    items,
+    items: items.map((it, i) => (it.pos === 0 ? { ...it, pos: i + 1 } : it)),
+    settings: { ...DEFAULT_SETTINGS },
   };
 }
 
-/** An item of a catalog entry with a fixed id. */
+/** An item of a catalog entry with a fixed id; without `over.pos` numbered by `testProject`. */
 export function testItem(id: string, catalogId: string, x: number, y: number, rotation = 0, over: Partial<Item> = {}): Item {
   const e = catalogEntry(catalogId);
   if (!e) throw new Error(`unknown catalog id ${catalogId}`);
@@ -39,6 +43,7 @@ export function testItem(id: string, catalogId: string, x: number, y: number, ro
     height: e.height,
     elevation: e.elevation,
     connections: { ...e.connections },
+    pos: 0,
     ...over,
   };
 }

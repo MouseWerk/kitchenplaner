@@ -14,7 +14,8 @@ function room(openings: Opening[] = [door, windowN], points = rectRoom(8000, 600
 function wallMeshes(g: THREE.Object3D): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];
   g.traverse((o) => {
-    if (o instanceof THREE.Mesh && typeof o.userData.wall === "number" && o.name !== "pane") out.push(o);
+    // The solid wall pieces only: fittings (panes, shelves, door frames and leaves) carry names.
+    if (o instanceof THREE.Mesh && typeof o.userData.wall === "number" && o.name === "") out.push(o);
   });
   return out;
 }

@@ -2,6 +2,8 @@
 // equipment as in Blender: click and frame selection, dragging with snapping guides, the modal
 // G (grab) and R (rotate) operators, Shift+D, and dropping catalog entries. In the room mode the
 // room editor (RoomEditLayer.tsx) lies above the drawing and takes all input; the plan only draws.
+// Above both lies the measure tool while it is on (MeasureLayer.tsx). A right click without
+// moving opens the context menu of the mode (planMenu.ts); a right drag pans.
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
@@ -11,6 +13,10 @@ import { add, area, bounds, footprint, itemsInFrame, partitionOutline, pointInPo
 import { snapGroupGuides, snapItemGuides, type Guide } from "../model/snapGuides";
 import { planDrawing } from "../model/plan";
 import { RoomEditLayer } from "./RoomEditLayer";
+import { MeasureLayer } from "./MeasureLayer";
+import { arrangeMenu, roomMenu } from "./planMenu";
+import { ContextMenu, type ContextEntry } from "../components/ContextMenu";
+import { useMeasuring } from "../lib/measureTool";
 import { itemFromCatalog } from "../model/project";
 import type { Item, Project, Vec2 } from "../model/types";
 import { drawingBounds, mm, type Drawing, type Shape } from "../render/drawing";
@@ -51,7 +57,7 @@ const CORNER_R = 2.5;
 const READOUT_OFFSET = 16;
 
 type Drag =
-  | { kind: "pan"; start: Vec2; ox: number; oy: number }
+  | { kind: "pan"; start: Vec2; ox: number; oy: number; button: number }
   | {
       kind: "items";
       start: Vec2;
@@ -111,6 +117,9 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
   const [hover, setHover] = useState<string | null>(null);
   const [live, setLive] = useState<Live>(IDLE);
   const [panning, setPanning] = useState(false);
+  const measuring = useMeasuring();
+  /** The open context menu: where (window pixels) and its entries. */
+  const [menu, setMenu] = useState<{ at: Vec2; entries: ContextEntry[] } | null>(null);
 
   const warned = useMemo(() => new Set(issues.flatMap((i) => i.itemIds)), [issues]);
   const selected = useMemo(() => project.items.filter((i) => selection.items.includes(i.id)), [project.items, selection.items]);
@@ -334,7 +343,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     // Middle or right button, or Space held: pan.
     if (e.button === 1 || e.button === 2 || (e.button === 0 && space.current)) {
-      drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, ox: vp.ox, oy: vp.oy };
+      drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, ox: vp.ox, oy: vp.oy, button: e.button };
       setPanning(true);
       return;
     }
@@ -409,10 +418,18 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: RPointerEvent<SVGSVGElement>) => {
     if (roomEdit) return;
     const d = drag.current;
     const st = useStore.getState();
+    if (d?.kind === "pan" && d.button === 2 && e.type === "pointerup" && Math.hypot(e.clientX - d.start.x, e.clientY - d.start.y) < DRAG_THRESHOLD) {
+      // A right click without moving: the menu for the item under the pointer, or for the selection.
+      const hit = hitItem(st.project.items, point(e), st.selection.items);
+      if (hit && !st.selection.items.includes(hit.id)) st.select({ items: [hit.id], opening: null });
+      endDrag(true);
+      setMenu({ at: { x: e.clientX, y: e.clientY }, entries: arrangeMenu() });
+      return;
+    }
     if (d?.kind === "items" && !d.session && d.toggleOff) {
       st.select({ items: st.selection.items.filter((id) => id !== d.toggleOff) });
     } else if (d?.kind === "frame") {
@@ -494,7 +511,11 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
         </div>
       )}
       {/* Room mode: the room editor lies above the plan and takes all pointer input (RoomEditLayer.tsx). */}
-      {roomEdit && size.w > 0 && <RoomEditLayer vp={vp} width={size.w} height={size.h} setVp={setVp} onCursor={props.onCursor} />}
+      {roomEdit && size.w > 0 && (
+        <RoomEditLayer vp={vp} width={size.w} height={size.h} setVp={setVp} onCursor={props.onCursor} onMenu={(at, world, hit) => setMenu({ at, entries: roomMenu(world, hit) })} />
+      )}
+      {measuring && size.w > 0 && <MeasureLayer vp={vp} width={size.w} height={size.h} setVp={setVp} onCursor={props.onCursor} />}
+      {menu && <ContextMenu at={menu.at} entries={menu.entries} label={t("contextMenu.title")} backLabel={t("contextMenu.back")} onClose={() => setMenu(null)} />}
     </div>
   );
 }

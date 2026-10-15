@@ -1,8 +1,9 @@
 // Plausibility checks of a plan: what a planner would otherwise notice only on site.
 
 import { collides, kindOf, placementOf } from "../kinds/registry";
-import { add, convexOverlap, cross, EPS, footprint, openingSpan, pointInPolygon, scale, sub, walls } from "./geometry";
-import { bandPiece, clampPartitionOpening, openingSpanOnPartition, partitionAxes, partitionBand, partitionLength, partitionOutline } from "./partitions";
+import { across, doorLeaves, doorSetup, isDoor, leafRect, openingFrame, SLIDE_CLEAR, swingFrame } from "./doors";
+import { convexOverlap, cross, EPS, footprint, pointInPolygon, sub } from "./geometry";
+import { bandPiece, partitionBand, partitionLength, partitionOutline } from "./partitions";
 import { positions } from "./project";
 import { selfIntersects } from "./roomEdit";
 import type { Project, Room, Vec2 } from "./types";
@@ -20,7 +21,8 @@ export interface Issue {
 /**
  * All problems of a project, in a stable order: a room outline crossing itself, overlaps (by position pairs), items outside the
  * room, items standing in a partition, partitions reaching outside the room, items blocking a
- * door (in an outer wall or a partition), items higher than the room (each by position).
+ * door on the side it opens to (in an outer wall or a partition), items higher than the room
+ * (each by position).
  *
  * Items only collide with items of the same placement (`collides`): a hood above a range or a
  * slicer on a table is the normal case, and flat ones (drains, platforms) collide with nothing.
@@ -43,7 +45,9 @@ export function checkProject(project: Project): Issue[] {
     for (let j = i + 1; j < items.length; j++) {
       if (!collides(placement[i], placement[j])) continue;
       if (!convexOverlap(fps[i], fps[j])) continue;
-      issues.push({ key: "check.overlap", vars: { a: posOf(items[i].id), b: posOf(items[j].id) }, itemIds: [items[i].id, items[j].id] });
+      // The lower number first, whatever the list order: "Pos. 3 und Pos. 12".
+      const [pa, pb] = [posOf(items[i].id), posOf(items[j].id)].sort((x, y) => x - y);
+      issues.push({ key: "check.overlap", vars: { a: pa, b: pb }, itemIds: [items[i].id, items[j].id] });
     }
   }
 
@@ -117,31 +121,38 @@ function properlyCross(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
 }
 
 /**
- * The square in front of every door that has to stay free: door width × door width on the side
- * it opens to (into the room for an outer wall, left of a→b for a partition).
+ * The areas in front of every door that have to stay free. A hinged door: its swing square, door
+ * width × door width (each of two leaves its half), on the side it opens to (into the room or
+ * out of it for an outer wall, left or right of a→b for a partition). A door in an outer wall
+ * opening out sweeps outside the room, where items are found by the outside check, so it needs
+ * no area here. A sliding door: a strip `SLIDE_CLEAR` deep in front of the opening on every side
+ * inside the room, and on the face it runs on also beside the opening where its leaf parks.
  */
-function doorClearances(project: Project): Vec2[][] {
+export function doorClearances(project: Pick<Project, "room">): Vec2[][] {
   const { room } = project;
-  const ws = walls(room);
   const out: Vec2[][] = [];
   for (const o of room.openings) {
-    if (o.kind !== "door") continue;
-    if (o.partition !== undefined) {
-      const p = room.partitions.find((q) => q.id === o.partition);
-      if (!p || partitionLength(p) < EPS) continue;
-      const c = clampPartitionOpening(p, o);
-      const { left } = partitionAxes(p);
-      const face = scale(left, p.thickness / 2);
-      const [s0, s1] = openingSpanOnPartition(p, c).map((q) => add(q, face));
-      const into = scale(left, c.width);
-      out.push([s0, s1, add(s1, into), add(s0, into)]);
+    if (!isDoor(o)) continue;
+    const at = openingFrame(room, o);
+    if (!at) continue;
+    const { frame, opening } = at;
+    const setup = doorSetup(opening);
+    const outer = opening.partition === undefined;
+    const f = swingFrame(frame, setup.swing);
+    const inRoom = !outer || setup.swing === "in";
+    if (opening.kind === "door") {
+      if (!inRoom) continue;
+      for (const leaf of doorLeaves(f, opening)) out.push(leafRect(f, leaf, 0, leaf.width, f.near, f.near + leaf.width));
       continue;
     }
-    const span = openingSpan(room, o);
-    const w = ws[o.wall];
-    if (!span || !w) continue;
-    const into = scale(w.inward, o.width);
-    out.push([span[0], span[1], add(span[1], into), add(span[0], into)]);
+    // Sliding: the run face with the parking places, then the other face where it is in the room.
+    if (inRoom) {
+      for (const leaf of doorLeaves(f, opening)) out.push(leafRect(f, leaf, -leaf.width, leaf.width, f.near, f.near + SLIDE_CLEAR));
+    }
+    const back = swingFrame(frame, setup.swing === "in" ? "out" : "in");
+    if (!outer || setup.swing === "out") {
+      out.push([across(back, back.start, back.near), across(back, back.end, back.near), across(back, back.end, back.near + SLIDE_CLEAR), across(back, back.start, back.near + SLIDE_CLEAR)]);
+    }
   }
   return out;
 }

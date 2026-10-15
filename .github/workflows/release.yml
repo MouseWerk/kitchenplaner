@@ -6,8 +6,14 @@ name: Release
 #     (signingIdentity "-"), not notarized
 #   - Linux: .deb and .AppImage
 #   - the two example kitchens (examples/*.kplan) and SHA256SUMS.txt over every file
-# The body is docs/releases/v<version>.md (required). Nothing is signed with a paid certificate, so
-# the workflow needs no secrets, only the job token.
+# The body is docs/releases/v<version>.md (required). Nothing is signed with a paid certificate.
+#
+# Updates of the installed apps (src-tauri/src/updater.rs): with the repository secrets
+# TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD the builds sign their update files
+# (the setup, the macOS .app.tar.gz, the AppImage, the .deb when signed) and the release gets the
+# .sig files and the feed latest.json (scripts/update-feed.mjs), checked against the public key in
+# tauri.conf.json on the draft before it is published. Without the secrets (a fork) the release is
+# built and published without them, and the job summary says so: installed apps then do not see it.
 #
 # Started two ways (docs/release/automatic.md):
 #   - by auto-release.yml after a green CI on main (workflow_call with the version and the commit
@@ -141,6 +147,8 @@ jobs:
     env:
       TAG: ${{ needs.tag.outputs.tag }}
       VERSION: ${{ needs.tag.outputs.version }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -170,7 +178,13 @@ jobs:
           rm -rf target/release/bundle target/universal-apple-darwin/release/bundle
           # linuxdeploy is an AppImage itself: extract instead of mounting (no FUSE on the runners).
           export APPIMAGE_EXTRACT_AND_RUN=1
-          npx tauri build ${{ matrix.args }}
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            # Off in tauri.conf.json (CI and local builds have no key): signed update files here.
+            npx tauri build ${{ matrix.args }} --config '{"bundle":{"createUpdaterArtifacts":true}}'
+          else
+            echo "::notice::No TAURI_SIGNING_PRIVATE_KEY secret: built without update files."
+            npx tauri build ${{ matrix.args }}
+          fi
       - name: Collect files
         shell: bash
         run: |
@@ -186,17 +200,36 @@ jobs:
             fi
             cp "${m[0]}" "dist/$2"
           }
+          SIGNED=0
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then SIGNED=1; fi
           case "$RUNNER_OS" in
             Windows)
               one "target/release/bundle/nsis/*.exe" "${P}_x64-setup.exe"
+              if [ "$SIGNED" = 1 ]; then
+                one "target/release/bundle/nsis/*.exe.sig" "${P}_x64-setup.exe.sig"
+              fi
               ;;
             Linux)
               one "target/release/bundle/deb/*.deb" "${P}_amd64.deb"
               one "target/release/bundle/appimage/*.AppImage" "${P}_amd64.AppImage"
+              if [ "$SIGNED" = 1 ]; then
+                one "target/release/bundle/appimage/*.AppImage.sig" "${P}_amd64.AppImage.sig"
+                # The .deb's own feed entry, when the bundler signed it (scripts/update-feed.mjs).
+                if compgen -G "target/release/bundle/deb/*.deb.sig" > /dev/null; then
+                  one "target/release/bundle/deb/*.deb.sig" "${P}_amd64.deb.sig"
+                fi
+              fi
               ;;
             macOS)
               B=target/universal-apple-darwin/release/bundle
               one "$B/dmg/*.dmg" "${P}_universal.dmg"
+              if [ "$SIGNED" = 1 ]; then
+                # The bundler's own archive: its signature covers exactly these bytes.
+                one "$B/macos/*.app.tar.gz" "${P}_universal.app.tar.gz"
+                one "$B/macos/*.app.tar.gz.sig" "${P}_universal.app.tar.gz.sig"
+                ls -la dist
+                exit 0
+              fi
               APP=( "$B"/macos/*.app )
               if [ "${#APP[@]}" -ne 1 ] || [ ! -d "${APP[0]}" ]; then
                 echo "::error::Expected one app in $B/macos, found: ${APP[*]}"
@@ -222,10 +255,14 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ needs.tag.outputs.tag }}
       VERSION: ${{ needs.tag.outputs.version }}
+      SIGNED: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ needs.tag.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -246,6 +283,21 @@ jobs:
             "${P}_amd64.AppImage" \
             Beispielkueche-Restaurant.kplan \
             Example-Kitchen-Restaurant.kplan > "$RUNNER_TEMP/files.txt"
+          if [ "$SIGNED" = true ]; then
+            # The feed from the signed files; fails when a required platform is not signed.
+            node scripts/update-feed.mjs make dist "$VERSION" \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG" "docs/releases/$TAG.md"
+            printf '%s\n' \
+              "${P}_x64-setup.exe.sig" \
+              "${P}_universal.app.tar.gz.sig" \
+              "${P}_amd64.AppImage.sig" \
+              latest.json >> "$RUNNER_TEMP/files.txt"
+            if [ -f "dist/${P}_amd64.deb.sig" ]; then echo "${P}_amd64.deb.sig" >> "$RUNNER_TEMP/files.txt"; fi
+            echo "Update feed: latest.json for $(node -p 'Object.keys(require("./dist/latest.json").platforms).join(", ")')." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY secret: no update files and no latest.json. Installed apps do not see this release."
+            echo "Update feed: skipped (no TAURI_SIGNING_PRIVATE_KEY secret). Installed apps do not see this release." >> "$GITHUB_STEP_SUMMARY"
+          fi
           while read -r f; do
             [ -s "dist/$f" ] || { echo "::error::dist/$f is missing or empty"; ls -la dist; exit 1; }
           done < "$RUNNER_TEMP/files.txt"
@@ -301,6 +353,30 @@ jobs:
             exit 1
           fi
           echo "All $(wc -l < "$RUNNER_TEMP/expected.tsv") files are on the draft release."
+
+      # The files as the apps will download them: from the draft, not from dist.
+      - name: Verify the update feed
+        if: env.SIGNED == 'true'
+        shell: bash
+        env:
+          ID: ${{ steps.draft.outputs.id }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/feed"
+          mkdir -p "$D"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$ID/assets?per_page=100" \
+            --jq '.[] | "\(.id)\t\(.name)"' > "$RUNNER_TEMP/assets.tsv"
+          while IFS=$'\t' read -r AID ANAME; do
+            case "$ANAME" in
+              latest.json | *.exe | *.app.tar.gz | *.AppImage | *.deb)
+                curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+                  -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" \
+                  -o "$D/$ANAME" "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$AID"
+                ;;
+            esac
+          done < "$RUNNER_TEMP/assets.tsv"
+          node scripts/update-feed.mjs verify "$D" src-tauri/tauri.conf.json "$VERSION" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
 
       - name: Publish
         shell: bash

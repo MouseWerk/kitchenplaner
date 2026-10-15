@@ -2,7 +2,7 @@
 // plan's operators.
 
 import { bounds, footprint, normalizeAngle, rad, round } from "../model/geometry";
-import { newId } from "../model/project";
+import { newId, numberNew, renumberPositions } from "../model/project";
 import type { Item, Project, Vec2 } from "../model/types";
 import { selectedItems, useStore, type AppState } from "../store/store";
 
@@ -23,6 +23,17 @@ export function duplicateSelected() {
   const st = useStore.getState();
   const copies = copiesOf(selectedItems(st), DUPLICATE_OFFSET);
   if (copies.length > 0) st.addItems(copies);
+}
+
+/**
+ * Numbers all items 1 to n again as a walk round the room (`renumberPositions`): one undo step,
+ * and none when the numbers are already that.
+ */
+export function renumberItems() {
+  useStore.getState().change((p) => {
+    const items = renumberPositions(p);
+    return items.every((it, i) => it.pos === p.items[i].pos) ? p : { ...p, items };
+  });
 }
 
 /** Moves the selection by (dx, dy) mm; each key press is one undo step. */
@@ -151,7 +162,7 @@ export function beginTransform(): TransformSession | null {
  */
 export function beginDuplicate(): TransformSession | null {
   const st = useStore.getState();
-  const copies = copiesOf(selectedItems(st), 0);
+  const copies = numberNew(st.project.items, copiesOf(selectedItems(st), 0));
   if (copies.length === 0) return null;
   const snap = takeSnapshot();
   st.beginGesture();

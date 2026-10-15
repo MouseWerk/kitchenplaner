@@ -35,7 +35,7 @@ body:
     attributes:
       label: Kitchenplaner version / Version
       description: The version in the installer's file name, or in Windows under Settings → Apps. / Steht im Dateinamen des Installers.
-      placeholder: "0.1.0"
+      placeholder: "0.2.0"
     validations:
       required: true
   - type: input

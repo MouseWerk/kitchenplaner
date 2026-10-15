@@ -1,17 +1,25 @@
 // The main window: toolbar, catalog, the views in the chosen layout, inspector and status bar.
 
+import { invoke } from "@tauri-apps/api/core";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { CatalogPanel } from "./components/CatalogPanel";
-import { Inspector, connectionTotals } from "./components/Inspector";
+import { Inspector } from "./components/Inspector";
 import { Menu } from "./components/Menu";
 import { Toolbar } from "./components/Toolbar";
+import { AutosaveStatus } from "./components/AutosaveStatus";
+import { RecoveryDialog } from "./components/RecoveryDialog";
+import { Intro } from "./components/Intro";
+import { UpdateNotice } from "./components/UpdateNotice";
 import { confirmDiscard, openPath } from "./lib/actions";
+import { discardOwnBackup } from "./lib/autosave";
 import { num, useT } from "./lib/i18n";
 import { isTauri } from "./lib/platform";
 import { handleShortcut } from "./lib/shortcuts";
 import { dismissToast, useToasts } from "./lib/toast";
+import { startUpdates } from "./lib/updates";
 import { checkProject } from "./model/checks";
+import { electricStatus } from "./model/equipment";
 import { ELEVATION_CUTS, WALL_CUT_DEPTH, type ElevationCut } from "./model/elevation";
 import { FACINGS, type Facing, type Vec2 } from "./model/types";
 import { useStore } from "./store/store";
@@ -28,6 +36,8 @@ export function App() {
   const [fitSignal, setFitSignal] = useState(0);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [secondFacing, setSecondFacing] = useState<Facing>("east");
+  // The introduction waits until the question about backups is answered (or there are none).
+  const [recoverySettled, setRecoverySettled] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,6 +52,7 @@ export function App() {
   useEffect(() => setFitSignal((n) => n + 1), [loadCount]);
 
   useDesktopIntegration();
+  useEffect(() => startUpdates(), []);
 
   const plan = (
     <Pane title={t("view.plan")} key="plan">
@@ -98,6 +109,8 @@ export function App() {
       <Inspector />
       <StatusBar cursor={cursor} />
       <Toasts />
+      <RecoveryDialog onSettled={() => setRecoverySettled(true)} />
+      <Intro ready={recoverySettled} />
     </div>
   );
 }
@@ -154,7 +167,6 @@ function StatusBar(props: { cursor: Vec2 | null }) {
   const mode = useStore((s) => s.mode);
   const status = useStore((s) => s.status);
   const issues = useMemo(() => checkProject(project), [project]);
-  const totals = useMemo(() => connectionTotals(project.items), [project.items]);
   return (
     <footer className="statusbar">
       <span className="status-cell mono">{props.cursor ? `X ${Math.round(props.cursor.x)}  Y ${Math.round(props.cursor.y)}` : " "}</span>
@@ -162,8 +174,9 @@ function StatusBar(props: { cursor: Vec2 | null }) {
       <span className="status-cell mode">{t(mode === "room" ? "mode.room" : "mode.arrange")}</span>
       {status ? <span className="status-cell mono">{status}</span> : <span className="status-cell">{t(mode === "room" ? "mode.roomHint" : "mode.arrangeHint")}</span>}
       <span className="status-spacer" />
+      <AutosaveStatus />
       <span className="status-cell">{t("status.items", { n: project.items.length })}</span>
-      <span className="status-cell">{num(totals.electricKw, 1)} kW</span>
+      <span className="status-cell">{electricStatus(project)}</span>
       {issues.length > 0 && (
         <span className="status-cell warn">
           <AlertTriangle size={13} strokeWidth={1.75} aria-hidden /> {t("status.issues", { n: issues.length })}
@@ -178,6 +191,7 @@ function Toasts() {
   const toasts = useToasts();
   return (
     <div className="toasts" role="status" aria-live="polite">
+      <UpdateNotice />
       {toasts.map((x) => (
         <div key={x.id} className={x.tone === "danger" ? "toast danger" : "toast"}>
           {x.tone === "danger" && <AlertTriangle size={15} strokeWidth={1.75} aria-hidden />}
@@ -214,17 +228,17 @@ function useDesktopIntegration() {
     let cancelled = false;
     void (async () => {
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      const { invoke } = await import("@tauri-apps/api/core");
       const win = getCurrentWindow();
       const off = await win.onCloseRequested(async (event) => {
         event.preventDefault();
-        if (await confirmDiscard()) await win.destroy();
+        // Closing without saving: the discarded changes must not come back as a backup.
+        if (await confirmDiscard()) await discardOwnBackup().then(() => win.destroy());
       });
       // Quitting the app (Cmd+Q on macOS) closes no window first, so the shell holds the exit and
       // asks here; "confirm_exit" lets it go.
       const { listen } = await import("@tauri-apps/api/event");
       const offExit = await listen("exit-requested", async () => {
-        if (await confirmDiscard()) await invoke("confirm_exit");
+        if (await confirmDiscard()) await discardOwnBackup().then(() => invoke("confirm_exit"));
       });
       if (cancelled) {
         off();

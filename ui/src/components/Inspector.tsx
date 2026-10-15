@@ -24,12 +24,16 @@ import {
   type OpeningHostRef,
 } from "../model/roomEdit";
 import { removeRoomSelection } from "../views/RoomEditLayer";
-import { newId, positions, variantPatch } from "../model/project";
-import type { Connections, Item, Opening, OpeningKind, Partition, Project, Vec2 } from "../model/types";
+import { cleanSpec, MAX_SIMULTANEITY, MIN_SIMULTANEITY, newId, variantPatch } from "../model/project";
+import { withSimultaneity } from "../model/equipment";
+import { doorHand, doorSetup, isDoor, openingFrame } from "../model/doors";
+import type { Connections, DoorHinge, DoorSwing, Item, ItemSpec, Opening, OpeningKind, Partition, Project, Vec2 } from "../model/types";
 import { selectedItems, useStore } from "../store/store";
-import { num, useT, type TKey } from "../lib/i18n";
+import { currentLang, num, useT, type TKey } from "../lib/i18n";
+import { keyLabel } from "../lib/shortcuts";
 import { CheckField, DateField, NumberField, SelectField, TextField } from "./Fields";
-import { duplicateSelected, rotateSelected } from "../lib/commands";
+import { AlignTools } from "./AlignTools";
+import { duplicateSelected, renumberItems, rotateSelected } from "../lib/commands";
 
 /** Smallest item size (mm). */
 const MIN_SIZE = 10;
@@ -90,20 +94,21 @@ const ELEVATION_LABEL: Record<Placement, TKey> = {
   overhead: "inspector.mountHeight",
 };
 
-function ItemPanel({ item, project }: { item: Item; project: Project }) {
+function ItemPanel({ item }: { item: Item; project: Project }) {
   const t = useT();
   const st = useStore.getState();
-  const pos = positions(project).get(item.id);
   const entry = catalogEntry(item.catalogId);
   const set = (patch: Partial<Item>) => st.updateItems([item.id], () => patch);
   const setConn = (patch: Partial<Connections>) => st.updateItems([item.id], (it) => ({ connections: { ...it.connections, ...patch } }));
+  const spec = item.spec ?? {};
+  const setSpec = (patch: Partial<ItemSpec>) => st.updateItems([item.id], (it) => ({ spec: cleanSpec({ ...it.spec, ...patch }) }));
   const c = item.connections;
   const placement = placementOf(kindOf(item.catalogId));
 
   return (
     <>
       <div className="insp-title">
-        <span className="pos-badge">{pos}</span>
+        <span className="pos-badge">{item.pos}</span>
         <div>
           <div className="insp-name">{item.name}</div>
           {entry && <div className="insp-sub">{t(entry.name)}</div>}
@@ -138,6 +143,14 @@ function ItemPanel({ item, project }: { item: Item; project: Project }) {
             })}
           </div>
         )}
+      </Section>
+      <Section title={t("inspector.product")}>
+        <div className="grid">
+          <TextField label={t("list.manufacturer")} value={spec.manufacturer ?? ""} onChange={(v) => setSpec({ manufacturer: v })} wide />
+          <TextField label={t("list.model")} value={spec.model ?? ""} onChange={(v) => setSpec({ model: v })} />
+          <TextField label={t("list.article")} value={spec.article ?? ""} onChange={(v) => setSpec({ article: v })} />
+          <NumberField label={t("inspector.price")} unit="€" value={spec.price ?? 0} min={0} max={10_000_000} step={10} digits={2} onChange={(v) => setSpec({ price: v || undefined })} />
+        </div>
       </Section>
       <Section title={t("inspector.position")}>
         <div className="grid">
@@ -181,6 +194,7 @@ function ItemPanel({ item, project }: { item: Item; project: Project }) {
           <CheckField label={t("list.drain")} checked={!!c.drain} onChange={(v) => setConn({ drain: v || undefined })} />
           <CheckField label={t("list.floorDrain")} checked={!!c.floorDrain} onChange={(v) => setConn({ floorDrain: v || undefined })} />
         </div>
+        <p className="hint">{t("data.typicalValues")}</p>
       </Section>
       <Section title={t("list.note")}>
         <TextField label={t("list.note")} value={item.note ?? ""} onChange={(v) => set({ note: v || undefined })} wide multiline />
@@ -204,6 +218,7 @@ function MultiPanel({ count }: { count: number }) {
       <div className="insp-title">
         <div className="insp-name">{t("inspector.multi", { n: count })}</div>
       </div>
+      <AlignTools count={count} />
       <div className="insp-actions">
         <button type="button" className="btn" onClick={() => rotateSelected(90)}>
           <RotateCw size={15} strokeWidth={1.75} aria-hidden /> {t("inspector.rotateRight")}
@@ -241,7 +256,7 @@ function hostLabel(t: T, project: Project, o: Opening): string {
   return o.partition ? partitionLabel(t, project, o.partition) : wallLabel(t, project, o.wall);
 }
 
-const OPENING_KINDS: OpeningKind[] = ["door", "window", "passage", "hatch"];
+const OPENING_KINDS: OpeningKind[] = ["door", "slidingDoor", "window", "passage", "hatch"];
 const ADD_KINDS: OpeningKind[] = ["door", "window", "hatch"];
 
 /** Adds a new opening of `kind` to its host and selects it (one undo step). */
@@ -316,8 +331,71 @@ function OpeningPanel({ opening, project }: { opening: Opening; project: Project
         </div>
         {opening.kind === "hatch" && <p className="hint">{t("inspector.hatchHint")}</p>}
       </Section>
+      {isDoor(opening) && <DoorSection opening={opening} project={project} />}
       <DeleteButton />
     </>
+  );
+}
+
+/** The compass direction a plan vector points to most. */
+function compass(v: Vec2): "North" | "East" | "South" | "West" {
+  return Math.abs(v.x) > Math.abs(v.y) ? (v.x > 0 ? "East" : "West") : v.y > 0 ? "South" : "North";
+}
+
+/**
+ * Hinge side, opening direction and leaves of a door; for a sliding door the side it opens to and
+ * the face it runs on. The hinge reads as DIN links/rechts, which follows from the hinge jamb and
+ * the opening direction; a partition names its sides by the compass.
+ */
+function DoorSection({ opening, project }: { opening: Opening; project: Project }) {
+  const t = useT();
+  const st = useStore.getState();
+  const at = openingFrame(project.room, opening);
+  if (!at) return null;
+  const { frame } = at;
+  const setup = doorSetup(opening);
+  const sliding = opening.kind === "slidingDoor";
+  const outer = opening.partition === undefined;
+  const hand = (hinge: DoorHinge): string => {
+    const side = doorHand(frame, { ...opening, hinge });
+    if (sliding) return t(side === "left" ? "door.slideLeft" : "door.slideRight");
+    return t(side === "left" ? "door.left" : "door.right");
+  };
+  const sideLabel = (swing: DoorSwing): string => {
+    if (outer) return t(sliding ? (swing === "in" ? "door.faceIn" : "door.faceOut") : swing === "in" ? "door.swingIn" : "door.swingOut");
+    const dirName = compass(swing === "in" ? frame.normal : { x: -frame.normal.x, y: -frame.normal.y });
+    return t(sliding ? (`door.face${dirName}` as const) : (`door.to${dirName}` as const));
+  };
+  const hingeLabel = sliding ? t("door.slidesTo") : setup.leaves === 2 ? t("door.activeLeaf") : t("door.hinge");
+  const lang = currentLang();
+  const keys = { hinge: keyLabel("H", lang), swing: keyLabel("Shift+H", lang) };
+  return (
+    <Section title={t(`opening.${opening.kind}` as const)}>
+      <div className="grid">
+        <SelectField<DoorHinge>
+          label={hingeLabel}
+          value={setup.hinge}
+          options={(["start", "end"] as const).map((h) => ({ value: h, label: hand(h) }))}
+          onChange={(v) => st.updateOpening(opening.id, { hinge: v })}
+        />
+        <SelectField<DoorSwing>
+          label={sliding ? t("door.runsOn") : t("door.swing")}
+          value={setup.swing}
+          options={(["in", "out"] as const).map((v) => ({ value: v, label: sideLabel(v) }))}
+          onChange={(v) => st.updateOpening(opening.id, { swing: v })}
+        />
+        <SelectField<1 | 2>
+          label={t("door.leaves")}
+          value={setup.leaves}
+          options={[
+            { value: 1, label: t("door.leaves1") },
+            { value: 2, label: t("door.leaves2") },
+          ]}
+          onChange={(v) => st.updateOpening(opening.id, { leaves: v })}
+        />
+      </div>
+      <p className="hint">{t(sliding ? "door.slideHint" : "door.handHint", keys)}</p>
+    </Section>
   );
 }
 
@@ -451,8 +529,9 @@ function ProjectPanel({ project }: { project: Project }) {
   const setInfo = (patch: Partial<Project["info"]>) => st.change((p) => ({ ...p, info: { ...p.info, ...patch } }));
   const rect = rectSize(project);
   const issues = useMemo(() => checkProject(project), [project]);
-  const pos = positions(project);
   const totals = useMemo(() => connectionTotals(project.items), [project.items]);
+  const factor = project.settings.simultaneity;
+  const setFactor = (v: number) => st.change((p) => ({ ...p, settings: { ...p.settings, simultaneity: v } }));
 
   const resize = (w: number, d: number) => {
     const b = bounds(project.room.points);
@@ -473,6 +552,8 @@ function ProjectPanel({ project }: { project: Project }) {
           <TextField label={t("sheet.client")} value={info.client} onChange={(v) => setInfo({ client: v })} wide />
           <TextField label={t("sheet.author")} value={info.author} onChange={(v) => setInfo({ author: v })} />
           <DateField label={t("sheet.date")} value={info.date} onChange={(v) => setInfo({ date: v })} />
+          <TextField label={t("sheet.drawingNo")} value={info.drawingNo ?? ""} onChange={(v) => setInfo({ drawingNo: v.trim() || undefined })} />
+          <TextField label={t("sheet.revision")} value={info.revision ?? ""} onChange={(v) => setInfo({ revision: v.trim() || undefined })} />
         </div>
       </Section>
       <Section title={t("inspector.room")}>
@@ -503,11 +584,19 @@ function ProjectPanel({ project }: { project: Project }) {
         {project.room.openings.length === 0 ? <p className="hint">{t("inspector.noOpenings")}</p> : <OpeningList project={project} openings={project.room.openings} />}
       </Section>
       <Section title={t("inspector.totals")}>
+        <div className="grid">
+          <NumberField label={t("data.simultaneity")} value={factor} min={MIN_SIMULTANEITY} max={MAX_SIMULTANEITY} step={0.05} digits={2} onChange={setFactor} />
+        </div>
+        <p className="hint">{t("data.simultaneityHint")}</p>
         <dl className="totals">
-          <dt>{t("list.electric")}</dt>
+          <dt>{t("data.electricSum")}</dt>
           <dd>{num(totals.electricKw, 1)}</dd>
-          <dt>{t("list.gas")}</dt>
+          <dt>{t("data.electricFactored")}</dt>
+          <dd>{num(withSimultaneity(totals.electricKw, factor), 1)}</dd>
+          <dt>{t("data.gasSum")}</dt>
           <dd>{num(totals.gasKw, 1)}</dd>
+          <dt>{t("data.gasFactored")}</dt>
+          <dd>{num(withSimultaneity(totals.gasKw, factor), 1)}</dd>
           <dt>{t("list.exhaust")}</dt>
           <dd>{num(totals.exhaustM3h)}</dd>
           <dt>{t("inspector.waterPoints")}</dt>
@@ -516,8 +605,25 @@ function ProjectPanel({ project }: { project: Project }) {
           <dd>{totals.drains}</dd>
           <dt>{t("inspector.itemCount")}</dt>
           <dd>{project.items.length}</dd>
+          {totals.pricedCount > 0 && (
+            <>
+              <dt>{t("data.priceSum")}</dt>
+              <dd>{num(totals.price, 2)}</dd>
+            </>
+          )}
         </dl>
+        <p className="hint">{t("data.typicalValues")}</p>
       </Section>
+      {project.items.length > 0 && (
+        <Section title={t("data.positions")}>
+          <p className="hint">{t("data.renumberHint")}</p>
+          <div className="btn-row">
+            <button type="button" className="btn small" onClick={renumberItems}>
+              {t("data.renumber")}
+            </button>
+          </div>
+        </Section>
+      )}
       <Section title={t("inspector.check")}>
         {issues.length === 0 ? (
           <p className="notice ok">
@@ -535,7 +641,7 @@ function ProjectPanel({ project }: { project: Project }) {
             ))}
           </ul>
         )}
-        {pos.size === 0 && <p className="hint">{t("inspector.emptyHint")}</p>}
+        {project.items.length === 0 && <p className="hint">{t("inspector.emptyHint")}</p>}
       </Section>
     </>
   );
@@ -547,13 +653,19 @@ export function connectionTotals(items: readonly Item[]) {
   let exhaustM3h = 0;
   let water = 0;
   let drains = 0;
+  let price = 0;
+  let pricedCount = 0;
   for (const it of items) {
     const c = it.connections;
+    if (it.spec?.price !== undefined) {
+      price += it.spec.price;
+      pricedCount++;
+    }
     electricKw += c.electricKw ?? 0;
     gasKw += c.gasKw ?? 0;
     exhaustM3h += c.exhaustM3h ?? 0;
     if (c.coldWater || c.hotWater) water++;
     if (c.drain || c.floorDrain) drains++;
   }
-  return { electricKw, gasKw, exhaustM3h, water, drains };
+  return { electricKw, gasKw, exhaustM3h, water, drains, price, pricedCount };
 }

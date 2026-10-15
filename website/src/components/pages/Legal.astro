@@ -1,0 +1,89 @@
+---
+/**
+ * Legal notice and privacy policy. The provider's details come from src/data/legal.mjs; while a
+ * required one is missing, the page shows a draft notice and marked placeholders and stays out of
+ * search engines (the deploy workflow does not publish the site then).
+ */
+import Base from '../../layouts/Base.astro';
+import { dicts, type Lang } from '../../i18n';
+import { LEGAL, missingLegal } from '../../data/legal.mjs';
+import { ROUTES, absolute } from '../../data/site.mjs';
+
+interface Props { lang: Lang; kind: 'imprint' | 'privacy' }
+const { lang, kind } = Astro.props;
+const t = dicts[lang];
+const l = t.legal;
+const draft = missingLegal().length > 0;
+const todo = (field: string) => `TODO: ${field}`;
+const val = (v: string | null, field: string) => v ?? todo(field);
+const title = kind === 'imprint' ? l.imprint.title : l.privacy.title;
+const crumbs = {
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Kitchenplaner', item: absolute(ROUTES.home[lang]) },
+    { '@type': 'ListItem', position: 2, name: title, item: absolute(ROUTES[kind][lang]) },
+  ],
+};
+const GITHUB_PRIVACY = 'https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement';
+---
+<Base lang={lang} page={kind} title={t.meta[kind].title} description={t.meta[kind].description} noindex={draft} schema={[crumbs]}>
+  <div class="wrap page-head">
+    <h1>{title}</h1>
+    {draft && (
+      <div class="notice" role="note">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="10" cy="10" r="8" /><path d="M10 6v5M10 14v.01" stroke-linecap="round" /></svg>
+        <p>{l.draft}</p>
+      </div>
+    )}
+  </div>
+  <div class="page-body">
+    <div class="wrap">
+      <div class="legal">
+      {kind === 'imprint' ? (
+        <>
+          <h2>{l.imprint.provider}</h2>
+          <address>
+            <span class:list={{ todo: !LEGAL.name }}>{val(LEGAL.name, 'name')}</span><br />
+            <span class:list={{ todo: !LEGAL.street }}>{val(LEGAL.street, 'street')}</span><br />
+            <span class:list={{ todo: !LEGAL.city }}>{val(LEGAL.city, 'city')}</span><br />
+            <span class:list={{ todo: !LEGAL.country }}>{val(LEGAL.country, 'country')}</span>
+          </address>
+          {LEGAL.represented && <p>{l.imprint.represented}: {LEGAL.represented}</p>}
+          <h2>{l.imprint.contact}</h2>
+          <p>
+            {l.imprint.email}: {LEGAL.email ? <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> : <span class="todo">{todo('email')}</span>}
+            {LEGAL.phone && <><br />{l.imprint.phone}: {LEGAL.phone}</>}
+          </p>
+          {LEGAL.register && <><h2>{l.imprint.register}</h2><p>{LEGAL.register}</p></>}
+          {LEGAL.vat && <><h2>{l.imprint.vat}</h2><p>{LEGAL.vat}</p></>}
+          <h2>{l.imprint.responsible}</h2>
+          <p><span class:list={{ todo: !LEGAL.responsible }}>{val(LEGAL.responsible, 'responsible')}</span></p>
+        </>
+      ) : (
+        <>
+          <h2>{l.privacy.short}</h2>
+          <ul>{l.privacy.shortItems.map((i) => <li>{i}</li>)}</ul>
+          <h2>{l.privacy.controllerTitle}</h2>
+          <address>
+            <span class:list={{ todo: !LEGAL.name }}>{val(LEGAL.name, 'name')}</span><br />
+            <span class:list={{ todo: !LEGAL.street }}>{val(LEGAL.street, 'street')}</span><br />
+            <span class:list={{ todo: !LEGAL.city }}>{val(LEGAL.city, 'city')}</span><br />
+            {LEGAL.email ? <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> : <span class="todo">{todo('email')}</span>}
+          </address>
+          <h2>{l.privacy.hostingTitle}</h2>
+          <p>{l.privacy.hosting} <a href={GITHUB_PRIVACY} rel="noopener">{l.privacy.hostingLink}</a></p>
+          <h2>{l.privacy.downloadsTitle}</h2>
+          <p>{l.privacy.downloads}</p>
+          <h2>{l.privacy.appTitle}</h2>
+          <p>{l.privacy.app}</p>
+          <h2>{l.privacy.rightsTitle}</h2>
+          <p>{l.privacy.rights}</p>
+        </>
+      )}
+      <p class="stand">
+        {l.updated}: {LEGAL.updated ? <time datetime={LEGAL.updated}>{new Date(LEGAL.updated).toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</time> : <span class="todo">{todo('updated')}</span>}
+      </p>
+      </div>
+    </div>
+  </div>
+</Base>

@@ -1,0 +1,27 @@
+---
+/** GitHub Pages serves this one file for every missing address, so it speaks both languages. */
+import Base from '../layouts/Base.astro';
+import { dicts } from '../i18n';
+import { ROUTES } from '../data/site.mjs';
+const { de, en } = dicts;
+---
+<Base lang="de" page={null} title={de.meta.notFound.title} description={de.meta.notFound.description} noindex>
+  <div class="wrap page-head">
+    <h1>{de.notFound.title}</h1>
+    <p class="lead">{de.notFound.text}</p>
+    <ul class="buttons">
+      <li><a class="btn btn-primary" href={ROUTES.home.de}>Kitchenplaner</a></li>
+      <li><a class="btn btn-secondary" href={ROUTES.download.de}>{de.nav.download}</a></li>
+      <li><a class="btn btn-secondary" href={ROUTES.example.de}>{de.nav.example}</a></li>
+    </ul>
+  </div>
+  <div class="wrap page-head" lang="en">
+    <h2>{en.notFound.title}</h2>
+    <p class="lead">{en.notFound.text}</p>
+    <ul class="buttons">
+      <li><a class="btn btn-secondary" href={ROUTES.home.en}>Kitchenplaner</a></li>
+      <li><a class="btn btn-secondary" href={ROUTES.download.en}>{en.nav.download}</a></li>
+      <li><a class="btn btn-secondary" href={ROUTES.example.en}>{en.nav.example}</a></li>
+    </ul>
+  </div>
+</Base>

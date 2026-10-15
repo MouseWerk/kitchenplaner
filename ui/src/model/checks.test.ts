@@ -145,3 +145,10 @@ describe("checkProject partitions", () => {
     expect(checkProject(p)).toEqual([{ key: "check.doorBlocked", vars: { pos: 1 }, itemIds: ["e"] }]);
   });
 });
+
+describe("position numbers in the findings", () => {
+  it("names items by their stable numbers, the lower first", () => {
+    const p = testProject([testItem("a", "table", 2000, 350, 0, { pos: 12 }), testItem("b", "table", 2500, 350, 0, { pos: 3 })]);
+    expect(checkProject(p).find((i) => i.key === "check.overlap")?.vars).toEqual({ a: 3, b: 12 });
+  });
+});

@@ -1,0 +1,91 @@
+name: Website
+
+# Builds website/ (Astro, static) and publishes it to GitHub Pages at kitchenplaner.mousewerk.de
+# (website/public/CNAME). The build reads the latest release from the GitHub API, so the download
+# buttons link to its files; it runs again after every release. The build runs the site checks
+# (links, anchors, SEO, images, CSP, page weight, i18n, design rules); a failing check stops it.
+#
+# The site is only deployed when the legal notice is complete (website/src/data/legal.mjs,
+# scripts/legal-ready.mjs); until then the build and the checks run, the deploy is skipped.
+# Needs: Settings -> Pages -> Source "GitHub Actions", and the DNS record
+# kitchenplaner CNAME mousewerk.github.io. See website/README.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - website/**
+      - docs/releases/**
+      - pitch/**
+      - src-tauri/icons/icon.png
+      - .github/workflows/website.yml
+  pull_request:
+    paths:
+      - website/**
+      - docs/releases/**
+      - .github/workflows/website.yml
+  # release.yml publishes with the workflow token, which does not start other workflows through
+  # "release: published"; so the site follows the Release workflow. It runs on main. After a
+  # release published by hand, run this workflow by hand (Actions -> Website -> Run workflow).
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and check
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      legal_ready: ${{ steps.legal.outputs.ready }}
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Build and check
+        run: npm run build
+        env:
+          # Raises the API rate limit for reading the releases (read-only, public data).
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Legal notice complete?
+        id: legal
+        run: node scripts/legal-ready.mjs
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: website/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: >-
+      github.event_name != 'pull_request' &&
+      needs.build.outputs.legal_ready == 'true' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_run')
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

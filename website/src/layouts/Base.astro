@@ -1,0 +1,160 @@
+---
+/**
+ * Every page: head (title, description, canonical, hreflang, preview tags, CSP, JSON-LD), the
+ * header with the navigation and the language switch, the content and the footer. The site sends
+ * no JavaScript; the CSP of the built pages forbids scripts, inline styles and other origins.
+ */
+import { getImage } from 'astro:assets';
+import interLatin from '../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import appIcon from '../../../src-tauri/icons/icon.png';
+import '../styles/fonts.css';
+import '../styles/tokens.css';
+import '../styles/site.css';
+import { dicts, type Lang } from '../i18n';
+import { ROUTES, SITE_NAME, REPO_URL, RELEASES_URL, ISSUES_URL, LICENSE_URL, absolute } from '../data/site.mjs';
+
+type PageKey = keyof typeof ROUTES;
+
+interface Props {
+  lang: Lang;
+  /** The page in ROUTES; null for the 404 page. */
+  page: PageKey | null;
+  title: string;
+  description: string;
+  noindex?: boolean;
+  /** Page-specific schema.org nodes; WebSite is added here. */
+  schema?: Record<string, unknown>[];
+  /** The navigation entry to mark as current (defaults to the page). */
+  current?: PageKey;
+}
+
+const { lang, page, title, description, noindex = false, schema = [], current = page } = Astro.props;
+const t = dicts[lang];
+const other: Lang = lang === 'de' ? 'en' : 'de';
+const path = page ? ROUTES[page][lang] : null;
+const canonical = path ? absolute(path) : null;
+const ogImage = absolute('/og.jpg');
+const r = (key: PageKey, l: Lang = lang) => ROUTES[key][l];
+
+const favicon = await getImage({ src: appIcon, format: 'png', width: 64 });
+const touchIcon = await getImage({ src: appIcon, format: 'png', width: 180 });
+const brandIcon = await getImage({ src: appIcon, format: 'png', width: 56 });
+
+const website = {
+  '@type': 'WebSite',
+  '@id': `${absolute('/')}#website`,
+  name: SITE_NAME,
+  url: absolute(ROUTES.home[lang]),
+  inLanguage: lang,
+};
+const jsonLd = noindex ? null : JSON.stringify({ '@context': 'https://schema.org', '@graph': [website, ...schema] }).replace(/</g, '\\u003c');
+
+const csp = [
+  "default-src 'none'",
+  "img-src 'self'",
+  "style-src 'self'",
+  "font-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  'upgrade-insecure-requests',
+].join('; ');
+
+const nav: { key: PageKey; label: string; href: string }[] = [
+  { key: 'home', label: t.nav.features, href: `${r('home')}#funktionen` },
+  { key: 'example', label: t.nav.example, href: r('example') },
+  { key: 'download', label: t.nav.download, href: r('download') },
+  { key: 'changelog', label: t.nav.changelog, href: r('changelog') },
+];
+---
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {import.meta.env.PROD && <meta http-equiv="Content-Security-Policy" content={csp} />}
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex" /> : <meta name="robots" content="index,follow,max-image-preview:large" />}
+    {canonical && !noindex && <link rel="canonical" href={canonical} />}
+    {page && !noindex && <link rel="alternate" hreflang="de" href={absolute(r(page, 'de'))} />}
+    {page && !noindex && <link rel="alternate" hreflang="en" href={absolute(r(page, 'en'))} />}
+    {page && !noindex && <link rel="alternate" hreflang="x-default" href={absolute(r(page, 'de'))} />}
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href={favicon.src} type="image/png" sizes="64x64" />
+    <link rel="apple-touch-icon" href={touchIcon.src} />
+    <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:locale" content={t.locale} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={t.meta.ogAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    {jsonLd && <script type="application/ld+json" set:html={jsonLd} />}
+  </head>
+  <body>
+    <a class="skip" href="#inhalt">{t.skip}</a>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href={r('home')} aria-label={t.nav.home}>
+          <img src={brandIcon.src} width="28" height="28" alt="" loading="eager" />
+          <span>{SITE_NAME}</span>
+        </a>
+        <nav aria-label={t.nav.label}>
+          <ul class="nav">
+            {nav.map((n) => (
+              <li>
+                <a href={n.href} aria-current={current === n.key && n.key !== 'home' ? 'page' : undefined}>{n.label}</a>
+              </li>
+            ))}
+            {page && (
+              <li class="lang-item">
+                <a class="lang" href={r(page, other)} hreflang={other} lang={other} aria-label={t.nav.switchLabel}>{t.nav.switchTo}</a>
+              </li>
+            )}
+          </ul>
+        </nav>
+      </div>
+    </header>
+    <main id="inhalt" tabindex="-1">
+      <slot />
+    </main>
+    <footer class="site-footer" aria-label={t.footer.label}>
+      <div class="wrap footer-grid">
+        <div>
+          <p>{t.footer.tagline}</p>
+        </div>
+        <div>
+          <h2>{t.footer.site}</h2>
+          <ul>
+            <li><a href={r('example')}>{t.nav.example}</a></li>
+            <li><a href={r('download')}>{t.nav.download}</a></li>
+            <li><a href={r('changelog')}>{t.nav.changelog}</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2>{t.footer.project}</h2>
+          <ul>
+            <li><a href={REPO_URL} rel="noopener">{t.footer.source}</a></li>
+            <li><a href={RELEASES_URL} rel="noopener">{t.footer.releases}</a></li>
+            <li><a href={ISSUES_URL} rel="noopener">{t.footer.issues}</a></li>
+            <li><a href={LICENSE_URL} rel="noopener">{t.footer.license}</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2>{t.footer.legal}</h2>
+          <ul>
+            <li><a href={r('imprint')}>{t.footer.imprint}</a></li>
+            <li><a href={r('privacy')}>{t.footer.privacy}</a></li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

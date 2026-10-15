@@ -2,18 +2,24 @@
 //
 // The editing modes add their own keys through `setModeKeyHandler`: the plan's arrange mode
 // (G, R, Shift+D and the keys of a running operator) and the room layer register a handler while
-// they are active; it sees every key first and swallows what it handles.
+// they are active; it sees every key first and swallows what it handles. A tool laid over both
+// modes (the measure tool) registers with `setToolKeyHandler` and sees keys before the mode.
 
 import { newFile, openFile, saveFile } from "./actions";
 import { deselectAll, duplicateSelected, nudgeSelected, rotateSelected, selectAll } from "./commands";
+import { planShown, toggleMeasuring } from "./measureTool";
 import { useStore, type Layout } from "../store/store";
 
 export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** A shortcut as the user's keyboard labels it: „Strg+S“ / "Ctrl+S" / "⌘S". */
 export function keyLabel(combo: string, lang: "de" | "en"): string {
-  if (isMac) return combo.replace("Mod+", "⌘").replace("Shift+", "⇧").replace("Alt+", "⌥");
-  return combo.replace("Mod", lang === "de" ? "Strg" : "Ctrl").replace("Shift", lang === "de" ? "Umschalt" : "Shift").replace("Del", lang === "de" ? "Entf" : "Del");
+  if (isMac) return combo.replace("Mod+", "⌘").replace("Shift+", "⇧").replace("Alt+", "⌥").replace("Enter", "↩");
+  return combo
+    .replace("Mod", lang === "de" ? "Strg" : "Ctrl")
+    .replace("Shift", lang === "de" ? "Umschalt" : "Shift")
+    .replace("Del", lang === "de" ? "Entf" : "Del")
+    .replace("Enter", lang === "de" ? "Eingabe" : "Enter");
 }
 
 /** Nudge steps with the arrow keys (mm): plain and with Shift. */
@@ -39,13 +45,23 @@ export function setModeKeyHandler(fn: ModeKeyHandler | null): () => void {
   };
 }
 
+let toolKeyHandler: ModeKeyHandler | null = null;
+
+/** Registers the key handler of a tool over the modes (null removes it); as `setModeKeyHandler`. */
+export function setToolKeyHandler(fn: ModeKeyHandler | null): () => void {
+  toolKeyHandler = fn;
+  return () => {
+    if (toolKeyHandler === fn) toolKeyHandler = null;
+  };
+}
+
 /** Handles a key press; returns true when it was a shortcut. `fit` fits the views. */
 export function handleShortcut(e: KeyboardEvent, fit: () => void): boolean {
   const target = e.target as HTMLElement | null;
   const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
   // Shortcuts do nothing behind an open dialog or menu.
   if (document.querySelector("[role=menu], [role=dialog]")) return false;
-  if (!typing && modeKeyHandler?.(e)) {
+  if (!typing && (toolKeyHandler?.(e) || modeKeyHandler?.(e))) {
     e.preventDefault();
     return true;
   }
@@ -75,6 +91,8 @@ export function handleShortcut(e: KeyboardEvent, fit: () => void): boolean {
   if (key === "Tab" && inViews && !e.shiftKey) return run(() => st.setMode(st.mode === "room" ? "arrange" : "room"));
   if (key === "f") return run(fit);
   if (LAYOUT_KEYS[key]) return run(() => st.setLayout(LAYOUT_KEYS[key]));
+  // M measures in the plan, in both modes (a running operator took the key above).
+  if (key === "m" && !e.shiftKey && planShown()) return run(toggleMeasuring);
   // The rest edits equipment; the room mode handles its own keys (its handler above).
   if (!arrange) return false;
   const hasSel = st.selection.items.length > 0;

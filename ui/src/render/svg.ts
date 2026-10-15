@@ -138,6 +138,9 @@ const FRAME_OTHER = 10;
 const TITLE_W = 180;
 const TITLE_ROW = 9;
 const TITLE_ROWS = 4;
+/** Widths of the plan number and revision cells at the right of the project row (paper mm). */
+const DRAWING_NO_W = 40;
+const REVISION_W = 20;
 /** Free space between the frame and the drawing (paper mm). */
 const DRAWING_PADDING = 8;
 /** Standard scales offered for sheets, the most detailed first. */
@@ -198,13 +201,18 @@ export function sheetDrawing(source: Drawing | DrawingAtScale, info: ProjectInfo
 
   rect(frame.minX, frame.minY, frame.maxX, frame.maxY);
 
-  // Title block, bottom right: project across the full width, then two columns.
+  // Title block, bottom right: project, plan number and revision in the first row, then two
+  // columns.
   const tx0 = frame.maxX - TITLE_W;
   const ty0 = frame.maxY - titleH;
   const mid = tx0 + TITLE_W / 2;
+  const noX = frame.maxX - DRAWING_NO_W - REVISION_W;
+  const revX = frame.maxX - REVISION_W;
   rect(tx0, ty0, frame.maxX, frame.maxY);
   for (let r = 1; r < TITLE_ROWS; r++) line(tx0, ty0 + r * TITLE_ROW, frame.maxX, ty0 + r * TITLE_ROW);
   line(mid, ty0 + TITLE_ROW, mid, frame.maxY);
+  line(noX, ty0, noX, ty0 + TITLE_ROW);
+  line(revX, ty0, revX, ty0 + TITLE_ROW);
 
   const label = (k: TKey) => t(k, undefined, lang);
   const LABEL_PAD = 1.5;
@@ -214,6 +222,8 @@ export function sheetDrawing(source: Drawing | DrawingAtScale, info: ProjectInfo
     text(x + LABEL_PAD, top + TITLE_ROW - LABEL_PAD, value, size);
   };
   cell(tx0, 0, "sheet.project", info.name);
+  cell(noX, 0, "sheet.drawingNo", info.drawingNo ?? "");
+  cell(revX, 0, "sheet.revision", info.revision ?? "");
   cell(tx0, 1, "sheet.client", info.client);
   cell(mid, 1, "sheet.date", formatDate(info.date, lang));
   cell(tx0, 2, "sheet.author", info.author);

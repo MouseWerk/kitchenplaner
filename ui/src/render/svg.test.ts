@@ -86,6 +86,15 @@ describe("sheetDrawing", () => {
     expect(sheet.drawing.shapes.slice(0, own.length)).toEqual(own);
   });
 
+  it("puts plan number and revision into the title block", () => {
+    const p = testProject();
+    p.info = { ...p.info, drawingNo: "K-101", revision: "B" };
+    const svg = sheetSvg(planDrawing(p, { showNames: false, showDims: true }), p.info, "Grundriss", "de");
+    for (const s of ["Plannummer", "K-101", "Revision", "B"]) expect(svg).toContain(`>${s}</text>`);
+    const en = sheetDrawing(planDrawing(p, { showNames: false, showDims: true }), p.info, "Plan", "en");
+    expect(en.drawing.shapes.some((s) => s.t === "text" && s.text === "Drawing no.")).toBe(true);
+  });
+
   it("places an elevation at a detailed scale", () => {
     const p = testProject([testItem("a", "table", 1600, 350)]);
     const sheet = sheetDrawing(elevationDrawing(p, "north", { showDims: true }), p.info, "Ansicht Nord", "de");

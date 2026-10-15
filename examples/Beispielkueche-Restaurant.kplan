@@ -1,11 +1,16 @@
 {
   "format": "kitchenplaner",
-  "version": 2,
+  "version": 3,
   "info": {
     "name": "Beispielküche Restaurant Lindenhof",
     "client": "Restaurant Lindenhof (Beispiel)",
     "author": "Kitchenplaner",
-    "date": "2026-10-13"
+    "date": "2026-10-13",
+    "drawingNo": "K-101",
+    "revision": "A"
+  },
+  "settings": {
+    "simultaneity": 1
   },
   "room": {
     "points": [
@@ -157,6 +162,7 @@
   "items": [
     {
       "id": "ex-01",
+      "pos": 1,
       "catalogId": "shelving-5",
       "name": "Regal, 5 Böden",
       "x": 600,
@@ -171,6 +177,7 @@
     },
     {
       "id": "ex-02",
+      "pos": 2,
       "catalogId": "shelving-5",
       "name": "Regal, 5 Böden",
       "x": 1800,
@@ -185,6 +192,7 @@
     },
     {
       "id": "ex-03",
+      "pos": 3,
       "catalogId": "shelving-5",
       "name": "Regal, 5 Böden",
       "x": 250,
@@ -199,6 +207,7 @@
     },
     {
       "id": "ex-04",
+      "pos": 4,
       "catalogId": "dunnage-rack",
       "name": "Bodenrost",
       "x": 1000,
@@ -213,6 +222,7 @@
     },
     {
       "id": "ex-05",
+      "pos": 5,
       "catalogId": "cold-room",
       "name": "Kühlzelle",
       "x": 1050,
@@ -230,6 +240,7 @@
     },
     {
       "id": "ex-06",
+      "pos": 6,
       "catalogId": "freezer-room",
       "name": "Tiefkühlzelle",
       "x": 5200,
@@ -247,6 +258,7 @@
     },
     {
       "id": "ex-07",
+      "pos": 7,
       "catalogId": "table-sink",
       "name": "Arbeitstisch mit Spülbecken",
       "x": 600,
@@ -265,6 +277,7 @@
     },
     {
       "id": "ex-08",
+      "pos": 8,
       "catalogId": "wall-shelf",
       "name": "Wandbord",
       "x": 600,
@@ -279,6 +292,7 @@
     },
     {
       "id": "ex-09",
+      "pos": 9,
       "catalogId": "table",
       "name": "Arbeitstisch an der Wand",
       "x": 1900,
@@ -293,6 +307,7 @@
     },
     {
       "id": "ex-10",
+      "pos": 10,
       "catalogId": "prep-veg-cutter",
       "name": "Gemüseschneidemaschine",
       "x": 1600,
@@ -310,6 +325,7 @@
     },
     {
       "id": "ex-11",
+      "pos": 11,
       "catalogId": "socket-panel",
       "name": "Steckdosenkombination",
       "x": 2350,
@@ -324,6 +340,7 @@
     },
     {
       "id": "ex-12",
+      "pos": 12,
       "catalogId": "handwash",
       "name": "Handwaschbecken",
       "x": 2850,
@@ -342,6 +359,7 @@
     },
     {
       "id": "ex-13",
+      "pos": 13,
       "catalogId": "table-sink",
       "name": "Arbeitstisch mit Spülbecken",
       "x": 3600,
@@ -360,6 +378,7 @@
     },
     {
       "id": "ex-14",
+      "pos": 14,
       "catalogId": "wall-shelf",
       "name": "Wandbord",
       "x": 3600,
@@ -374,6 +393,7 @@
     },
     {
       "id": "ex-15",
+      "pos": 15,
       "catalogId": "table",
       "name": "Arbeitstisch an der Wand",
       "x": 4700,
@@ -388,6 +408,7 @@
     },
     {
       "id": "ex-16",
+      "pos": 16,
       "catalogId": "prep-slicer",
       "name": "Aufschnittmaschine",
       "x": 4425,
@@ -405,6 +426,7 @@
     },
     {
       "id": "ex-17",
+      "pos": 17,
       "catalogId": "prep-vacuum-table",
       "name": "Vakuumiergerät, Tischgerät",
       "x": 5000,
@@ -422,6 +444,7 @@
     },
     {
       "id": "ex-18",
+      "pos": 18,
       "catalogId": "table-island",
       "name": "Arbeitstisch frei stehend",
       "x": 4200,
@@ -436,6 +459,7 @@
     },
     {
       "id": "ex-19",
+      "pos": 19,
       "catalogId": "prep-mixer-10",
       "name": "Planetenrührmaschine 10 l, Tischgerät",
       "x": 3610,
@@ -453,6 +477,7 @@
     },
     {
       "id": "ex-20",
+      "pos": 20,
       "catalogId": "prep-scale",
       "name": "Tischwaage",
       "x": 4175,
@@ -470,6 +495,7 @@
     },
     {
       "id": "ex-21",
+      "pos": 21,
       "catalogId": "blast-chiller-10",
       "name": "Schockkühler 10 × GN 1/1",
       "x": 5600,
@@ -488,6 +514,7 @@
     },
     {
       "id": "ex-22",
+      "pos": 22,
       "catalogId": "handwash-sensor",
       "name": "Handwaschstation mit Sensorarmatur",
       "x": 7150,
@@ -506,6 +533,7 @@
     },
     {
       "id": "ex-23",
+      "pos": 23,
       "catalogId": "tilting-pan",
       "name": "Kippbratpfanne",
       "x": 8200,
@@ -526,6 +554,7 @@
     },
     {
       "id": "ex-24",
+      "pos": 24,
       "catalogId": "kettle-100",
       "name": "Kochkessel 100 l",
       "x": 9200,
@@ -547,6 +576,7 @@
     },
     {
       "id": "ex-25",
+      "pos": 25,
       "catalogId": "drain-channel-300",
       "name": "Entwässerungsrinne, 300 mm breit",
       "x": 8600,
@@ -563,6 +593,7 @@
     },
     {
       "id": "ex-26",
+      "pos": 26,
       "catalogId": "hood-wall",
       "name": "Wandhaube",
       "x": 8600,
@@ -581,6 +612,7 @@
     },
     {
       "id": "ex-27",
+      "pos": 27,
       "catalogId": "chef-base",
       "name": "Kühlunterbau mit Schubladen",
       "x": 10500,
@@ -598,6 +630,7 @@
     },
     {
       "id": "ex-28",
+      "pos": 28,
       "catalogId": "salamander",
       "name": "Salamander",
       "x": 10500,
@@ -615,6 +648,7 @@
     },
     {
       "id": "ex-29",
+      "pos": 29,
       "catalogId": "combi-10",
       "name": "Kombidämpfer 10 × GN 1/1 auf Untergestell",
       "x": 11825,
@@ -635,6 +669,7 @@
     },
     {
       "id": "ex-30",
+      "pos": 30,
       "catalogId": "condensing-hood",
       "name": "Kondensationshaube für Kombidämpfer",
       "x": 11825,
@@ -653,6 +688,7 @@
     },
     {
       "id": "ex-31",
+      "pos": 31,
       "catalogId": "combi-20",
       "name": "Kombidämpfer 20 × GN 1/1",
       "x": 12750,
@@ -673,6 +709,7 @@
     },
     {
       "id": "ex-32",
+      "pos": 32,
       "catalogId": "condensing-hood",
       "name": "Kondensationshaube für Kombidämpfer",
       "x": 12750,
@@ -691,6 +728,7 @@
     },
     {
       "id": "ex-33",
+      "pos": 33,
       "catalogId": "handwash-sensor",
       "name": "Handwaschstation mit Sensorarmatur",
       "x": 13000,
@@ -709,6 +747,7 @@
     },
     {
       "id": "ex-34",
+      "pos": 34,
       "catalogId": "pasta-cooker",
       "name": "Nudelkocher",
       "x": 7800,
@@ -729,6 +768,7 @@
     },
     {
       "id": "ex-35",
+      "pos": 35,
       "catalogId": "bain-marie",
       "name": "Bain-Marie GN 1/1",
       "x": 8200,
@@ -748,6 +788,7 @@
     },
     {
       "id": "ex-36",
+      "pos": 36,
       "catalogId": "solid-top",
       "name": "Glühplatte, Backofen",
       "x": 8800,
@@ -766,6 +807,7 @@
     },
     {
       "id": "ex-37",
+      "pos": 37,
       "catalogId": "range-6",
       "name": "Herd, 6 Kochstellen, Backofen",
       "x": 9800,
@@ -784,6 +826,7 @@
     },
     {
       "id": "ex-38",
+      "pos": 38,
       "catalogId": "line-heated-cabinet-900",
       "name": "Wärmeschrank-Unterbau, 900er Linie",
       "x": 10800,
@@ -801,6 +844,7 @@
     },
     {
       "id": "ex-39",
+      "pos": 39,
       "catalogId": "neutral-900",
       "name": "Neutralelement 900er Linie",
       "x": 11600,
@@ -815,6 +859,7 @@
     },
     {
       "id": "ex-40",
+      "pos": 40,
       "catalogId": "fryer-2",
       "name": "Fritteuse, 2 Becken",
       "x": 8000,
@@ -833,6 +878,7 @@
     },
     {
       "id": "ex-41",
+      "pos": 41,
       "catalogId": "neutral-900",
       "name": "Neutralelement 900er Linie",
       "x": 8600,
@@ -847,6 +893,7 @@
     },
     {
       "id": "ex-42",
+      "pos": 42,
       "catalogId": "chargrill",
       "name": "Lavasteingrill",
       "x": 9200,
@@ -865,6 +912,7 @@
     },
     {
       "id": "ex-43",
+      "pos": 43,
       "catalogId": "griddle",
       "name": "Grillplatte",
       "x": 10000,
@@ -883,6 +931,7 @@
     },
     {
       "id": "ex-44",
+      "pos": 44,
       "catalogId": "induction-4",
       "name": "Induktionsherd, 4 Zonen",
       "x": 10800,
@@ -900,6 +949,7 @@
     },
     {
       "id": "ex-45",
+      "pos": 45,
       "catalogId": "induction-4",
       "name": "Induktionsherd, 4 Zonen",
       "x": 11600,
@@ -917,6 +967,7 @@
     },
     {
       "id": "ex-46",
+      "pos": 46,
       "catalogId": "hood-island",
       "name": "Inselhaube",
       "x": 8600,
@@ -935,6 +986,7 @@
     },
     {
       "id": "ex-47",
+      "pos": 47,
       "catalogId": "hood-island",
       "name": "Inselhaube",
       "x": 11000,
@@ -953,6 +1005,7 @@
     },
     {
       "id": "ex-48",
+      "pos": 48,
       "catalogId": "plate-dispenser-heated",
       "name": "Tellerspender, fahrbar, beheizt",
       "x": 8145,
@@ -970,6 +1023,7 @@
     },
     {
       "id": "ex-49",
+      "pos": 49,
       "catalogId": "pass-counter",
       "name": "Ausgabepass, beheizt",
       "x": 9565,
@@ -987,6 +1041,7 @@
     },
     {
       "id": "ex-50",
+      "pos": 50,
       "catalogId": "heat-lamp-bridge",
       "name": "Wärmebrücke",
       "x": 9565,
@@ -1004,6 +1059,7 @@
     },
     {
       "id": "ex-51",
+      "pos": 51,
       "catalogId": "plate-dispenser-heated",
       "name": "Tellerspender, fahrbar, beheizt",
       "x": 10985,
@@ -1021,6 +1077,7 @@
     },
     {
       "id": "ex-52",
+      "pos": 52,
       "catalogId": "saladette",
       "name": "Saladette",
       "x": 12302.5,
@@ -1038,6 +1095,7 @@
     },
     {
       "id": "ex-53",
+      "pos": 53,
       "catalogId": "mop-sink",
       "name": "Ausgussbecken",
       "x": 250,
@@ -1056,6 +1114,7 @@
     },
     {
       "id": "ex-54",
+      "pos": 54,
       "catalogId": "shelving",
       "name": "Regal, 4 Böden",
       "x": 1200,
@@ -1070,6 +1129,7 @@
     },
     {
       "id": "ex-55",
+      "pos": 55,
       "catalogId": "pot-sink",
       "name": "Topfspültisch mit tiefem Becken",
       "x": 2600,
@@ -1088,6 +1148,7 @@
     },
     {
       "id": "ex-56",
+      "pos": 56,
       "catalogId": "wall-shelf",
       "name": "Wandbord",
       "x": 2600,
@@ -1102,6 +1163,7 @@
     },
     {
       "id": "ex-57",
+      "pos": 57,
       "catalogId": "handwash",
       "name": "Handwaschbecken",
       "x": 3600,
@@ -1120,6 +1182,7 @@
     },
     {
       "id": "ex-58",
+      "pos": 58,
       "catalogId": "table",
       "name": "Arbeitstisch an der Wand",
       "x": 4500,
@@ -1134,6 +1197,7 @@
     },
     {
       "id": "ex-59",
+      "pos": 59,
       "catalogId": "sorting-table",
       "name": "Vorspül- und Sortiertisch",
       "x": 5400,
@@ -1152,6 +1216,7 @@
     },
     {
       "id": "ex-60",
+      "pos": 60,
       "catalogId": "rack-conveyor",
       "name": "Korbtransportspülmaschine",
       "x": 3600,
@@ -1172,6 +1237,7 @@
     },
     {
       "id": "ex-61",
+      "pos": 61,
       "catalogId": "dish-outlet-table",
       "name": "Ablauftisch",
       "x": 2100,
@@ -1188,6 +1254,7 @@
     },
     {
       "id": "ex-62",
+      "pos": 62,
       "catalogId": "shelving",
       "name": "Regal, 4 Böden",
       "x": 700,
@@ -1202,6 +1269,7 @@
     },
     {
       "id": "ex-63",
+      "pos": 63,
       "catalogId": "shelving",
       "name": "Regal, 4 Böden",
       "x": 250,
@@ -1216,6 +1284,7 @@
     },
     {
       "id": "ex-64",
+      "pos": 64,
       "catalogId": "floor-drain",
       "name": "Bodenablauf",
       "x": 3600,
@@ -1232,6 +1301,7 @@
     },
     {
       "id": "ex-65",
+      "pos": 65,
       "catalogId": "column",
       "name": "Stütze",
       "x": 6650,

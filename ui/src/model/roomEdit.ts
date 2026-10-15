@@ -413,9 +413,13 @@ export function deleteSelection(room: Room, sel: { corners: readonly number[]; p
   };
 }
 
-/** Typical sizes of a new opening (mm): a hatch is a pass-through window at counter height. */
+/**
+ * Typical sizes of a new opening (mm): a hatch is a pass-through window at counter height; a
+ * sliding door has the clear width of a hinged one.
+ */
 export const OPENING_DEFAULTS: Record<OpeningKind, { width: number; height: number; sill: number }> = {
   door: { width: 1010, height: 2135, sill: 0 },
+  slidingDoor: { width: 1010, height: 2135, sill: 0 },
   window: { width: 1200, height: 1200, sill: 900 },
   passage: { width: 1010, height: 2135, sill: 0 },
   hatch: { width: 1200, height: 800, sill: 900 },

@@ -12,6 +12,21 @@ import * as THREE from "three";
 import type { Opening, Partition, Room, Vec2 } from "../model/types";
 import { add, bounds, cross, EPS, scale, sub, walls, type Wall } from "../model/geometry";
 import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, HATCH_SHELF_THICKNESS, partitionBand, partitionLength } from "../model/partitions";
+import {
+  doorLeaves,
+  doorSetup,
+  HANDLE_HEIGHT,
+  HANDLE_LENGTH,
+  isDoor,
+  LEAF_THICKNESS,
+  leafRect,
+  openingFrame,
+  SLIDE_GAP,
+  SLIDE_OVERLAP,
+  swingFrame,
+  TRACK_HEIGHT,
+  type DoorLeaf,
+} from "../model/doors";
 import { MM_PER_UNIT } from "./meshes";
 
 /** Spacing of the floor grid lines (mm): one metre, the usual tile module for orientation. */
@@ -26,9 +41,27 @@ const COLORS = {
   grid: 0xb3afa8,
   wall: 0xf2f0ec,
   glass: 0xa9c0cc,
-  /** Brushed stainless steel of hatch shelves. */
+  /** Brushed stainless steel of hatch shelves, door frames, handles and tracks. */
   steel: 0xc4c8cc,
+  /** A light grey laminate door leaf, as commercial kitchens have them. */
+  door: 0xe2e0db,
 };
+
+/** Width of a door frame (Zarge) inside the opening (mm), as the elevation draws it. */
+const DOOR_FRAME = 60;
+/** Gap under a door leaf (mm). */
+const FLOOR_GAP = 5;
+/** Gap between the two leaves of a double door (mm). */
+const LEAF_GAP = 4;
+/** How far a handle stands off its leaf (mm), and its cross section. */
+const HANDLE_REACH = 60;
+const HANDLE_SIZE = 22;
+/** A hinge knuckle: its side and length (mm), and how far its ends sit from the leaf's ends. */
+const HINGE_SIZE = 22;
+const HINGE_LENGTH = 120;
+const HINGE_INSET = 250;
+/** Half the length of a sliding door's bar handle (mm). */
+const BAR_HALF = 200;
 
 const m = (mm: number) => mm / MM_PER_UNIT;
 
@@ -53,7 +86,8 @@ export function buildRoomObject(room: Room): THREE.Group {
     depthWrite: false,
   });
   const steelMat = new THREE.MeshStandardMaterial({ color: COLORS.steel, roughness: 0.35, metalness: 0.6 });
-  const mats: Materials = { wall: wallMat, glass: glassMat, steel: steelMat };
+  const doorMat = new THREE.MeshStandardMaterial({ color: COLORS.door, roughness: 0.6, metalness: 0 });
+  const mats: Materials = { wall: wallMat, glass: glassMat, steel: steelMat, door: doorMat };
   const ws = walls(room);
   const outer = outerCorners(ws, room.wallThickness);
   for (const w of ws) {
@@ -185,6 +219,7 @@ interface Materials {
   wall: THREE.Material;
   glass: THREE.Material;
   steel: THREE.Material;
+  door: THREE.Material;
 }
 
 function buildWall(w: Wall, outerStart: Vec2, outerEnd: Vec2, room: Room, openings: readonly Opening[], mats: Materials): THREE.Group {
@@ -214,6 +249,12 @@ function buildWall(w: Wall, outerStart: Vec2, outerEnd: Vec2, room: Room, openin
     mesh.userData.wall = w.index;
     g.add(mesh);
   }
+  for (const o of openings) {
+    for (const mesh of doorParts(room, o, room.height, mats)) {
+      mesh.userData.wall = w.index;
+      g.add(mesh);
+    }
+  }
   return g;
 }
 
@@ -231,6 +272,7 @@ function buildPartition(room: Room, p: Partition, openings: readonly Opening[], 
   }
   const across = (s: number, k: number) => add(add(p.a, scale(band.dir, s)), scale(band.left, k));
   for (const mesh of openingFittings(openings, band.length, p.height, across, p.thickness / 2, -p.thickness / 2, mats)) g.add(mesh);
+  for (const o of openings) for (const mesh of doorParts(room, o, p.height, mats)) g.add(mesh);
   g.traverse((o) => (o.userData.partition = p.id));
   return g;
 }
@@ -272,6 +314,76 @@ function openingFittings(
       out.push(shelf);
     }
   }
+  return out;
+}
+
+/**
+ * The door in an opening, closed: in the plan the swing is drawn open, but closed leaves keep
+ * the walk-through and the cut-away views free and show the door as one sees it in the kitchen.
+ * A hinged door gets a steel frame (Zarge) inside the opening, its leaves flush with the face it
+ * opens to, hinges on that face at the hinge jambs and a lever on both faces at the lock edge of
+ * the active leaf. A sliding door gets its leaf on the face it runs on, overlapping the opening,
+ * a track above reaching over the place it parks, and a bar handle at the edge that closes.
+ * Meshes are named "frame", "leaf", "hinge", "handle", "track". `hostHeight` caps them.
+ */
+function doorParts(room: Room, o: Opening, hostHeight: number, mats: Materials): THREE.Mesh[] {
+  if (!isDoor(o)) return [];
+  const at = openingFrame(room, o);
+  if (!at) return [];
+  const { opening } = at;
+  const f = swingFrame(at.frame, doorSetup(opening).swing);
+  const z0 = opening.sill;
+  const z1 = Math.min(opening.sill + opening.height, hostHeight);
+  if (z1 - z0 < DOOR_FRAME * 2) return [];
+  const out: THREE.Mesh[] = [];
+  const box = (name: string, mat: THREE.Material, pts: Vec2[], y0: number, y1: number) => {
+    const mesh = new THREE.Mesh(extrudeOutline(pts, y0, y1), mat);
+    mesh.name = name;
+    mesh.castShadow = name === "leaf";
+    mesh.receiveShadow = true;
+    out.push(mesh);
+  };
+  const leaves = doorLeaves(f, opening);
+  const two = leaves.length === 2;
+
+  if (opening.kind === "slidingDoor") {
+    const k0 = f.near + SLIDE_GAP;
+    const k1 = k0 + LEAF_THICKNESS;
+    const top = Math.min(z1 + SLIDE_OVERLAP, hostHeight - TRACK_HEIGHT);
+    leaves.forEach((leaf) => {
+      const s1 = leaf.width + (two ? -LEAF_GAP / 2 : SLIDE_OVERLAP);
+      box("leaf", mats.door, leafRect(f, leaf, -SLIDE_OVERLAP, s1, k0, k1), z0 + FLOOR_GAP, top);
+      box("track", mats.steel, leafRect(f, leaf, -SLIDE_OVERLAP - leaf.width, s1, f.near, k1 + SLIDE_GAP), top, top + TRACK_HEIGHT);
+      const bar = s1 - HANDLE_REACH;
+      const hy = Math.min(z0 + HANDLE_HEIGHT, top - BAR_HALF);
+      box("handle", mats.steel, leafRect(f, leaf, bar - HANDLE_SIZE, bar, k1, k1 + HANDLE_REACH / 2), hy - BAR_HALF, hy + BAR_HALF);
+    });
+    return out;
+  }
+
+  // The frame: two jambs across the whole band and the head.
+  const whole: DoorLeaf = { hinge: f.start, along: f.dir, width: opening.width };
+  const w = opening.width;
+  box("frame", mats.steel, leafRect(f, whole, 0, DOOR_FRAME, f.far, f.near), z0, z1);
+  box("frame", mats.steel, leafRect(f, whole, w - DOOR_FRAME, w, f.far, f.near), z0, z1);
+  box("frame", mats.steel, leafRect(f, whole, DOOR_FRAME, w - DOOR_FRAME, f.far, f.near), z1 - DOOR_FRAME, z1);
+
+  const lk = f.near - LEAF_THICKNESS;
+  const leafTop = z1 - DOOR_FRAME;
+  leaves.forEach((leaf, i) => {
+    const s1 = two ? leaf.width - LEAF_GAP / 2 : leaf.width - DOOR_FRAME;
+    box("leaf", mats.door, leafRect(f, leaf, DOOR_FRAME, s1, lk, f.near), z0 + FLOOR_GAP, leafTop);
+    for (const y of [z0 + HINGE_INSET, leafTop - HINGE_INSET - HINGE_LENGTH]) {
+      box("hinge", mats.steel, leafRect(f, leaf, DOOR_FRAME - HINGE_SIZE / 2, DOOR_FRAME + HINGE_SIZE / 2, f.near, f.near + HINGE_SIZE), y, y + HINGE_LENGTH);
+    }
+    if (i > 0) return;
+    // A lever on both faces, from near the lock edge towards the hinge.
+    const hy = Math.min(z0 + HANDLE_HEIGHT, leafTop - HANDLE_SIZE);
+    const sa = s1 - HANDLE_REACH - HANDLE_LENGTH;
+    const sb = s1 - HANDLE_REACH;
+    box("handle", mats.steel, leafRect(f, leaf, sa, sb, f.near, f.near + HANDLE_REACH), hy - HANDLE_SIZE / 2, hy + HANDLE_SIZE / 2);
+    box("handle", mats.steel, leafRect(f, leaf, sa, sb, lk - HANDLE_REACH, lk), hy - HANDLE_SIZE / 2, hy + HANDLE_SIZE / 2);
+  });
   return out;
 }
 

@@ -3,6 +3,7 @@
 //! The UI owns the project model and its validation; this crate only guarantees that what reaches
 //! the UI is a plausible project file and that what is saved never ends up half-written.
 
+pub mod autosave;
 mod error;
 pub mod files;
 pub mod recent;

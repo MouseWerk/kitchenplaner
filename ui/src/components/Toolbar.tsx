@@ -1,6 +1,7 @@
 // The top bar: file commands, undo, layouts, room editing, export and view settings.
 
-import { Armchair, FilePlus2, FolderOpen, PenLine, Redo2, Save, Undo2 } from "lucide-react";
+import { useState } from "react";
+import { Armchair, FilePlus2, FolderOpen, PenLine, Redo2, Ruler, Save, Undo2 } from "lucide-react";
 import { newFile, openFile, runExport, saveFile } from "../lib/actions";
 import { currentLang, useT } from "../lib/i18n";
 import { baseName } from "../lib/platform";
@@ -9,6 +10,11 @@ import { keyLabel } from "../lib/shortcuts";
 import { useCanCapture3d } from "../three/capture";
 import { useStore, type Layout } from "../store/store";
 import { Menu } from "./Menu";
+import { PlanSetDialog } from "./PlanSetDialog";
+import { openExampleKitchen } from "./Intro";
+import { openIntro } from "../lib/intro";
+import { toggleMeasuring, useMeasuring } from "../lib/measureTool";
+import { useUpdateMenuEntries } from "./UpdateNotice";
 
 const LAYOUTS: { id: Layout; key: "view.plan" | "view.elevations" | "view.3d" | "view.split" }[] = [
   { id: "plan", key: "view.plan" },
@@ -33,6 +39,9 @@ export function Toolbar() {
   const mode = useStore((s) => s.mode);
   const roomTool = useStore((s) => s.roomTool);
   const settings = useSettings();
+  const updateEntries = useUpdateMenuEntries();
+  const [planSetOpen, setPlanSetOpen] = useState(false);
+  const measuring = useMeasuring();
   // The 3D export renders the mounted 3D pane; layouts without one have nothing to capture.
   const can3d = useCanCapture3d();
   const st = useStore.getState();
@@ -97,11 +106,24 @@ export function Toolbar() {
             ))}
           </div>
         )}
+        <button
+          type="button"
+          className="tb-icon"
+          aria-pressed={measuring}
+          disabled={layout !== "plan" && layout !== "split"}
+          onClick={toggleMeasuring}
+          title={`${t("measure.title")} (M)`}
+          aria-label={t("measure.title")}
+        >
+          <Ruler size={17} strokeWidth={1.75} />
+        </button>
         <Menu
           label={t("export.title")}
           title={t("export.title")}
           align="end"
           entries={[
+            { label: t("export.planSetPdf"), onSelect: () => setPlanSetOpen(true) },
+            "sep",
             { label: t("export.planSvg"), onSelect: () => void runExport("plan-svg", facing) },
             { label: t("export.planDxf"), onSelect: () => void runExport("plan-dxf", facing) },
             { label: t("export.planPng"), onSelect: () => void runExport("plan-png", facing) },
@@ -132,9 +154,14 @@ export function Toolbar() {
             { label: t("settings.langSystem"), checked: settings.lang === "system", onSelect: () => updateSettings({ lang: "system" }) },
             { label: "Deutsch", checked: settings.lang === "de", onSelect: () => updateSettings({ lang: "de" }) },
             { label: "English", checked: settings.lang === "en", onSelect: () => updateSettings({ lang: "en" }) },
+            "sep" as const,
+            { label: t("intro.show"), onSelect: openIntro },
+            { label: t("intro.example"), onSelect: () => void openExampleKitchen() },
+            ...updateEntries,
           ]}
         />
       </div>
+      {planSetOpen && <PlanSetDialog onClose={() => setPlanSetOpen(false)} />}
     </header>
   );
 }

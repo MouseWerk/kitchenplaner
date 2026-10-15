@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leaderLine, planDrawing } from "./plan";
+import { textWidth } from "../render/pdf";
 import { exampleKitchen } from "../examples/exampleKitchen";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS, SHEET_SCALES } from "../render/svg";
 import { area, bounds, footprint, pointInPolygon } from "./geometry";
@@ -339,5 +340,69 @@ describe("planDrawing position numbers", () => {
     expect([one[0].x, one[0].y]).toEqual([2000, 2000]);
     expect(Math.hypot(one[1].x - one[0].x, one[1].y - one[0].y)).toBeGreaterThanOrEqual(2 * one[0].r);
     expect(circles(planDrawing(p, { ...NONE, paperScale: 50 }).shapes, 50)).toEqual(one);
+  });
+});
+
+describe("planDrawing names", () => {
+  const circles = (shapes: Shape[], ps: number) =>
+    shapes
+      .filter((s): s is TextShape => s.t === "text" && s.circled === true)
+      .map((s) => ({ id: s.itemId!, x: s.p.x, y: s.p.y - CIRCLE_CENTER_RISE * s.size * ps, r: CIRCLE_RADIUS * s.size * ps }));
+  /** Names as boxes (plan mm): advance width, Arial's ascender above and descender below the baseline. */
+  const names = (shapes: Shape[], ps: number) =>
+    texts(shapes)
+      .filter((s) => !s.circled && s.itemId)
+      .map((s) => {
+        const w = textWidth(s.text, s.size) * ps;
+        const h = s.size * ps;
+        return { id: s.itemId!, text: s.text, minX: s.p.x - w / 2, maxX: s.p.x + w / 2, minY: s.p.y - 0.75 * h, maxY: s.p.y + 0.22 * h };
+      });
+  type B = { minX: number; minY: number; maxX: number; maxY: number };
+  const meet = (a: B, b: B) => a.minX < b.maxX && b.minX < a.maxX && a.minY < b.maxY && b.minY < a.maxY;
+  const meetsCircle = (b: B, c: { x: number; y: number; r: number }) => Math.hypot(Math.max(b.minX - c.x, 0, c.x - b.maxX), Math.max(b.minY - c.y, 0, c.y - b.maxY)) < c.r;
+
+  // 40: the screen; the others: every scale a sheet may print the plan at.
+  it.each([40, ...SHEET_SCALES])("never lets a name of the example kitchen overlap another name or a number (1:%i)", (ps) => {
+    const p = exampleKitchen("de");
+    const shapes = planDrawing(p, { showNames: true, showDims: true, paperScale: ps }).shapes;
+    const ns = names(shapes, ps);
+    const cs = circles(shapes, ps);
+    for (let i = 0; i < ns.length; i++) {
+      for (let j = i + 1; j < ns.length; j++) expect(meet(ns[i], ns[j]), `${ns[i].text} / ${ns[j].text}`).toBe(false);
+      for (const c of cs) expect(meetsCircle(ns[i], c), `${ns[i].text} / number of ${c.id}`).toBe(false);
+      // Never wider than its unit.
+      const it = p.items.find((x) => x.id === ns[i].id)!;
+      const b = bounds(footprint(it));
+      expect(ns[i].maxX - ns[i].minX).toBeLessThanOrEqual(b.maxX - b.minX);
+    }
+    // At the scales a plan is printed at most units keep their names.
+    if (ps <= 50) expect(ns.length).toBeGreaterThan(p.items.length / 2);
+  });
+
+  it("puts the name under the number inside its unit, and the same way every time", () => {
+    const p = testProject([testItem("t", "table", 3000, 3000)]);
+    p.items[0].name = "Arbeitstisch";
+    const shapes = planDrawing(p, { ...ALL, paperScale: 50 }).shapes;
+    const [n] = names(shapes, 50);
+    const [c] = circles(shapes, 50);
+    expect(n.text).toBe("Arbeitstisch");
+    expect((n.minX + n.maxX) / 2).toBeCloseTo(c.x);
+    expect(n.minY).toBeGreaterThan(c.y + c.r);
+    expect(pointInPolygon({ x: n.minX, y: n.maxY }, footprint(p.items[0]))).toBe(true);
+    expect(names(planDrawing(p, { ...ALL, paperScale: 50 }).shapes, 50)).toEqual([n]);
+  });
+
+  it("shortens a long name to its unit's width and leaves out the name of a unit too small for it", () => {
+    const p = testProject([testItem("t", "table", 2000, 2000), testItem("d", "floor-drain", 5000, 2000)]);
+    p.items[0].name = "Arbeitstisch mit Unterbau, Grundablage und Schubladenblock";
+    p.items[1].name = "Bodenablauf";
+    const shapes = planDrawing(p, { ...ALL, paperScale: 50 }).shapes;
+    const ns = names(shapes, 50);
+    const table = ns.find((n) => n.id === "t")!;
+    expect(table.text.endsWith("…")).toBe(true);
+    expect(table.maxX - table.minX).toBeLessThanOrEqual(p.items[0].width);
+    // A drain is a few centimetres wide: at 1:200 its name has no room inside or beside it.
+    expect(names(planDrawing(p, { ...ALL, paperScale: 200 }).shapes, 200).some((n) => n.id === "d")).toBe(false);
+    expect(texts(planDrawing(p, { ...NONE, paperScale: 50 }).shapes).filter((s) => !s.circled)).toHaveLength(0);
   });
 });

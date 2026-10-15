@@ -4,8 +4,8 @@
 // A partition's frame: `dir` runs from `a` to `b`; `left` is the unit normal to the left of
 // a→b on screen (y down), so for a partition running east `left` points north. Its long faces
 // lie `thickness / 2` to either side of the centre line. Openings in a partition measure their
-// `offset` from `a` along a→b; a door in a partition is hinged at the start of its opening
-// (the side nearer `a`) and swings to the left.
+// `offset` from `a` along a→b; a door in a partition opening "in" swings to the left, "out" to
+// the right (`doors.ts`).
 
 import { add, cross, dist, dot, EPS, norm, scale, sub, walls } from "./geometry";
 import type { Opening, Partition, Room, Vec2 } from "./types";
@@ -124,8 +124,8 @@ export function partitionOf(room: Pick<Room, "partitions">, o: Pick<Opening, "pa
 /**
  * A wall that can hold openings: an outer wall or a partition. Openings measure their offset from
  * `a` along `dir`. `a`→`b` is the inner face for an outer wall and the centre line for a
- * partition. `normal` is the side a door swings to: into the room for outer walls, to the left
- * of a→b for partitions.
+ * partition. `normal` is the side a door opening "in" swings to: into the room for outer walls,
+ * to the left of a→b for partitions.
  */
 export type WallHost =
   | { kind: "wall"; index: number; a: Vec2; b: Vec2; dir: Vec2; normal: Vec2; length: number; thickness: number }

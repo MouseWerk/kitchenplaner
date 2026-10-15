@@ -23,6 +23,7 @@ function item(catalogId: string, patch: Partial<Item> = {}): Item {
     height: e.height,
     elevation: e.elevation,
     connections: {},
+    pos: 1,
     ...patch,
   };
 }

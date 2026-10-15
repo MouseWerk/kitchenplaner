@@ -1,14 +1,20 @@
-// The equipment list (Geräteliste): one row per item with its connection values, the totals an
-// installer needs, and the CSV export for spreadsheets.
+// The equipment list (Geräteliste): one row per item with its product and connection values, the
+// totals an installer needs (plain and with the simultaneity factor), and the CSV export for
+// spreadsheets.
 
-import { positions } from "./project";
 import type { Project } from "./types";
-import { t, type Lang, type TKey } from "../lib/i18n";
+import { num, t, type Lang, type TKey } from "../lib/i18n";
 
 export interface EquipmentRow {
   id: string;
   pos: number;
   name: string;
+  /** Product of the position ("" when not given). */
+  manufacturer: string;
+  model: string;
+  article: string;
+  /** Net price in euros. */
+  price?: number;
   width: number;
   depth: number;
   height: number;
@@ -32,17 +38,24 @@ export interface EquipmentTotals {
   hotWater: number;
   drain: number;
   floorDrain: number;
+  /** Sum of the net prices given (positions without a price count as 0). */
+  price: number;
 }
 
-/** One row per item, in position order. */
-export function equipmentRows(project: Project): EquipmentRow[] {
-  const pos = positions(project);
-  return project.items.map((it) => {
+/** One row per item, sorted by position number. */
+export function equipmentRows(project: Pick<Project, "items">): EquipmentRow[] {
+  const sorted = [...project.items].sort((a, b) => a.pos - b.pos);
+  return sorted.map((it) => {
     const c = it.connections;
+    const spec = it.spec ?? {};
     return {
       id: it.id,
-      pos: pos.get(it.id) ?? 0,
+      pos: it.pos,
       name: it.name,
+      manufacturer: spec.manufacturer ?? "",
+      model: spec.model ?? "",
+      article: spec.article ?? "",
+      ...(spec.price !== undefined ? { price: spec.price } : {}),
       width: it.width,
       depth: it.depth,
       height: it.height,
@@ -71,12 +84,32 @@ export function equipmentTotals(rows: readonly EquipmentRow[]): EquipmentTotals 
     hotWater: count((r) => r.hotWater),
     drain: count((r) => r.drain),
     floorDrain: count((r) => r.floorDrain),
+    price: round2(sum((r) => r.price)),
   };
+}
+
+/**
+ * A connected load (kW) times the simultaneity factor: the peak a supply is sized for when not
+ * every appliance runs at full power at once. The plain sum stays the „Anschlussleistung“.
+ */
+export function withSimultaneity(kw: number, factor: number): number {
+  return round2(kw * factor);
 }
 
 /** Sums of floats like 15.6 + 22.4 would otherwise show float noise. */
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+/**
+ * The electric load for the status bar in the display language: the plain sum, or with a factor
+ * below 1 the load times the factor, saying so ("48,0 kW bei Gleichzeitigkeit 0,6").
+ */
+export function electricStatus(project: Pick<Project, "items" | "settings">): string {
+  const sum = project.items.reduce((s, it) => s + (it.connections.electricKw ?? 0), 0);
+  const f = project.settings.simultaneity;
+  if (f >= 1) return t("data.statusKw", { kw: num(sum, 1) });
+  return t("data.statusKwFactored", { kw: num(withSimultaneity(sum, f), 1), f: num(f, 2) });
 }
 
 /** "1200 × 700 × 900" */
@@ -100,7 +133,22 @@ export function drainText(r: Pick<EquipmentRow, "drain" | "floorDrain">, lang: L
   return parts.join(", ");
 }
 
-const COLUMNS: readonly TKey[] = ["list.pos", "list.name", "list.dimensions", "list.electric", "list.voltage", "list.gas", "list.water", "list.drain", "list.exhaust", "list.note"];
+const COLUMNS: readonly TKey[] = [
+  "list.pos",
+  "list.name",
+  "list.manufacturer",
+  "list.model",
+  "list.article",
+  "list.dimensions",
+  "list.electric",
+  "list.voltage",
+  "list.gas",
+  "list.water",
+  "list.drain",
+  "list.exhaust",
+  "list.note",
+  "list.price",
+];
 
 /** UTF-8 byte order mark: Excel only detects UTF-8 in a CSV file with it. */
 const BOM = "﻿";
@@ -108,18 +156,34 @@ const BOM = "﻿";
 const EOL = "\r\n";
 
 /**
- * The equipment list as CSV text for spreadsheets, with a total row. German uses semicolons and
- * a decimal comma (what Excel expects in a German locale), English commas and a decimal point.
- * Starts with a BOM so Excel reads it as UTF-8.
+ * The equipment list as CSV text for spreadsheets, sorted by position, with a total row, a row
+ * with the loads times the project's simultaneity factor and the note that connection values are
+ * typical values. German uses semicolons and a decimal comma (what Excel expects in a German
+ * locale), English commas and a decimal point. Starts with a BOM so Excel reads it as UTF-8.
  */
-export function equipmentCsv(project: Project, lang: Lang): string {
+export function equipmentCsv(project: Pick<Project, "items" | "settings">, lang: Lang): string {
   const sep = lang === "de" ? ";" : ",";
   const n = (v: number | undefined) => (v === undefined ? "" : formatNumber(v, lang));
   const rows = equipmentRows(project);
   const lines: string[][] = [COLUMNS.map((k) => t(k, undefined, lang))];
   for (const r of rows) {
-    // Name and note are typed by the user; every other cell is a number or a fixed label.
-    lines.push([String(r.pos), csvText(r.name), dimensionsText(r), n(r.electricKw), n(r.voltage), n(r.gasKw), waterText(r, lang), drainText(r, lang), n(r.exhaustM3h), csvText(r.note)]);
+    // Name, product and note are typed by the user; every other cell is a number or a fixed label.
+    lines.push([
+      String(r.pos),
+      csvText(r.name),
+      csvText(r.manufacturer),
+      csvText(r.model),
+      csvText(r.article),
+      dimensionsText(r),
+      n(r.electricKw),
+      n(r.voltage),
+      n(r.gasKw),
+      waterText(r, lang),
+      drainText(r, lang),
+      n(r.exhaustM3h),
+      csvText(r.note),
+      r.price === undefined ? "" : formatPrice(r.price, lang),
+    ]);
   }
   const tot = equipmentTotals(rows);
   const counted = (pairs: [TKey, number][]) =>
@@ -127,9 +191,13 @@ export function equipmentCsv(project: Project, lang: Lang): string {
       .filter(([, c]) => c > 0)
       .map(([k, c]) => `${c} × ${t(k, undefined, lang)}`)
       .join(", ");
+  const priced = rows.some((r) => r.price !== undefined);
   lines.push([
     "",
     t("list.total", undefined, lang),
+    "",
+    "",
+    "",
     "",
     n(tot.electricKw),
     "",
@@ -138,13 +206,24 @@ export function equipmentCsv(project: Project, lang: Lang): string {
     counted([["list.drain", tot.drain], ["list.floorDrain", tot.floorDrain]]),
     n(tot.exhaustM3h),
     "",
+    priced ? formatPrice(tot.price, lang) : "",
   ]);
+  const f = project.settings.simultaneity;
+  const factored = ["", t("list.simultaneous", { f: formatNumber(f, lang) }, lang), "", "", "", "", n(withSimultaneity(tot.electricKw, f)), "", n(withSimultaneity(tot.gasKw, f)), "", "", "", "", ""];
+  lines.push(factored);
+  lines.push(["", t("data.typicalValues", undefined, lang), "", "", "", "", "", "", "", "", "", "", "", ""]);
   return BOM + lines.map((cells) => cells.map((c) => csvField(c, sep)).join(sep)).join(EOL) + EOL;
 }
 
 /** A number for a CSV cell: up to two decimals, no thousands separator, decimal comma in German. */
 export function formatNumber(v: number, lang: Lang): string {
   const s = String(round2(v));
+  return lang === "de" ? s.replace(".", ",") : s;
+}
+
+/** A price for a CSV cell: always two decimals, no thousands separator, decimal comma in German. */
+export function formatPrice(v: number, lang: Lang): string {
+  const s = (Math.round(v * 100) / 100).toFixed(2);
   return lang === "de" ? s.replace(".", ",") : s;
 }
 

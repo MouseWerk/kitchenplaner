@@ -9,8 +9,16 @@ export interface Vec2 {
   y: number;
 }
 
-/** A hatch is a pass-through window (Durchreiche, Speisenausgabe) with a sill at counter height. */
-export type OpeningKind = "door" | "window" | "passage" | "hatch";
+/**
+ * A hatch is a pass-through window (Durchreiche, Speisenausgabe) with a sill at counter height; a
+ * sliding door runs along the wall instead of swinging.
+ */
+export type OpeningKind = "door" | "slidingDoor" | "window" | "passage" | "hatch";
+
+/** The side of a door's hinge, seen along its wall from the wall's start (a partition's `a`). */
+export type DoorHinge = "start" | "end";
+/** Which way a hinged door opens: into the room (or to the left of a partition) or out of it. */
+export type DoorSwing = "in" | "out";
 
 /** A door, window, passage or hatch in an outer wall of the room or in a partition. */
 export interface Opening {
@@ -26,6 +34,15 @@ export interface Opening {
   height: number;
   /** Height of the lower edge above the floor (0 for doors and passages). */
   sill: number;
+  /**
+   * Doors: hinge side (default "start"); for two leaves the side of the active leaf. A sliding
+   * door slides open towards this side.
+   */
+  hinge?: DoorHinge;
+  /** Doors: opening direction (default "in"); a sliding door runs on that face. Escape doors usually open out. */
+  swing?: DoorSwing;
+  /** Doors: one or two leaves (default 1). */
+  leaves?: 1 | 2;
 }
 
 /**
@@ -87,7 +104,25 @@ export interface Item {
   connections: Connections;
   /** The energy variant of a unit offered in several (absent for all others). */
   energy?: Energy;
+  /**
+   * The position number („Pos.“) in plans, elevations and lists. Stable: it stays when other
+   * items are deleted or reordered, so plans already sent out keep their numbers. Unique, >= 1.
+   */
+  pos: number;
+  /** The concrete product chosen for the position (all optional; typical values otherwise). */
+  spec?: ItemSpec;
   note?: string;
+}
+
+/** A manufacturer's product for a position, as a planner specifies it for a quote. */
+export interface ItemSpec {
+  manufacturer?: string;
+  /** Model or type designation. */
+  model?: string;
+  /** Article number of the manufacturer or dealer. */
+  article?: string;
+  /** Net unit price in euros. */
+  price?: number;
 }
 
 export interface ProjectInfo {
@@ -96,6 +131,19 @@ export interface ProjectInfo {
   author: string;
   /** Date of the drawing, ISO "YYYY-MM-DD". */
   date: string;
+  /** Plan number for the title block (e.g. „K-101“). */
+  drawingNo?: string;
+  /** Revision letter or number for the title block (e.g. „B“). */
+  revision?: string;
+}
+
+/** Settings of a project that change how its totals are computed. */
+export interface ProjectSettings {
+  /**
+   * Simultaneity (diversity) factor for the connected electric and gas load, 0.1 to 1: not all
+   * appliances run at full power at the same time. The plain sum is shown too.
+   */
+  simultaneity: number;
 }
 
 export interface Project {
@@ -105,6 +153,7 @@ export interface Project {
   info: ProjectInfo;
   room: Room;
   items: Item[];
+  settings: ProjectSettings;
 }
 
 /** The four elevation directions: the wall the viewer looks at from inside the room. */

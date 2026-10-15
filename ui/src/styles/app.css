@@ -1328,6 +1328,51 @@
   margin-top: var(--sp-2);
 }
 
+.dialog-text {
+  color: var(--text-muted);
+}
+
+/* The backups in the recovery dialog (RecoveryDialog.tsx). */
+.recovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.recovery-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+label.recovery-entry:hover {
+  background: var(--bg-hover);
+}
+
+.recovery-entry.is-current {
+  background: var(--bg-current);
+}
+
+.recovery-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recovery-name {
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+}
+
+.recovery-meta {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
 /* ---- Motion: opacity and transform only, once */
 
 @keyframes pop-in {

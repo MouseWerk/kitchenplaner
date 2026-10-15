@@ -1,4 +1,4 @@
-// Appearance and language: stored per computer in the webview's storage (they are not part of a
+// Appearance, language and update checks: stored per computer in the webview's storage (they are not part of a
 // project). Applied instantly; a failing storage (private mode) only loses the choice.
 
 import { useSyncExternalStore } from "react";
@@ -10,10 +10,12 @@ export type LangChoice = "system" | Lang;
 export interface AppSettings {
   theme: ThemeChoice;
   lang: LangChoice;
+  /** Look for a newer version at start and every few hours (lib/updates.ts). */
+  autoUpdate: boolean;
 }
 
 const KEY = "kitchenplaner.settings.v1";
-const DEFAULTS: AppSettings = { theme: "system", lang: "system" };
+const DEFAULTS: AppSettings = { theme: "system", lang: "system", autoUpdate: true };
 
 let current: AppSettings = load();
 const listeners = new Set<() => void>();
@@ -26,6 +28,7 @@ function load(): AppSettings {
     return {
       theme: v.theme === "light" || v.theme === "dark" ? v.theme : "system",
       lang: v.lang === "de" || v.lang === "en" ? v.lang : "system",
+      autoUpdate: v.autoUpdate !== false,
     };
   } catch {
     return DEFAULTS;

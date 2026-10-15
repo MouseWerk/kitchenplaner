@@ -21,8 +21,8 @@ const UTF8_BOM: &str = "\u{feff}";
 pub const PROJECT_EXTENSIONS: &[&str] = &["kplan"];
 /// What the shell may write as text: the project and the SVG, DXF and CSV exports.
 pub const TEXT_FILE_EXTENSIONS: &[&str] = &["kplan", "svg", "dxf", "csv"];
-/// What the shell may write as binary: the PNG exports.
-pub const BINARY_FILE_EXTENSIONS: &[&str] = &["png"];
+/// What the shell may write as binary: the PNG exports and the PDF plan set.
+pub const BINARY_FILE_EXTENSIONS: &[&str] = &["png", "pdf"];
 
 /// Accepts only an absolute path without NUL whose extension is one of `allowed`, ignoring case
 /// (save dialogs keep whatever case the user typed). Relative paths are refused because they
@@ -348,13 +348,17 @@ mod tests {
             check_path(dir.path().join(name), TEXT_FILE_EXTENSIONS).unwrap();
         }
         check_path(dir.path().join("bild.PNG"), BINARY_FILE_EXTENSIONS).unwrap();
+        check_path(dir.path().join("Plansatz Küche.PDF"), BINARY_FILE_EXTENSIONS).unwrap();
     }
 
     #[test]
     fn check_path_refuses_other_extensions() {
         let dir = tempfile::tempdir().unwrap();
-        let refused: [(&str, &[&str]); 7] = [
+        let refused: [(&str, &[&str]); 9] = [
             ("a.png", TEXT_FILE_EXTENSIONS),
+            // A PDF is binary: the text command would mangle it.
+            ("a.pdf", TEXT_FILE_EXTENSIONS),
+            ("a.pdf", PROJECT_EXTENSIONS),
             ("a.exe", TEXT_FILE_EXTENSIONS),
             ("a.kplan.bat", TEXT_FILE_EXTENSIONS),
             ("ohne_endung", TEXT_FILE_EXTENSIONS),

@@ -1,6 +1,9 @@
 //! The desktop shell: one window with the UI, and the few commands it needs for file IO. The
 //! logic lives in kitchen-core; this file only adapts it to Tauri.
 
+mod autosave;
+mod updater;
+
 use base64::Engine;
 use kitchen_core::{
     BINARY_FILE_EXTENSIONS, ErrorKind, FileError, PROJECT_EXTENSIONS, TEXT_FILE_EXTENSIONS, check_path, file_name_of,
@@ -66,7 +69,7 @@ fn write_text_file(path: String, contents: String) -> Result<(), CmdError> {
     Ok(kitchen_core::write_atomic(path, contents.as_bytes())?)
 }
 
-/// Binary exports (PNG) arrive base64-encoded: the IPC would otherwise send them as a JSON
+/// Binary exports (PNG, PDF) arrive base64-encoded: the IPC would otherwise send them as a JSON
 /// array of numbers, several times larger.
 #[tauri::command]
 fn write_binary_file(path: String, data: String) -> Result<(), CmdError> {
@@ -250,8 +253,11 @@ pub fn run() {
     let startup = file_from_args(std::env::args().skip(1));
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(updater::plugin())
         .manage(StartupFile(Mutex::new(startup)))
         .manage(ExitConfirmed::default())
+        .manage(updater::Pending::default())
+        .manage(autosave::AutosaveState::default())
         .on_menu_event(|app, event| {
             if event.id() == QUIT_MENU_ID {
                 quit_requested(app);
@@ -265,6 +271,14 @@ pub fn run() {
             add_recent_file,
             startup_file,
             confirm_exit,
+            autosave::autosave_write,
+            autosave::autosave_clear,
+            autosave::autosave_list,
+            autosave::autosave_restore,
+            autosave::autosave_discard,
+            updater::update_enabled,
+            updater::update_check,
+            updater::update_install,
         ]);
     #[cfg(target_os = "macos")]
     let builder = builder.menu(app_menu);

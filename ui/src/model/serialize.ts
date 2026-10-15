@@ -4,9 +4,9 @@
 import { catalogEntry } from "../kinds/registry";
 import { clampOpening, MAX_LENGTH } from "./geometry";
 import { clampPartitionOpening, MAX_PARTITION_THICKNESS, MIN_PARTITION_THICKNESS } from "./partitions";
-import { FORMAT_VERSION, newId } from "./project";
+import { DEFAULT_SETTINGS, FORMAT_VERSION, MAX_SIMULTANEITY, MIN_SIMULTANEITY, newId, repairPositions } from "./project";
 import { COINCIDENT_DISTANCE, isUsableOutline, removeCoincidentCorners } from "./roomEdit";
-import { ENERGIES, type Connections, type Energy, type Item, type Opening, type OpeningKind, type Partition, type Project, type ProjectInfo, type Room, type Vec2 } from "./types";
+import { ENERGIES, type Connections, type DoorHinge, type DoorSwing, type Energy, type Item, type ItemSpec, type Opening, type OpeningKind, type Partition, type Project, type ProjectInfo, type ProjectSettings, type Room, type Vec2 } from "./types";
 import { t, type TKey } from "../lib/i18n";
 
 const FORMAT_ID = "kitchenplaner";
@@ -15,7 +15,12 @@ const FORMAT_ID = "kitchenplaner";
 const DEFAULT_ROOM_HEIGHT = 3000;
 const DEFAULT_WALL_THICKNESS = 240;
 
-const OPENING_KINDS: readonly OpeningKind[] = ["door", "window", "passage", "hatch"];
+const OPENING_KINDS: readonly OpeningKind[] = ["door", "slidingDoor", "window", "passage", "hatch"];
+const HINGES: readonly DoorHinge[] = ["start", "end"];
+const SWINGS: readonly DoorSwing[] = ["in", "out"];
+const LEAVES: readonly (1 | 2)[] = [1, 2];
+/** Text fields of an item's product, in file order. */
+const SPEC_TEXTS = ["manufacturer", "model", "article"] as const;
 const CONNECTION_NUMBERS = ["electricKw", "voltage", "gasKw", "exhaustM3h"] as const;
 const CONNECTION_FLAGS = ["coldWater", "hotWater", "drain", "floorDrain"] as const;
 /** Key order of connections in the file. */
@@ -39,7 +44,15 @@ export function serializeProject(p: Project): string {
   const doc = {
     format: FORMAT_ID,
     version: FORMAT_VERSION,
-    info: { name: p.info.name, client: p.info.client, author: p.info.author, date: p.info.date },
+    info: {
+      name: p.info.name,
+      client: p.info.client,
+      author: p.info.author,
+      date: p.info.date,
+      ...(p.info.drawingNo !== undefined ? { drawingNo: p.info.drawingNo } : {}),
+      ...(p.info.revision !== undefined ? { revision: p.info.revision } : {}),
+    },
+    settings: { simultaneity: p.settings.simultaneity },
     room: {
       points: p.room.points.map((q) => ({ x: q.x, y: q.y })),
       height: p.room.height,
@@ -53,6 +66,9 @@ export function serializeProject(p: Project): string {
         width: o.width,
         height: o.height,
         sill: o.sill,
+        ...(o.hinge !== undefined ? { hinge: o.hinge } : {}),
+        ...(o.swing !== undefined ? { swing: o.swing } : {}),
+        ...(o.leaves !== undefined ? { leaves: o.leaves } : {}),
       })),
       partitions: p.room.partitions.map((q) => ({ id: q.id, a: { x: q.a.x, y: q.a.y }, b: { x: q.b.x, y: q.b.y }, thickness: q.thickness, height: q.height })),
     },
@@ -62,8 +78,12 @@ export function serializeProject(p: Project): string {
         const v = it.connections[k];
         if (v !== undefined) connections[k] = v;
       }
+      const spec: ItemSpec = {};
+      for (const k of SPEC_TEXTS) if (it.spec?.[k] !== undefined) spec[k] = it.spec[k];
+      if (it.spec?.price !== undefined) spec.price = it.spec.price;
       return {
         id: it.id,
+        pos: it.pos,
         catalogId: it.catalogId,
         name: it.name,
         x: it.x,
@@ -75,6 +95,7 @@ export function serializeProject(p: Project): string {
         elevation: it.elevation,
         connections,
         ...(it.energy !== undefined ? { energy: it.energy } : {}),
+        ...(Object.keys(spec).length > 0 ? { spec } : {}),
         ...(it.note !== undefined ? { note: it.note } : {}),
       };
     }),
@@ -90,7 +111,12 @@ export function serializeProject(p: Project): string {
  *
  * Versions: 1 has no partitions (read as none); 2 adds `room.partitions`, openings in a
  * partition (`partition`) and the opening kind "hatch". An item's optional `energy` ("electric" or
- * "gas") needs no new version: older builds drop it and draw the default variant.
+ * "gas") needs no new version: older builds drop it and draw the default variant. 3 adds the
+ * stable position number `pos` of every item, its product `spec`, the opening kind "slidingDoor"
+ * and a door's `hinge`, `swing` and `leaves`, `info.drawingNo` and `info.revision`, and
+ * `settings.simultaneity`. Older files get the position numbers of their list order (what they
+ * showed) and the simultaneity 1 (their totals stay the plain sums). Position numbers that are
+ * not whole numbers >= 1 or repeat one before them are renumbered (`repairPositions`).
  */
 export function parseProject(text: string): Project {
   let raw: unknown;
@@ -107,7 +133,7 @@ export function parseProject(text: string): Project {
   const room = parseRoom(raw.room);
   const itemsRaw = raw.items ?? [];
   if (!Array.isArray(itemsRaw)) invalid("items", itemsRaw);
-  const items = itemsRaw.map((v, i) => parseItem(v, `items[${i}]`));
+  const items = itemsRaw.map((v, i) => parseItem(v, `items[${i}]`, version >= 3 ? undefined : i + 1));
 
   // Ids must be unique across partitions, openings and items: selection and hit testing rely on
   // them. Partitions go first and keep their ids, so an opening referring to a duplicated id
@@ -127,7 +153,8 @@ export function parseProject(text: string): Project {
     version: FORMAT_VERSION,
     info: parseInfo(raw.info),
     room,
-    items: items.map(unique),
+    items: repairPositions(items.map(unique)),
+    settings: parseSettings(raw.settings),
   };
 }
 
@@ -174,7 +201,24 @@ function parseInfo(v: unknown): ProjectInfo {
     client: str(o.client, "info.client", ""),
     author: str(o.author, "info.author", ""),
     date: str(o.date, "info.date", ""),
+    ...(o.drawingNo !== undefined ? { drawingNo: str(o.drawingNo, "info.drawingNo") } : {}),
+    ...(o.revision !== undefined ? { revision: str(o.revision, "info.revision") } : {}),
   };
+}
+
+function parseSettings(v: unknown): ProjectSettings {
+  if (v === undefined) return { ...DEFAULT_SETTINGS };
+  if (!isObject(v)) invalid("settings", v);
+  const simultaneity = num(v.simultaneity, "settings.simultaneity", "positive", DEFAULT_SETTINGS.simultaneity);
+  if (simultaneity < MIN_SIMULTANEITY || simultaneity > MAX_SIMULTANEITY) invalid("settings.simultaneity", simultaneity);
+  return { simultaneity };
+}
+
+/** A value that must be one of `allowed`; absent stays absent. */
+function oneOf<T>(v: unknown, path: string, allowed: readonly T[]): T | undefined {
+  if (v === undefined) return undefined;
+  if (!allowed.includes(v as T)) invalid(path, v);
+  return v as T;
 }
 
 function parseRoom(v: unknown): Room {
@@ -240,7 +284,7 @@ function parseOpening(v: unknown, path: string, wallCount: number): Opening {
   // The wall index of an opening in a partition is not used; a missing one reads as 0.
   const wall = num(v.wall, `${path}.wall`, "nonNegative", partition !== undefined ? 0 : undefined);
   if (!Number.isInteger(wall) || (partition === undefined && wall >= wallCount)) invalid(`${path}.wall`, wall);
-  return {
+  const o: Opening = {
     id: str(v.id, `${path}.id`, ""),
     kind: kind as OpeningKind,
     wall,
@@ -250,15 +294,27 @@ function parseOpening(v: unknown, path: string, wallCount: number): Opening {
     height: num(v.height, `${path}.height`, "size"),
     sill: num(v.sill, `${path}.sill`, "distance", 0),
   };
+  const hinge = oneOf(v.hinge, `${path}.hinge`, HINGES);
+  const swing = oneOf(v.swing, `${path}.swing`, SWINGS);
+  const leaves = oneOf(v.leaves, `${path}.leaves`, LEAVES);
+  if (hinge !== undefined) o.hinge = hinge;
+  if (swing !== undefined) o.swing = swing;
+  if (leaves !== undefined) o.leaves = leaves;
+  return o;
 }
 
-function parseItem(v: unknown, path: string): Item {
+/**
+ * One item; `listPos` is the position number of a file before version 3 (its place in the list).
+ * A missing number in a newer file reads as 0, which `repairPositions` replaces.
+ */
+function parseItem(v: unknown, path: string, listPos?: number): Item {
   if (!isObject(v)) invalid(path, v);
   const catalogId = str(v.catalogId, `${path}.catalogId`);
   // Sizes missing in the file come from the catalog; an unknown entry has nothing to offer.
   const entry = catalogEntry(catalogId);
   const item: Item = {
     id: str(v.id, `${path}.id`, ""),
+    pos: listPos ?? num(v.pos, `${path}.pos`, "any", 0),
     catalogId,
     name: str(v.name, `${path}.name`, entry ? t(entry.name) : catalogId),
     x: num(v.x, `${path}.x`, "any"),
@@ -274,8 +330,20 @@ function parseItem(v: unknown, path: string): Item {
     if (!ENERGIES.includes(v.energy as Energy)) invalid(`${path}.energy`, v.energy);
     item.energy = v.energy as Energy;
   }
+  if (v.spec !== undefined) {
+    const spec = parseSpec(v.spec, `${path}.spec`);
+    if (Object.keys(spec).length > 0) item.spec = spec;
+  }
   if (v.note !== undefined) item.note = str(v.note, `${path}.note`);
   return item;
+}
+
+function parseSpec(v: unknown, path: string): ItemSpec {
+  if (!isObject(v)) invalid(path, v);
+  const spec: ItemSpec = {};
+  for (const k of SPEC_TEXTS) if (v[k] !== undefined) spec[k] = str(v[k], `${path}.${k}`);
+  if (v.price !== undefined) spec.price = num(v.price, `${path}.price`, "nonNegative");
+  return spec;
 }
 
 function parseConnections(v: unknown, path: string): Connections {

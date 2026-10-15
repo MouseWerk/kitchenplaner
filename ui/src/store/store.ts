@@ -7,7 +7,7 @@
 import { create } from "zustand";
 import type { ElevationCut } from "../model/elevation";
 import type { Facing, Item, Opening, Project, Room } from "../model/types";
-import { newProject } from "../model/project";
+import { newProject, numberNew } from "../model/project";
 
 /** How many steps undo keeps. */
 const HISTORY_LIMIT = 200;
@@ -79,7 +79,8 @@ export interface AppState {
   isGestureActive: () => boolean;
   undo: () => void;
   redo: () => void;
-  load: (project: Project, path: string | null) => void;
+  /** Opens `project`; `dirty` marks it as not saved yet (a restored autosave). */
+  load: (project: Project, path: string | null, opts?: { dirty?: boolean }) => void;
   markSaved: (path: string) => void;
   select: (sel: Partial<Selection>) => void;
   setLayout: (layout: Layout) => void;
@@ -92,6 +93,7 @@ export interface AppState {
 
   // Shortcuts over `change`.
   updateItems: (ids: readonly string[], patch: (it: Item) => Partial<Item>, opts?: { gesture?: boolean }) => void;
+  /** Adds new items (placed, pasted or duplicated): each gets the next free position number. */
   addItems: (items: Item[]) => void;
   removeSelected: () => void;
   updateRoom: (patch: (r: Room) => Partial<Room>, opts?: { gesture?: boolean }) => void;
@@ -165,10 +167,10 @@ export const useStore = create<AppState>((set, get) => ({
     set({ project: next, past: [...past, project], future: future.slice(1), dirty: true, selection: keepExisting(get().selection, next) });
   },
 
-  load(project, path) {
+  load(project, path, opts) {
     gestureOpen = false;
     gestureActive = false;
-    set((s) => ({ project, path, dirty: false, past: [], future: [], selection: EMPTY_SELECTION, loadCount: s.loadCount + 1 }));
+    set((s) => ({ project, path, dirty: opts?.dirty ?? false, past: [], future: [], selection: EMPTY_SELECTION, loadCount: s.loadCount + 1 }));
   },
 
   markSaved(path) {
@@ -216,7 +218,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   addItems(items) {
-    get().change((p) => ({ ...p, items: [...p.items, ...items] }));
+    get().change((p) => ({ ...p, items: [...p.items, ...numberNew(p.items, items)] }));
     get().select({ items: items.map((i) => i.id) });
   },
 

@@ -3,7 +3,8 @@
 //
 // - select: click or frame corners, walls, partitions and openings; G grabs the selection
 //   (X/Y lock, typed distance, Enter or click confirms, Escape or right click cancels), dragging
-//   a handle moves it directly, a double click on a wall inserts a corner, Delete or X removes;
+//   a handle moves it directly, a double click on a wall inserts a corner, Delete or X removes,
+//   H flips a selected door's hinge side and Shift+H its opening direction;
 // - outline: draws a new room outline wall by wall (model/wallDraw.ts);
 // - partition: draws partitions from end to end.
 //
@@ -13,6 +14,7 @@
 
 import { useEffect, useReducer, useRef, type PointerEvent as RPointerEvent } from "react";
 import { add, dist, dot, norm, round, scale, snapValue, sub, walls } from "../model/geometry";
+import { flipHinge, flipSwing, isDoor } from "../model/doors";
 import { newId } from "../model/project";
 import {
   clampToHost,
@@ -51,6 +53,8 @@ export interface RoomEditLayerProps {
   /** Pans the plan (middle or right drag on the overlay). */
   setVp: (vp: Viewport) => void;
   onCursor?: (p: { x: number; y: number } | null) => void;
+  /** A right click without moving (select tool): window pixels, plan millimetres, what is under it. */
+  onMenu?: (at: Vec2, world: Vec2, hit: RoomHit | null) => void;
 }
 
 /** Pick distance around handles, walls and openings (px). */
@@ -87,7 +91,7 @@ interface Grab {
 }
 
 type Interaction =
-  | { kind: "pan"; client: Vec2; ox: number; oy: number }
+  | { kind: "pan"; client: Vec2; ox: number; oy: number; button: number }
   | { kind: "press"; hit: RoomHit | null; client: Vec2; world: Vec2; mode: SelectMode; wasSelected: boolean }
   | { kind: "frame"; from: Vec2; mode: SelectMode }
   | Grab;
@@ -122,6 +126,20 @@ export function removeRoomSelection(): boolean {
   }
   st.change((p) => ({ ...p, room: next }));
   st.select(EMPTY_ROOM_SELECTION);
+  return true;
+}
+
+/**
+ * H and Shift+H: the selected door gets its hinge on the other side (a sliding door slides the
+ * other way), or opens to the other side (a sliding door runs on the other face). One undo step;
+ * false when no door is selected.
+ */
+export function flipSelectedDoor(what: "hinge" | "swing"): boolean {
+  const st = useStore.getState();
+  const o = st.project.room.openings.find((x) => x.id === st.selection.opening);
+  if (!o || !isDoor(o)) return false;
+  const next = what === "hinge" ? flipHinge(o) : flipSwing(o);
+  st.updateOpening(o.id, { hinge: next.hinge, swing: next.swing });
   return true;
 }
 
@@ -168,6 +186,24 @@ function selectHit(hit: RoomHit, mode: SelectMode) {
   const partitions = hit.kind === "partition" || hit.kind === "end" ? [hit.id] : [];
   if (mode === "replace") st.select({ corners, partitions, opening: null });
   else st.select({ corners: combine(sel.corners, corners, mode), partitions: combine(sel.partitions, partitions, mode), opening: null });
+}
+
+/**
+ * Inserts a corner into outer wall `index` where `p` (mm) lies along it (on the grid) and selects
+ * it: one undo step, none when it is too close to a corner. Returns whether a corner was added.
+ */
+export function insertCornerOnWall(index: number, p: Vec2): boolean {
+  const st = useStore.getState();
+  const w = walls(st.project.room)[index];
+  if (!w) return false;
+  const along = snapValue(dot(sub(p, w.a), w.dir), st.prefs.grid);
+  const at = add(w.a, scale(w.dir, along));
+  const split = insertCorner(st.project.room, index, { x: round(at.x), y: round(at.y) }, st.prefs.grid);
+  // Too close to an existing corner: nothing to add (and no empty undo step).
+  if (!split) return false;
+  st.change((pr) => ({ ...pr, room: split }));
+  st.select({ ...EMPTY_ROOM_SELECTION, corners: [index + 1] });
+  return true;
 }
 
 export function RoomEditLayer(props: RoomEditLayerProps) {
@@ -447,6 +483,8 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
     if (e.altKey) return false;
     // G works where the cursor is: over the plan (as in the arrange mode).
     if (e.code === "KeyG") return s.cursor ? beginGrab(false, s.cursor) : false;
+    // H flips the selected door's hinge side, Shift+H its opening direction (F stays "fit").
+    if (e.code === "KeyH") return flipSelectedDoor(e.shiftKey ? "swing" : "hinge");
     if (e.key === "Delete" || e.key === "Backspace" || e.code === "KeyX") return removeRoomSelection();
     if (e.key === "Escape") {
       const sel = st.selection;
@@ -509,7 +547,7 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
       return;
     }
     if (ev.button === 1 || ev.button === 2) {
-      s.inter = { kind: "pan", client: { x: ev.clientX, y: ev.clientY }, ox: vpRef.current.ox, oy: vpRef.current.oy };
+      s.inter = { kind: "pan", client: { x: ev.clientX, y: ev.clientY }, ox: vpRef.current.ox, oy: vpRef.current.oy, button: ev.button };
       return;
     }
     if (ev.button !== 0) return;
@@ -567,7 +605,13 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
       return;
     }
     s.inter = null;
-    if (inter?.kind === "frame") {
+    if (inter?.kind === "pan" && inter.button === 2 && ev.type === "pointerup" && st.roomTool === "select" && Math.hypot(ev.clientX - inter.client.x, ev.clientY - inter.client.y) < DRAG_THRESHOLD) {
+      // A right click without moving: the context menu, for what is under the pointer (selected first).
+      const p = worldOf(ev);
+      const hit = hitRoom(st.project.room, p, PICK_PX / vpRef.current.k);
+      if (hit && !isSelected(hit, st.selection, st.project.room)) selectHit(hit, "replace");
+      propsRef.current.onMenu?.({ x: ev.clientX, y: ev.clientY }, p, hit);
+    } else if (inter?.kind === "frame") {
       const to = worldOf(ev);
       const box = { minX: Math.min(inter.from.x, to.x), maxX: Math.max(inter.from.x, to.x), minY: Math.min(inter.from.y, to.y), maxY: Math.max(inter.from.y, to.y) };
       // Dragged right to left: everything the frame touches.
@@ -589,14 +633,7 @@ export function RoomEditLayer(props: RoomEditLayerProps) {
     const p = worldOf(ev);
     const hit = hitRoom(st.project.room, p, PICK_PX / vpRef.current.k);
     if (hit?.kind !== "wall") return;
-    const w = walls(st.project.room)[hit.index];
-    const along = snapValue(dot(sub(p, w.a), w.dir), st.prefs.grid);
-    const at = add(w.a, scale(w.dir, along));
-    const split = insertCorner(st.project.room, hit.index, { x: round(at.x), y: round(at.y) }, st.prefs.grid);
-    // Too close to an existing corner: nothing to add (and no empty undo step).
-    if (!split) return;
-    st.change((pr) => ({ ...pr, room: split }));
-    st.select({ ...EMPTY_ROOM_SELECTION, corners: [hit.index + 1] });
+    insertCornerOnWall(hit.index, p);
   };
 
   const onPointerLeave = () => {

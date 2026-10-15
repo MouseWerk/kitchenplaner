@@ -9,13 +9,14 @@ import { FACINGS, type Facing, type Project } from "../model/types";
 import { drawingBounds, TEXT, type Drawing, type Shape } from "../render/drawing";
 import { drawingToDxf } from "../render/dxf";
 import { svgToPng } from "../render/png";
+import { planSetPdf, type PlanSetOptions } from "../render/planSet";
 import { drawingToSvg, sheetDrawing } from "../render/svg";
-import { capture3dPng } from "../three/capture";
+import { canCapture3d, capture3dPng } from "../three/capture";
 import { useStore } from "../store/store";
 import { cancelActiveOperator } from "./commands";
 import { errorText } from "./errors";
 import { currentLang, t } from "./i18n";
-import { addRecentFile, baseName, confirmDialog, openProjectFile, PROJECT_FILTER, readProjectPath, safeFileName, saveBinary, saveText, type FileFilter } from "./platform";
+import { addRecentFile, baseName, confirmDialog, openProjectFile, PDF_FILTER, PROJECT_FILTER, readProjectPath, safeFileName, saveBinary, saveText, type FileFilter } from "./platform";
 import { toast } from "./toast";
 
 const SVG: FileFilter = { name: "SVG", extensions: ["svg"] };
@@ -25,6 +26,8 @@ const CSV: FileFilter = { name: "CSV", extensions: ["csv"] };
 
 /** Width of exported PNG images (px): sharp on a 4K screen and in an A4 printout. */
 const PNG_WIDTH = 3200;
+/** Width of the 3D image in the PDF plan set (px): about 150 dpi across an A2 sheet. */
+const PDF_IMAGE_WIDTH = 2400;
 /** Gap between the four elevations on one sheet (paper mm). */
 const SHEET_GAP = 18;
 
@@ -143,6 +146,26 @@ export async function runExport(kind: ExportKind, facing: Facing) {
     if (written) toast(t("export.done", { name: baseName(written) }));
   } catch (e) {
     toast(errorText(e), "danger");
+  }
+}
+
+/**
+ * Writes the plan set as PDF after asking where; returns whether it was written. The 3D page is
+ * left out when no 3D view is shown (the dialog says so). The elevations use the cut depth and
+ * the plan prints names when the dialog asks for them.
+ */
+export async function exportPlanSet(opts: PlanSetOptions): Promise<boolean> {
+  const { project, prefs } = useStore.getState();
+  const lang = currentLang();
+  try {
+    const image = opts.view3d && canCapture3d() ? await capture3dPng(PDF_IMAGE_WIDTH) : null;
+    const pdf = await planSetPdf(project, { ...opts, view3d: image !== null }, { lang, cut: prefs.elevationCut, image });
+    const written = await saveBinary(`${safeFileName(project.info.name)} - ${t("planSet.fileName")}.pdf`, PDF_FILTER, pdf);
+    if (written) toast(t("export.done", { name: baseName(written) }));
+    return written !== null;
+  } catch (e) {
+    toast(errorText(e), "danger");
+    return false;
   }
 }
 

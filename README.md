@@ -26,13 +26,26 @@ einzelne Datei (`.kplan`). Für Windows, macOS und Linux, auf Deutsch und Englis
   (Ecken, Wände, Trennwände, Öffnungen); G verschiebt, R dreht, X/Y sperren eine Achse, eine
   getippte Zahl gibt das genaue Maß.
 - **Raum zeichnen**: „Umriss zeichnen“ Wand für Wand mit getippten Längen und Einrasten auf 90° und
-  45°, Trennwände im Raum, Türen, Fenster und Durchreichen.
+  45°, Trennwände im Raum, Fenster und Durchreichen.
+- **Türen**: Anschlag DIN links oder rechts, nach innen oder außen öffnend, ein- oder zweiflügelig,
+  Schiebetüren; Grundriss, Ansichten, 3D und Prüfung folgen dem Aufschlag.
+- **Stabile Positionsnummern**: jedes Gerät behält seine Nummer, auch wenn andere gelöscht werden;
+  „Positionen neu nummerieren“ zählt auf Wunsch neu, im Uhrzeigersinn um den Raum.
 - **Geräteliste mit Anschlusswerten**: alle Positionen mit Maßen, Elektro, Gas, Wasser, Abwasser
-  und Abluft, mit Summen.
+  und Abluft, mit Summen und einstellbarem Gleichzeitigkeitsfaktor; Hersteller, Typ, Artikelnummer
+  und Nettopreis je Gerät, mit Preissumme. Anschlusswerte sind als Richtwerte gekennzeichnet.
 - **Prüfung**: Hinweise auf Geräte, die sich überschneiden, aus dem Raum ragen, eine Tür versperren,
   höher als der Raum sind oder in einer Trennwand stehen.
+- **Plansatz als PDF**: Grundriss, Ansichten, Geräteliste und 3D-Bild auf A4 bis A0, in festem
+  Maßstab (1:20 bis 1:200) oder automatisch, mit Plankopf (Plannummer, Revision, Blatt „n von m“).
 - **Export**: Grundriss als SVG, DXF und PNG, Ansichten als SVG und DXF, 3D-Ansicht als PNG,
   Geräteliste als CSV; das Projekt selbst als `.kplan` (JSON).
+- **Messen, Ausrichten, Kontextmenü**: Abstände im Grundriss messen (M), mehrere Geräte ausrichten,
+  verteilen oder lückenlos aneinanderreihen, die passenden Befehle per Rechtsklick.
+- **Automatische Sicherung**: ungespeicherte Änderungen werden alle paar Sekunden gesichert und
+  nach einem Absturz oder Stromausfall beim nächsten Start zum Wiederherstellen angeboten.
+- **Einführung** beim ersten Start in sechs Schritten, mit den Tastenkürzeln und der Beispielküche.
+- **Updates**: die App sucht selbst nach neuen Versionen und aktualisiert sich auf Wunsch.
 - **Helles und dunkles Design**, Deutsch und Englisch, jeweils wie das System oder von Hand gewählt.
 
 | | |
@@ -74,7 +87,9 @@ einem gekauften Zertifikat signiert; Windows und macOS warnen deshalb beim erste
   `libfuse2t64`).
 
 `SHA256SUMS.txt` im Release enthält die Prüfsummen aller Dateien. Neue Versionen gibt es auf der
-Releases-Seite; die App sucht nicht selbst nach Updates.
+Releases-Seite. Ab Version 0.2 sucht die App beim Start und alle paar Stunden selbst nach einer
+neuen Version und zeigt dann einen Hinweis mit „Jetzt aktualisieren“ (abschaltbar unter
+„Darstellung“ → „Automatisch nach Updates suchen“).
 
 ## Tastenkürzel
 
@@ -89,6 +104,8 @@ Auf dem Mac steht ⌘ statt Strg.
 | 1, 2, 3, 4 | Grundriss, Ansichten, 3D, Alle Ansichten |
 | F | Ansichten einpassen |
 | Mausrad, mittlere oder rechte Maustaste ziehen, Leertaste+Ziehen | Zoomen, Ansicht verschieben |
+| M | Messen im Grundriss: zwei Punkte klicken (rastet an Ecken, Kanten, Wänden und Raster ein), Umschalt hält 45°-Schritte, Alt misst frei; Esc, M oder Rechtsklick beendet |
+| Rechtsklick ohne Ziehen | Kontextmenü im Grundriss: Duplizieren, Drehen, Ausrichten, Löschen; im Modus „Raum“ Ecke einfügen, Türanschlag wechseln |
 
 Im Modus „Einrichten“ (Geräte anordnen, wie Blenders Objektmodus):
 
@@ -110,10 +127,20 @@ Im Modus „Einrichten“ (Geräte anordnen, wie Blenders Objektmodus):
 | Esc | Auswahl aufheben |
 | Alt beim Ziehen oder Verschieben | Ohne Raster und Einrasten |
 
+Mit zwei oder mehr ausgewählten Geräten richtet der Bereich „Ausrichten und verteilen“ in den
+Eigenschaften (und das Kontextmenü) sie links, rechts, oben, unten oder mittig am Rahmen um die
+ganze Auswahl aus, verteilt sie mit gleichen Abständen oder reiht sie lückenlos aneinander; jeder
+Befehl ist ein Rückgängig-Schritt. Beim ersten Start zeigt eine kurze Einführung die wichtigsten
+Schritte; unter „Darstellung“ öffnest du sie wieder oder lädst die Beispielküche.
+
 Beim Ziehen und Verschieben rastet ein Gerät mit der Rückseite an Wänden und Trennwänden ein und
 richtet Kanten und Mitten an anderen Geräten aus; Hilfslinien zeigen, woran. Tischgeräte
 (Aufschnittmaschine, Waage) stehen auf einem Tisch und rasten nur an einer Wand ein, die sie
 berühren; Bodenabläufe und Rinnen liegen im Boden und dürfen unter Geräten liegen.
+
+Im Modus „Raum“ wechselt H bei der ausgewählten Tür den Anschlag (DIN links/rechts), Umschalt+H
+die Öffnungsrichtung (nach innen/außen); bei einer Schiebetür die Richtung, in die sie öffnet, und
+die Seite, auf der sie läuft. Flügelzahl und Art (Tür, Schiebetür) stehen im Inspektor.
 
 ## Entwicklung
 
@@ -159,9 +186,15 @@ runs entirely on your computer, without an account; a project is a single `.kpla
   storage, ventilation, building elements), many in several widths and as electric or gas units,
   each with a 3D preview.
 - Editing in two modes like Blender (Tab: arrange units or edit the room; G moves, R rotates, X/Y
-  lock an axis, a typed number gives the exact value), a wall-by-wall room tool, partitions, doors,
-  windows and pass-through hatches.
-- An equipment list with connection values, a plan check, and exports as SVG, DXF, PNG and CSV.
+  lock an axis, a typed number gives the exact value), a wall-by-wall room tool, partitions, doors
+  (hinge side, opening in or out, double leaves, sliding doors), windows and pass-through hatches;
+  measuring, aligning and distributing, and a right-click menu.
+- Stable position numbers, manufacturer, type, article number and price per unit, an equipment list
+  with connection values and a simultaneity factor, and a plan check.
+- A PDF plan set (plan, elevations, list, 3D) on A4 to A0 at a fixed scale with a title block, and
+  exports as SVG, DXF, PNG and CSV.
+- Automatic backups with recovery after a crash, a short introduction on the first start, and
+  updates the app installs itself.
 - German and English, light and dark design. An example restaurant kitchen is in
   [`examples/`](examples/README.md) and attached to every release.
 

@@ -29,7 +29,7 @@ describe("serializeProject", () => {
   it("writes pretty JSON with a trailing newline in a fixed key order", () => {
     const text = serializeProject(sample());
     expect(text.endsWith("}\n")).toBe(true);
-    expect(text.startsWith('{\n  "format": "kitchenplaner",\n  "version": 2,\n  "info": {')).toBe(true);
+    expect(text.startsWith('{\n  "format": "kitchenplaner",\n  "version": 3,\n  "info": {')).toBe(true);
     // Shuffled keys in memory give the same file.
     const p = sample();
     const shuffled = { ...p, items: p.items.map((it) => Object.fromEntries(Object.entries(it).reverse()) as typeof it) };
@@ -96,11 +96,13 @@ describe("parseProject", () => {
     const p = parseProject("﻿" + text);
     expect(p).not.toHaveProperty("extra");
     expect(p.room).toEqual({ points: [{ x: 0, y: 0 }, { x: 4000, y: 0 }, { x: 4000, y: 3000 }], height: 3000, wallThickness: 240, openings: [], partitions: [] });
-    expect(p.items[0]).toEqual({ id: "f", catalogId: "future-robot", name: "future-robot", x: 100, y: 200, rotation: 0, width: 500, depth: 400, height: 900, elevation: 0, connections: {} });
+    expect(p.items[0]).toEqual({ id: "f", pos: 1, catalogId: "future-robot", name: "future-robot", x: 100, y: 200, rotation: 0, width: 500, depth: 400, height: 900, elevation: 0, connections: {} });
     // Sizes missing in the file come from the catalog.
     expect(p.items[1]).toMatchObject({ catalogId: "table", width: 1200, depth: 700, height: 900 });
     expect(p.items[1].id).not.toBe("");
+    expect(p.items[1].pos).toBe(2);
     expect(p.info.client).toBe("");
+    expect(p.settings).toEqual({ simultaneity: 1 });
   });
 
   it("rejects sizes beyond 100 m", () => {
@@ -212,8 +214,22 @@ function withPartitions() {
   return p;
 }
 
+/** A project file as version 2 wrote it: no position numbers, products, settings or title data. */
+function v2Raw(p = sample()): any {
+  const raw = JSON.parse(serializeProject(p));
+  raw.version = 2;
+  delete raw.settings;
+  delete raw.info.drawingNo;
+  delete raw.info.revision;
+  for (const it of raw.items) {
+    delete it.pos;
+    delete it.spec;
+  }
+  return raw;
+}
+
 function v1(edit: (raw: any) => void = () => {}): string {
-  const raw = JSON.parse(serializeProject(sample()));
+  const raw = v2Raw();
   raw.version = 1;
   delete raw.room.partitions;
   edit(raw);
@@ -221,10 +237,10 @@ function v1(edit: (raw: any) => void = () => {}): string {
 }
 
 describe("format version 2", () => {
-  it("writes version 2 with the partitions and the openings' partition after the wall", () => {
+  it("writes the partitions and the openings' partition after the wall", () => {
     const text = serializeProject(withPartitions());
     const raw = JSON.parse(text);
-    expect(raw.version).toBe(2);
+    expect(raw.version).toBe(3);
     expect(raw.room.partitions[0]).toEqual({ id: "p1", a: { x: 5000, y: 0 }, b: { x: 5000, y: 6000 }, thickness: 100, height: 3000 });
     expect(Object.keys(raw.room.openings[0])).toEqual(["id", "kind", "wall", "partition", "offset", "width", "height", "sill"]);
     // Openings in outer walls carry no partition key at all.
@@ -239,19 +255,22 @@ describe("format version 2", () => {
     expect(serializeProject(back)).toBe(serializeProject(p));
   });
 
-  it("reads a version 1 file as a room without partitions and writes it back as version 2", () => {
+  it("reads a version 1 file as a room without partitions and writes it back as version 3", () => {
     const p = parseProject(v1());
-    expect(p.version).toBe(2);
+    expect(p.version).toBe(3);
     expect(p.room.partitions).toEqual([]);
     expect(p.room.openings).toEqual(sample().room.openings);
+    // The position numbers are the list order the file showed.
     expect(p.items).toEqual(sample().items);
-    expect(JSON.parse(serializeProject(p)).version).toBe(2);
+    expect(p.items.map((i) => i.pos)).toEqual([1, 2]);
+    expect(p.settings).toEqual({ simultaneity: 1 });
+    expect(JSON.parse(serializeProject(p)).version).toBe(3);
     // Old, new, old shape again: the content survives the migration.
     expect(parseProject(serializeProject(p))).toEqual(p);
   });
 
-  it("rejects a version 3 file as too new", () => {
-    expect(errorOf(withRaw((r) => (r.version = 3))).key).toBe("error.tooNew");
+  it("rejects a version 4 file as too new", () => {
+    expect(errorOf(withRaw((r) => (r.version = 4))).key).toBe("error.tooNew");
   });
 
   it("rejects damaged partitions", () => {
@@ -347,5 +366,121 @@ describe("item energy", () => {
     const raw = JSON.parse(serializeProject(testProject([testItem("g", "range-4", 2000, 450, 0, { energy: "gas" })])));
     raw.items[0].energy = "steam";
     expect(errorOf(JSON.stringify(raw)).key).toBe("error.invalid");
+  });
+});
+
+/** The sample with every field of version 3: products, door details, a sliding door, title data, a factor. */
+function v3Sample() {
+  const p = sample();
+  p.items[0] = { ...p.items[0], pos: 7, spec: { manufacturer: "Muster GmbH", model: "HX 6", article: "123-456", price: 4890.5 } };
+  p.items[1] = { ...p.items[1], pos: 3, spec: { price: 0 } };
+  p.room.openings = [
+    { ...p.room.openings[0], hinge: "end", swing: "out", leaves: 2 },
+    { id: "s1", kind: "slidingDoor", wall: 0, offset: 2000, width: 1200, height: 2135, sill: 0 },
+  ];
+  p.info = { ...p.info, drawingNo: "K-101", revision: "B" };
+  p.settings = { simultaneity: 0.65 };
+  return p;
+}
+
+describe("format version 3", () => {
+  it("writes position, product, door details, title data and settings in a fixed order", () => {
+    const raw = JSON.parse(serializeProject(v3Sample()));
+    expect(raw.version).toBe(3);
+    expect(Object.keys(raw)).toEqual(["format", "version", "info", "settings", "room", "items"]);
+    expect(raw.info).toMatchObject({ drawingNo: "K-101", revision: "B" });
+    expect(raw.settings).toEqual({ simultaneity: 0.65 });
+    expect(Object.keys(raw.items[0]).slice(0, 3)).toEqual(["id", "pos", "catalogId"]);
+    expect(raw.items[0].spec).toEqual({ manufacturer: "Muster GmbH", model: "HX 6", article: "123-456", price: 4890.5 });
+    expect(Object.keys(raw.room.openings[0])).toEqual(["id", "kind", "wall", "offset", "width", "height", "sill", "hinge", "swing", "leaves"]);
+    expect(raw.room.openings[1].kind).toBe("slidingDoor");
+  });
+
+  it("leaves out what is not set", () => {
+    const raw = JSON.parse(serializeProject(sample()));
+    expect(raw.info).not.toHaveProperty("drawingNo");
+    expect(raw.info).not.toHaveProperty("revision");
+    expect(raw.items[0]).not.toHaveProperty("spec");
+    expect(raw.room.openings[0]).not.toHaveProperty("hinge");
+    // An empty product is no product.
+    const p = sample();
+    p.items[0] = { ...p.items[0], spec: {} };
+    expect(JSON.parse(serializeProject(p)).items[0]).not.toHaveProperty("spec");
+  });
+
+  it("round-trips every new field unchanged", () => {
+    const p = v3Sample();
+    const back = parseProject(serializeProject(p));
+    expect(back).toEqual(p);
+    expect(serializeProject(back)).toBe(serializeProject(p));
+  });
+
+  it("reads a version 2 file: numbers from the list order, the plain sums", () => {
+    const raw = v2Raw(withPartitions());
+    // A version 2 file knows no `pos`; one there (a hand edit) does not count.
+    raw.items[0].pos = 9;
+    const p = parseProject(JSON.stringify(raw));
+    expect(p.version).toBe(3);
+    expect(p.items.map((i) => [i.id, i.pos])).toEqual([
+      ["a", 1],
+      ["b", 2],
+    ]);
+    expect(p.settings).toEqual({ simultaneity: 1 });
+    expect(p.room).toEqual(withPartitions().room);
+    const again = JSON.parse(serializeProject(p));
+    expect(again.version).toBe(3);
+    expect(again.items.map((i: any) => i.pos)).toEqual([1, 2]);
+  });
+
+  it("repairs repeated, missing and broken position numbers the same way every time", () => {
+    const raw = JSON.parse(serializeProject(testProject(["a", "b", "c", "d", "e", "f"].map((id, i) => testItem(id, "table", 1000 + i * 1300, 350)))));
+    raw.items[0].pos = 4;
+    raw.items[1].pos = 4;
+    delete raw.items[2].pos;
+    raw.items[3].pos = 0;
+    raw.items[4].pos = 2.5;
+    raw.items[5].pos = 2;
+    const text = JSON.stringify(raw);
+    const p = parseProject(text);
+    // The first 4 and the 2 keep their numbers; the others follow the highest, in list order.
+    expect(p.items.map((i) => i.pos)).toEqual([4, 5, 6, 7, 8, 2]);
+    expect(parseProject(text).items.map((i) => i.pos)).toEqual([4, 5, 6, 7, 8, 2]);
+  });
+
+  it("rejects damaged products, door details and settings", () => {
+    const cases: ((r: any) => void)[] = [
+      (r) => (r.items[0].pos = "1"),
+      (r) => (r.items[0].pos = null),
+      (r) => (r.items[0].spec = "Muster"),
+      (r) => (r.items[0].spec = { manufacturer: 5 }),
+      (r) => (r.items[0].spec = { price: -1 }),
+      (r) => (r.items[0].spec = { price: "12,50" }),
+      (r) => (r.items[0].spec = { price: null }),
+      (r) => (r.room.openings[0].hinge = "left"),
+      (r) => (r.room.openings[0].swing = "up"),
+      (r) => (r.room.openings[0].leaves = 3),
+      (r) => (r.room.openings[0].leaves = "2"),
+      (r) => (r.info.drawingNo = 101),
+      (r) => (r.info.revision = null),
+      (r) => (r.settings = []),
+      (r) => (r.settings = { simultaneity: 0.05 }),
+      (r) => (r.settings = { simultaneity: 1.2 }),
+      (r) => (r.settings = { simultaneity: "0,7" }),
+      (r) => (r.settings = { simultaneity: 0 }),
+    ];
+    for (const edit of cases) expect(errorOf(withRaw(edit)).key, edit.toString()).toBe("error.invalid");
+    expect(() => parseProject(serializeProject(sample()).replace('"pos": 1,', '"pos": 1e400,'))).toThrow(ProjectError);
+  });
+
+  it("accepts the limits of the simultaneity factor and a missing one", () => {
+    expect(parseProject(withRaw((r) => (r.settings = { simultaneity: 0.1 }))).settings.simultaneity).toBe(0.1);
+    expect(parseProject(withRaw((r) => (r.settings = { simultaneity: 1 }))).settings.simultaneity).toBe(1);
+    expect(parseProject(withRaw((r) => delete r.settings)).settings.simultaneity).toBe(1);
+    expect(parseProject(withRaw((r) => (r.settings = {}))).settings.simultaneity).toBe(1);
+  });
+
+  it("accepts sliding doors and the door details", () => {
+    const p = parseProject(withRaw((r) => Object.assign(r.room.openings[0], { kind: "slidingDoor", hinge: "start", swing: "in", leaves: 1 })));
+    expect(p.room.openings[0]).toMatchObject({ kind: "slidingDoor", hinge: "start", swing: "in", leaves: 1 });
   });
 });

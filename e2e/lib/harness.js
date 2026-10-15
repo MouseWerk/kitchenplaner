@@ -1,6 +1,8 @@
 // Starts the real Kitchenplaner binary under tauri-driver and returns a WebdriverIO session. Every
-// launch gets fresh, isolated data: its own app data folder (recent files), its own WebView
-// storage (settings) and its own folder for the files a test saves and exports.
+// launch gets fresh, isolated data: its own app data folder (recent files, autosave backups), its
+// own WebView storage (settings) and its own folder for the files a test saves and exports. A
+// test of what survives a restart ends a run with `crash()` and starts the next one on the same
+// folders with `launch({ reuse })`.
 //
 // The binary must be a debug build with the UI embedded (`npm --prefix ui run build`, then
 // `cargo build -p kitchenplaner --features custom-protocol`); its path comes from
@@ -92,12 +94,15 @@ async function waitForDriver(port, driver, timeout = 15000) {
   throw new Error(`tauri-driver did not answer on port ${port}`);
 }
 
-/** Ends a process we started and everything it started (tauri-driver starts the native driver, which starts the app). */
-function killTree(child) {
+/**
+ * Ends a process we started and everything it started (tauri-driver starts the native driver, which
+ * starts the app). SIGKILL leaves the app no chance to clean up, as in a crash.
+ */
+function killTree(child, signal = "SIGTERM") {
   if (!child.pid || child.exitCode !== null) return;
   try {
     if (WINDOWS) execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-    else process.kill(-child.pid, "SIGTERM");
+    else process.kill(-child.pid, signal);
   } catch {
     /* already gone */
   }
@@ -130,14 +135,17 @@ function appEnv(dir) {
 
 /**
  * Starts the app. Returns helpers bound to its session; `close()` ends it and removes its folders.
- * `files` is an empty folder for the files the test saves, exports and opens.
+ * `files` is an empty folder for the files the test saves, exports and opens. `reuse` is the `dir`
+ * of an earlier run ended with `crash()`: the app starts again on its data, WebView storage and
+ * files, as after a restart (the introduction was seen then, the language is already German).
  */
-export async function launch({ width = 1440, height = 900 } = {}) {
+export async function launch({ width = 1440, height = 900, reuse = null } = {}) {
   if (!fs.existsSync(APP)) throw new Error(`app binary not found: ${APP} (build it, or set KITCHENPLANER_APP; see e2e/README.md)`);
   fs.mkdirSync(SHOTS, { recursive: true });
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kitchenplaner-e2e-"));
+  if (reuse && !fs.existsSync(reuse)) throw new Error(`no earlier run in ${reuse}`);
+  const dir = reuse ?? fs.mkdtempSync(path.join(os.tmpdir(), "kitchenplaner-e2e-"));
   const files = path.join(dir, "files");
-  fs.mkdirSync(files);
+  fs.mkdirSync(files, { recursive: true });
   const port = await driverPort();
   const args = ["--port", String(port), "--native-port", String(port + 1000)];
   // Windows: msedgedriver matching the installed WebView2 (e2e/README.md), from PATH or this variable.
@@ -163,6 +171,8 @@ export async function launch({ width = 1440, height = 900 } = {}) {
 
   const app = {
     browser,
+    /** This run's folders; pass it as `reuse` to start again on them after `crash()`. */
+    dir,
     files,
     /** A path in this run's file folder. */
     file: (name) => path.join(files, name),
@@ -285,16 +295,30 @@ export async function launch({ width = 1440, height = 900 } = {}) {
     async shot(name) {
       await browser.saveScreenshot(path.join(SHOTS, `${name}.png`));
     },
+    /**
+     * Kills the app and its drivers at once, as a crash or power cut would, and keeps this run's
+     * folders for `launch({ reuse: app.dir })`; the caller removes them with that run's `close()`.
+     */
+    async crash() {
+      const gone = new Promise((r) => (driver.exitCode !== null || driver.signalCode !== null ? r() : driver.once("exit", r)));
+      killTree(driver, "SIGKILL");
+      await gone;
+      ended = true;
+    },
     async close() {
-      await browser.deleteSession().catch(() => {});
-      killTree(driver);
-      await new Promise((r) => (driver.exitCode !== null ? r() : driver.once("exit", r)));
+      if (!ended) {
+        await browser.deleteSession().catch(() => {});
+        killTree(driver);
+        await new Promise((r) => (driver.exitCode !== null || driver.signalCode !== null ? r() : driver.once("exit", r)));
+      }
       fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     },
   };
+  let ended = false;
 
   try {
     await waitReady(app);
+    if (!reuse) await closeIntro(app);
     await ensureGerman(app);
     await browser.setWindowSize(width, height).catch(() => {});
   } catch (e) {
@@ -313,6 +337,36 @@ async function waitReady(app) {
   );
   const hooked = await app.exec(() => window.__KITCHENPLANER_E2E__ === true);
   if (!hooked) throw new Error("the test hooks are off: KITCHENPLANER_APP must be a debug build (they are compiled out of release builds)");
+  // The first start loads the 3D view (three.js, shaders compiled in software under Xvfb), which
+  // can hold the page for seconds: wait until it is there and the page draws frames again, so
+  // the first clicks do not time out on a busy page.
+  await app.waitUntil(
+    () => app.exec(() => !document.querySelector(".pane-loading") && !!document.querySelector(".v3d-host canvas, .v3d-message")),
+    "the 3D view did not load",
+    60000,
+  );
+  await app.waitUntil(
+    async () => {
+      const ms = await app.browser.executeAsync((done) => {
+        const t0 = performance.now();
+        requestAnimationFrame(() => requestAnimationFrame(() => done(performance.now() - t0)));
+      });
+      return ms < 250;
+    },
+    "the page did not settle after the start",
+    60000,
+  );
+}
+
+/**
+ * Every run starts with fresh WebView storage, so the introduction opens as on a first start
+ * (components/Intro.tsx): proves that, then closes it so the tests start on the bare window.
+ * Tests of the introduction open it again from the view menu.
+ */
+async function closeIntro(app) {
+  await app.waitUntil(() => app.exec(() => !!document.querySelector(".intro[role=dialog]")), "the introduction did not open on the first start");
+  await app.exec(() => document.querySelector(".intro-head button").click());
+  await app.waitUntil(() => app.exec(() => !document.querySelector(".intro[role=dialog]")), "the introduction did not close");
 }
 
 /**

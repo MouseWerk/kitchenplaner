@@ -1,11 +1,13 @@
 // The floor plan as a Drawing: cut walls with their openings, the equipment with its plan
 // symbols, position numbers and dimensions. Screen, SVG and DXF all draw this list.
 
-import { add, bounds, clampOpening, dot, EPS, footprint, pointInPolygon, scale, sub, toPlan, walls, type Wall } from "./geometry";
+import { add, bounds, clampOpening, dot, EPS, footprint, pointInPolygon, scale, sub, toPlan, walls, type Box, type Wall } from "./geometry";
 import { bandPiece, clampPartitionOpening, HATCH_SHELF_DEPTH, partitionBand, partitionLength } from "./partitions";
+import { across, doorLeaves, doorSetup, frameOn, LEAF_THICKNESS, leafRect, SLIDE_GAP, SLIDE_OVERLAP, swingFrame, type OpeningFrame } from "./doors";
 import { positions } from "./project";
 import type { Item, Opening, Project, Room, Vec2 } from "./types";
 import { mm, TEXT, type DimShape, type Drawing, type Fill, type Pen, type Shape } from "../render/drawing";
+import { fitText, textWidth } from "../render/pdf";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "../render/svg";
 import { PlanSketch } from "../kinds/parts/plan";
 import { kindDef, kindOf, placementOf, type KindDef, type Placement } from "../kinds/registry";
@@ -14,8 +16,8 @@ export interface PlanOptions {
   showNames: boolean;
   showDims: boolean;
   /**
-   * Drawing units per paper millimetre the plan is laid out for (default 1:50). It only moves
-   * the name under the position number and the dimension rows, which are spaced in paper mm.
+   * Drawing units per paper millimetre the plan is laid out for (default 1:50). It places the
+   * position numbers and names and spaces the dimension rows, which are sized in paper mm.
    */
   paperScale?: number;
 }
@@ -26,8 +28,6 @@ const DEFAULT_PAPER_SCALE = 50;
 export const DIM_GAP = 6;
 /** Distance between the wall dimension row and the overall dimension row (paper mm). */
 const DIM_ROW = 7;
-/** Gap between the position number and the name below it (paper mm). */
-const NAME_GAP = 2;
 
 /**
  * The order the plan draws items in, later ones on top: the floor units, then what lies in the
@@ -45,9 +45,10 @@ const PLAN_ORDER: readonly Placement[] = ["floor", "flat", "tableTop", "overhead
  * ones (drains) without fill, table-top units, overhead units (hoods, wall shelves) dashed on
  * top. Every item shape carries its `itemId`.
  *
- * Doors are hinged at the start of their opening (the end nearer the wall's or partition's
- * start) and drawn open at 90 degrees: into the room in an outer wall, to the left of a→b in a
- * partition.
+ * Doors are drawn open at 90 degrees from their hinge jamb (`hinge`), on the side they open to
+ * (`swing`: into the room or to the left of a partition's a→b, or the other side), each of two
+ * leaves with its own arc. A sliding door shows its closed leaf on the face it runs on, its
+ * parked position dashed and an arrow the way it opens (`doors.ts`).
  */
 export function planDrawing(project: Project, opts: PlanOptions): Drawing {
   const ps = opts.paperScale ?? DEFAULT_PAPER_SCALE;
@@ -68,11 +69,10 @@ export function planDrawing(project: Project, opts: PlanOptions): Drawing {
     const leader = leaderLine(it, centres[i], TEXT.normal * CIRCLE_RADIUS * ps);
     if (leader) shapes.push({ t: "poly", pen: "detail", itemId: it.id, pts: leader, closed: false });
     shapes.push({ t: "text", pen: "item", itemId: it.id, p, text: String(pos.get(it.id) ?? ""), size: TEXT.normal, anchor: "middle", circled: true });
-    if (opts.showNames && it.name) {
-      const below = { x: p.x, y: p.y + (NAME_GAP + TEXT.normal + TEXT.small) * ps };
-      shapes.push({ t: "text", pen: "item", itemId: it.id, p: below, text: it.name, size: TEXT.small, anchor: "middle" });
-    }
   });
+  if (opts.showNames) {
+    for (const n of nameLabels(ordered, centres, ps, room)) shapes.push({ t: "text", pen: "item", itemId: n.itemId, p: n.p, text: n.text, size: TEXT.small, anchor: "middle" });
+  }
 
   if (opts.showDims) drawDims(project, ps, shapes);
   return { shapes };
@@ -171,6 +171,119 @@ export function leaderLine(it: Item, c: Vec2, r: number): Vec2[] | null {
   }
   if (d <= r + EPS) return null;
   return [add(c, scale(sub(near, c), r / d)), near];
+}
+
+// ---- Names ----
+
+/** Least gap between a name and a number circle, another name or its unit's outline (paper mm). */
+const NAME_CLEAR = 0.5;
+/** A shortened name keeps at least this many characters before its ellipsis, or is left out. */
+const NAME_MIN_CHARS = 3;
+/** The box of a line of text around its baseline, in font sizes (Arial: ascender, descender). */
+export const TEXT_ASCENT = 0.75;
+export const TEXT_DESCENT = 0.22;
+/** Rows of places a name tries inside its unit, at most. */
+const NAME_ROWS = 24;
+
+export interface NameLabel {
+  itemId: string;
+  /** Middle of the baseline (plan mm). */
+  p: Vec2;
+  /** The name, shortened with an ellipsis where it is wider than its unit. */
+  text: string;
+  box: Box;
+}
+
+/** The box (plan mm) of a name of width `w` whose baseline middle is at `p`. */
+function nameBox(p: Vec2, w: number, h: number): Box {
+  return { minX: p.x - w / 2, maxX: p.x + w / 2, minY: p.y - TEXT_ASCENT * h, maxY: p.y + TEXT_DESCENT * h };
+}
+
+const boxesMeet = (a: Box, b: Box, gap: number) => a.minX < b.maxX + gap && b.minX < a.maxX + gap && a.minY < b.maxY + gap && b.minY < a.maxY + gap;
+
+function boxMeetsCircle(b: Box, c: Vec2, r: number): boolean {
+  const dx = Math.max(b.minX - c.x, 0, c.x - b.maxX);
+  const dy = Math.max(b.minY - c.y, 0, c.y - b.maxY);
+  return Math.hypot(dx, dy) < r;
+}
+
+const corners = (b: Box): Vec2[] => [
+  { x: b.minX, y: b.minY },
+  { x: b.maxX, y: b.minY },
+  { x: b.maxX, y: b.maxY },
+  { x: b.minX, y: b.maxY },
+];
+
+/**
+ * Where the item names go, placed after the position numbers (`centres`, in the order of `items`)
+ * and laid out for the paper scale `ps` like them. A name is as wide as its text at the small
+ * text size, shortened with an ellipsis to its unit's width. It takes the free place nearest its
+ * number, first where it stays inside its unit (under the number, above it, then rows across the
+ * unit), else right below or above the unit inside the room and clear of other units. A place is
+ * free when the name keeps `NAME_CLEAR` from every number circle and every name placed before.
+ * A name with no free place, or one that would keep fewer than `NAME_MIN_CHARS` characters, is
+ * left out: a missing name reads better than two on top of each other. Deterministic.
+ */
+export function nameLabels(items: readonly Item[], centres: readonly Vec2[], ps: number, room?: Pick<Room, "points">): NameLabel[] {
+  const r = TEXT.normal * CIRCLE_RADIUS * ps;
+  const h = TEXT.small * ps;
+  const gap = NAME_CLEAR * ps;
+  const boxes = items.map((it) => bounds(footprint(it)));
+  const out: NameLabel[] = [];
+  items.forEach((it, i) => {
+    const name = it.name?.trim();
+    if (!name) return;
+    const fp = footprint(it);
+    const own = boxes[i];
+    const text = fitText(name, (own.maxX - own.minX) / ps - 2 * NAME_CLEAR, TEXT.small);
+    const kept = text.endsWith("…") && !name.endsWith("…") ? [...text].length - 1 : [...text].length;
+    if (!text || (text !== name && kept < NAME_MIN_CHARS)) return;
+    const w = textWidth(text, TEXT.small) * ps;
+    const c = centres[i];
+    const asc = TEXT_ASCENT * h;
+    const desc = TEXT_DESCENT * h;
+
+    const free = (b: Box) => centres.every((o) => !boxMeetsCircle(b, o, r + gap)) && out.every((n) => !boxesMeet(b, n.box, gap));
+    const inside = (b: Box) => corners({ minX: b.minX - gap, minY: b.minY - gap, maxX: b.maxX + gap, maxY: b.maxY + gap }).every((q) => pointInPolygon(q, fp));
+    const clearOutside = (b: Box) =>
+      (!room || corners(b).every((q) => pointInPolygon(q, room.points))) && boxes.every((o, j) => j === i || !boxesMeet(b, o, 0)) && !boxesMeet(b, own, 0);
+
+    // Inside the unit: under and above the number, then rows across the unit, nearest first.
+    const within: Vec2[] = [
+      { x: c.x, y: c.y + r + gap + asc },
+      { x: c.x, y: c.y - r - gap - desc },
+    ];
+    const y0 = own.minY + gap + asc;
+    const y1 = own.maxY - gap - desc;
+    const rows = Math.min(NAME_ROWS, Math.max(1, Math.floor((y1 - y0) / ((asc + desc) / 2)) + 1));
+    for (let k = 0; k < rows; k++) {
+      const y = rows === 1 ? (y0 + y1) / 2 : y0 + ((y1 - y0) * k) / (rows - 1);
+      for (const x of [c.x, (own.minX + own.maxX) / 2, own.minX + gap + w / 2, own.maxX - gap - w / 2]) within.push({ x, y });
+    }
+    const dist = (p: Vec2) => Math.hypot(p.x - c.x, p.y - asc / 2 - c.y);
+    const nearest = (pts: Vec2[]) => pts.map((p, k) => ({ p, k, d: dist(p) })).sort((a, b) => a.d - b.d || a.k - b.k).map((x) => x.p);
+    // Outside: right below or above the unit, centred on it.
+    const cx = (own.minX + own.maxX) / 2;
+    const outside = nearest([
+      { x: cx, y: own.maxY + gap + asc },
+      { x: cx, y: own.minY - gap - desc },
+    ]);
+    for (const p of nearest(within)) {
+      const b = nameBox(p, w, h);
+      if (inside(b) && free(b)) {
+        out.push({ itemId: it.id, p, text, box: b });
+        return;
+      }
+    }
+    for (const p of outside) {
+      const b = nameBox(p, w, h);
+      if (clearOutside(b) && free(b)) {
+        out.push({ itemId: it.id, p, text, box: b });
+        return;
+      }
+    }
+  });
+  return out;
 }
 
 // ---- Walls and openings ----
@@ -274,45 +387,21 @@ function drawPartitions(project: Project, shapes: Shape[]) {
   }
 }
 
-/**
- * Where an opening lies in its wall band: `start` and `end` on the reference line (the inner face
- * of an outer wall, the centre line of a partition), the band reaching from `near` to `far`
- * along `normal` (mm). `normal` points to the side a door swings to, `near` is that face.
- */
-interface OpeningFrame {
-  start: Vec2;
-  end: Vec2;
-  dir: Vec2;
-  normal: Vec2;
-  near: number;
-  far: number;
-}
-
-function frameOn(a: Vec2, dir: Vec2, normal: Vec2, o: Opening, near: number, far: number): OpeningFrame {
-  return { start: add(a, scale(dir, o.offset - o.width / 2)), end: add(a, scale(dir, o.offset + o.width / 2)), dir, normal, near, far };
-}
-
 /** Angle of a direction in degrees, clockwise on screen from +x (the arc convention). */
 function angleOf(v: Vec2): number {
   return (Math.atan2(v.y, v.x) * 180) / Math.PI;
 }
 
 function drawOpening(f: OpeningFrame, o: Opening, shapes: Shape[]) {
-  const { start, end, dir, normal, near, far } = f;
+  const { start, end, normal, near, far } = f;
   const at = (p: Vec2, k: number) => add(p, scale(normal, k));
   const line = (a: Vec2, b: Vec2, pen: Pen): Shape => ({ t: "poly", pen, pts: [a, b], closed: false });
   const reveals = () => shapes.push(line(at(start, near), at(start, far), "opening"), line(at(end, near), at(end, far), "opening"));
 
   if (o.kind === "door") {
-    // Hinge at the start side on the swing-side face, the leaf drawn open at 90 degrees.
-    const hinge = at(start, near);
-    shapes.push(line(hinge, at(start, near + o.width), "opening"));
-    const aDir = angleOf(dir);
-    const aIn = angleOf(normal);
-    // The arc runs clockwise from a0 to a1; start from whichever of both directions comes first.
-    const cwFromDir = (((aIn - aDir) % 360) + 360) % 360;
-    const a0 = Math.abs(cwFromDir - 90) < 1 ? aDir : aIn;
-    shapes.push({ t: "arc", pen: "swing", c: hinge, r: o.width, a0, a1: a0 + 90 });
+    drawSwingDoor(swingFrame(f, doorSetup(o).swing), o, shapes);
+  } else if (o.kind === "slidingDoor") {
+    drawSlidingDoor(swingFrame(f, doorSetup(o).swing), o, shapes);
   } else if (o.kind === "window") {
     // Two panes inside the wall band, at a third and two thirds of the thickness.
     for (const k of [1 / 3, 2 / 3]) {
@@ -333,6 +422,50 @@ function drawOpening(f: OpeningFrame, o: Opening, shapes: Shape[]) {
     }
   } else {
     shapes.push(line(at(start, near), at(end, near), "hidden"), line(at(start, far), at(end, far), "hidden"));
+  }
+}
+
+/**
+ * A hinged door drawn open at 90 degrees, each leaf from its hinge on the swing side face with
+ * its swing arc back to the closed position.
+ */
+function drawSwingDoor(f: OpeningFrame, o: Opening, shapes: Shape[]) {
+  for (const leaf of doorLeaves(f, o)) {
+    const hinge = across(f, leaf.hinge, f.near);
+    shapes.push({ t: "poly", pen: "opening", pts: [hinge, across(f, hinge, leaf.width)], closed: false });
+    const aClosed = angleOf(leaf.along);
+    const aOpen = angleOf(f.normal);
+    // The arc runs clockwise from a0 to a1; start from whichever of both directions comes first.
+    const cw = (((aOpen - aClosed) % 360) + 360) % 360;
+    const a0 = Math.abs(cw - 90) < 1 ? aClosed : aOpen;
+    shapes.push({ t: "arc", pen: "swing", c: hinge, r: leaf.width, a0, a1: a0 + 90 });
+  }
+}
+
+/** Length of the arrow head showing a sliding door's direction (mm of the kitchen). */
+const SLIDE_ARROW_HEAD = 120;
+
+/**
+ * A sliding door: the closed leaf parallel to the wall on the face it runs on, overlapping the
+ * opening, its open position (beside the opening, where it parks) dashed, and an arrow the way
+ * it slides open.
+ */
+function drawSlidingDoor(f: OpeningFrame, o: Opening, shapes: Shape[]) {
+  const k0 = f.near + SLIDE_GAP;
+  const k1 = k0 + LEAF_THICKNESS;
+  for (const leaf of doorLeaves(f, o)) {
+    // In the leaf's frame `along` runs from the parking side across the opening.
+    // Two leaves meet in the middle; a single one overlaps the far jamb too.
+    const s1 = leaf.width + (doorSetup(o).leaves === 2 ? 0 : SLIDE_OVERLAP);
+    shapes.push({ t: "poly", pen: "opening", pts: leafRect(f, leaf, -SLIDE_OVERLAP, s1, k0, k1), closed: true });
+    shapes.push({ t: "poly", pen: "hidden", pts: leafRect(f, leaf, -SLIDE_OVERLAP - leaf.width, s1 - leaf.width, k0, k1), closed: true });
+    const k = k1 + LEAF_THICKNESS;
+    const from = across(f, add(leaf.hinge, scale(leaf.along, leaf.width * 0.7)), k);
+    const to = across(f, add(leaf.hinge, scale(leaf.along, leaf.width * 0.15)), k);
+    const head = Math.min(SLIDE_ARROW_HEAD, leaf.width * 0.2);
+    const back = add(to, scale(leaf.along, head));
+    shapes.push({ t: "poly", pen: "swing", pts: [from, to], closed: false });
+    shapes.push({ t: "poly", pen: "swing", pts: [across(f, back, head / 2), to, across(f, back, -head / 2)], closed: false });
   }
 }
 

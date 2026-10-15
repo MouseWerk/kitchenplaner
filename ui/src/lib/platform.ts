@@ -35,6 +35,7 @@ export interface FileFilter {
 }
 
 export const PROJECT_FILTER: FileFilter = { name: "Kitchenplaner", extensions: ["kplan"] };
+export const PDF_FILTER: FileFilter = { name: "PDF", extensions: ["pdf"] };
 
 /** An opened file: its path (null in the browser) and text. */
 export interface OpenedFile {
@@ -77,7 +78,7 @@ export async function saveText(path: string | null, suggestedName: string, filte
   return suggestedName;
 }
 
-/** Writes binary data (PNG) after a save dialog; returns the path, or null when cancelled. */
+/** Writes binary data (PNG, PDF) after a save dialog; returns the path, or null when cancelled. */
 export async function saveBinary(suggestedName: string, filter: FileFilter, data: Uint8Array): Promise<string | null> {
   if (isTauri()) {
     const target = await askSavePath(suggestedName, filter);
@@ -146,9 +147,9 @@ export function safeFileName(name: string): string {
   return `${stem}_${cleaned.slice(stem.length)}`;
 }
 
-function mimeOf(filter: FileFilter): string {
+export function mimeOf(filter: FileFilter): string {
   const ext = filter.extensions[0];
-  return ext === "svg" ? "image/svg+xml" : ext === "png" ? "image/png" : ext === "csv" ? "text/csv" : ext === "dxf" ? "application/dxf" : "application/json";
+  return ext === "svg" ? "image/svg+xml" : ext === "png" ? "image/png" : ext === "pdf" ? "application/pdf" : ext === "csv" ? "text/csv" : ext === "dxf" ? "application/dxf" : "application/json";
 }
 
 function toBase64(data: Uint8Array): string {

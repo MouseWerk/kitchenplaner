@@ -1,0 +1,122 @@
+---
+import Base from '../../layouts/Base.astro';
+import Shot from '../Shot.astro';
+import { dicts, fill, type Lang } from '../../i18n';
+import { getDownloads } from '../../data/release.mjs';
+import { ROUTES, REPO_URL, ISSUES_URL, LICENSE_URL, LATEST_URL, SITE_NAME, absolute } from '../../data/site.mjs';
+import type { ShotName } from '../../data/shots';
+
+interface Props { lang: Lang }
+const { lang } = Astro.props;
+const t = dicts[lang];
+const h = t.home;
+const d = await getDownloads();
+
+const FEATURE_SHOTS: ShotName[] = ['02-grundriss', '08-ansichten', '04-3d-uebersicht', '10-katalog-vorschau', '11-operator-verschieben', '12-raum-wand'];
+const FEATURE_SIZES = '(min-width: 1244px) 680px, (min-width: 960px) 56vw, calc(100vw - 32px)';
+
+const app = {
+  '@type': 'SoftwareApplication',
+  name: SITE_NAME,
+  description: t.meta.home.description,
+  url: absolute(ROUTES.home[lang]),
+  applicationCategory: 'DesignApplication',
+  operatingSystem: 'Windows 10, Windows 11, macOS 11+, Linux',
+  inLanguage: ['de', 'en'],
+  isAccessibleForFree: true,
+  license: LICENSE_URL,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+  downloadUrl: absolute(ROUTES.download[lang]),
+  codeRepository: REPO_URL,
+  image: absolute('/og.jpg'),
+  author: { '@type': 'Person', name: 'Maurice Kleindienst' },
+  ...(d.latest ? { softwareVersion: d.latest.version } : {}),
+};
+---
+<Base lang={lang} page="home" title={t.meta.home.title} description={t.meta.home.description} schema={[app]}>
+  <section class="hero" aria-labelledby="titel">
+    <div class="wrap">
+      <div class="hero-text">
+        <p class="eyebrow">{h.eyebrow}</p>
+        <h1 id="titel">{h.title}</h1>
+        <p class="lead">{h.lead}</p>
+        <div class="buttons">
+          <a class="btn btn-primary" href={ROUTES.download[lang]}>{h.download}</a>
+          <a class="btn btn-secondary" href={ROUTES.example[lang]}>{h.example}</a>
+        </div>
+        <ul class="facts">
+          {d.latest
+            ? <li><a href={ROUTES.changelog[lang]}>{fill(h.version, { v: d.latest.version })}</a></li>
+            : <li><a href={LATEST_URL} rel="noopener">GitHub</a></li>}
+          {h.facts.map((f) => <li>{f}</li>)}
+        </ul>
+      </div>
+      <Shot name="01-alle-ansichten" light="14-hell-alle-ansichten" alt={h.heroAlt} sizes="(min-width: 1244px) 1180px, calc(100vw - 32px)" eager />
+    </div>
+  </section>
+
+  <section class="section section-alt" id="fuer-wen" aria-labelledby="fuer-wen-titel">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="fuer-wen-titel">{h.audience.title}</h2>
+      </div>
+      <ul class="cards">
+        {h.audience.items.map((a) => (
+          <li class="card">
+            <h3>{a.title}</h3>
+            <p>{a.text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="funktionen" aria-labelledby="funktionen-titel">
+    <div class="wrap">
+      <div class="section-head">
+        <h2 id="funktionen-titel">{h.features.title}</h2>
+        <p class="lead">{h.features.intro}</p>
+      </div>
+      <div class="features">
+        {h.features.items.map((f, i) => (
+          <div class="feature">
+            <div class="feature-text">
+              <h3><span class="pos" aria-hidden="true">{i + 1}</span>{f.title}</h3>
+              <p>{f.text}</p>
+            </div>
+            <Shot name={FEATURE_SHOTS[i]} light={FEATURE_SHOTS[i] === '04-3d-uebersicht' ? '15-hell-3d' : undefined} alt={f.alt} sizes={FEATURE_SIZES} />
+          </div>
+        ))}
+      </div>
+      <h3 class="more-title">{h.features.moreTitle}</h3>
+      <ul class="more">
+        {h.features.more.map((m) => (
+          <li>
+            <h4>{m.title}</h4>
+            <p>{m.text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section section-alt" id="open-source" aria-labelledby="open-source-titel">
+    <div class="wrap split">
+      <div>
+        <h2 id="open-source-titel">{h.open.title}</h2>
+        <p class="lead">{h.open.text}</p>
+        <div class="buttons">
+          <a class="btn btn-secondary" href={REPO_URL} rel="noopener">{h.open.source}</a>
+          <a class="btn btn-secondary" href={ISSUES_URL} rel="noopener">{h.open.issues}</a>
+        </div>
+      </div>
+      <div>
+        <h2>{h.cta.title}</h2>
+        <p class="lead">{h.cta.text}</p>
+        <div class="buttons">
+          <a class="btn btn-primary" href={ROUTES.download[lang]}>{h.cta.button}</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>

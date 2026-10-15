@@ -4,7 +4,8 @@ Kitchenplaner releases itself: after CI passed for a push to `main`, `.github/wo
 the app's version when its release notes `docs/releases/v<version>.md` exist and that version has no tag yet. It
 calls `.github/workflows/release.yml` (a reusable workflow) with the version and the commit CI tested; the release
 workflow tags that commit, builds on three systems, uploads everything to a draft release, checks the files and
-then publishes the release. No secrets are needed: the workflows use the job token only.
+then publishes the release. The workflows use the job token; the only secrets are the updater's signing key and its
+password (see „Updates of the installed app“), and a release without them still succeeds.
 
 ## One version
 
@@ -55,6 +56,36 @@ says so. The choice is `scripts/release-pick.mjs`, tested by `scripts/release-pi
    every file, then compares the release's files with the expected list, names and sizes. Only when they match
    is the draft published (and marked as the latest release). A missing or extra file leaves the draft unpublished
    and fails the run.
+
+## Updates of the installed app
+
+The app checks `https://github.com/MouseWerk/kitchenplaner/releases/latest/download/latest.json` at start and every
+four hours (setting „Automatisch nach Updates suchen“ in „Darstellung“, on by default; release builds only, never
+debug or end-to-end builds). A newer version shows a notice; „Jetzt aktualisieren“ saves the project first if it
+has changes, downloads with progress, checks the signature against `plugins.updater.pubkey` in
+`src-tauri/tauri.conf.json` and restarts: Windows runs the setup in passive mode, macOS replaces the app from the
+`.app.tar.gz`, Linux replaces the AppImage or installs the signed `.deb` (pkexec).
+
+Signing, in the release:
+
+- With the repository secrets `TAURI_SIGNING_PRIVATE_KEY` (the content of the private key file) and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, the builds switch on `bundle.createUpdaterArtifacts` and sign the setup,
+  the macOS archive, the AppImage and, when the bundler signs it, the .deb. The release then also holds
+  `<file>.sig` for each and `latest.json` (`scripts/update-feed.mjs make`: `windows-x86_64`, `darwin-aarch64` and
+  `darwin-x86_64` (the universal archive), `linux-x86_64` (AppImage), `linux-x86_64-deb` when signed). After the
+  upload the files are downloaded again from the draft and `scripts/update-feed.mjs verify` checks that every URL
+  names a file of this release that is on it and that every signature verifies against the public key in
+  tauri.conf.json; only then is the release published. Tests: `scripts/update-feed.test.mjs`.
+- Without the secrets (a fork) everything is built and published without `.sig` files and `latest.json`, with a
+  warning and a line in the job summary: installed apps do not see that release.
+- `createUpdaterArtifacts` stays `false` in tauri.conf.json, so CI and local builds need no key.
+
+The key pair was made with `npx tauri signer generate`; the private key and its password are kept outside the
+repository by the owner. A lost private key means a new key pair: the new public key goes into tauri.conf.json, and
+apps of older versions cannot verify updates any more (they have to install once by hand). Never replace the public
+key without that reason.
+
+Release 0.1.0 has no updater: the first update in the app is from 0.2.0 to the next version.
 
 ## Never twice
 

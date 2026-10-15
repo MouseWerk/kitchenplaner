@@ -57,7 +57,7 @@ artifact `e2e-screenshots`. A few tests also write review shots there (start scr
 Native dialogs cannot be driven by WebDriver, and every run needs its own data. Debug builds have
 three hooks, all off unless the variable is set and all compiled out of release builds:
 
-- `KITCHENPLANER_DATA_DIR`: the app data folder (recent files) for this run
+- `KITCHENPLANER_DATA_DIR`: the app data folder (recent files, autosave backups) for this run
   (`src-tauri/src/lib.rs`, `data_dir`).
 - `KITCHENPLANER_E2E=1`: the shell injects a script (`e2e_hooks` in `src-tauri/src/lib.rs`) that
   sets `window.__KITCHENPLANER_E2E__` and records console errors and warnings in
@@ -69,6 +69,12 @@ three hooks, all off unless the variable is set and all compiled out of release 
 - WebView storage (settings such as the language) is isolated per run through
   `WEBVIEW2_USER_DATA_FOLDER` (Windows) and the XDG folders (Linux). The tests pin the language to
   German.
+- Every fresh run starts as a first start: the harness checks that the introduction opens and
+  closes it. Before the first click it waits until the 3D view has loaded and the page draws
+  frames again, as the first start can hold the page for seconds (three.js, software rendering).
+- A restart: `app.crash()` kills the app and its drivers at once (SIGKILL, like a crash) and keeps
+  the run's folders; `launch({ reuse: app.dir })` starts the app again on them (data, WebView
+  storage, files), with the introduction already seen and German already set.
 
 ## Writing tests
 
@@ -99,6 +105,10 @@ three hooks, all off unless the variable is set and all compiled out of release 
 | 08-design | no horizontal overflow at 1000/1440/1920 px in every layout; neutral `:focus-visible` ring |
 | 09-operators | G + X + typed 1000 moves exactly, Escape cancels, one undo step; R + typed 90; frame selection left to right (inside) vs right to left (touching) |
 | 10-room | Raum mode, partition tool with a typed 3000, „+ Durchreiche“ in it; the saved file holds both |
+| 11-doors | H and Shift+H flip the selected door's hinge and swing; the inspector and the saved file follow |
+| 11-editor-tools | the introduction from the view menu and the example kitchen; M measures; the context menu aligns as one undo step |
+| 12-autosave | an edit is backed up, the app is killed, the next start offers it; „Wiederherstellen“ brings it back unsaved |
+| 13-plan-set | „Plansatz als PDF…“: `%PDF-`, the page count the dialog shows, the project name in the title block |
 
 Not covered yet: the outline (wall) tool (typed lengths, 45°/90° snapping, closing on the start
 point), selecting and moving walls and corners in Raum mode (G X 1000, Delete refused below three

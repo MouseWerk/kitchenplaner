@@ -73,6 +73,8 @@ jobs:
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml
+    # The updater's signing key (release.yml): a called workflow sees no secrets otherwise.
+    secrets: inherit
     with:
       version: ${{ needs.pick.outputs.version }}
       ref: ${{ needs.pick.outputs.sha }}

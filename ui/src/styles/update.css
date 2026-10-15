@@ -1,0 +1,56 @@
+/* The notice of a new version (components/UpdateNotice.tsx): a card in the messages' column above
+   the status bar, in the look of a message, with its buttons and a download bar. */
+
+.update-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: 300px;
+  max-width: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background-color: var(--bg-overlay);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  pointer-events: auto;
+  animation: toast-in var(--dur) var(--ease-out);
+}
+
+.update-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-weight: var(--fw-semibold);
+}
+
+.update-head > svg {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.update-text {
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.update-actions {
+  justify-content: flex-end;
+}
+
+.update-bar {
+  height: var(--sp-1);
+  border-radius: var(--r-sm);
+  background-color: var(--bg-active);
+  overflow: hidden;
+}
+
+.update-bar-fill {
+  height: 100%;
+  background-color: var(--accent);
+  transition: width var(--dur) var(--ease-out);
+}

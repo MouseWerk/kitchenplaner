@@ -45,7 +45,7 @@ function cases(): Case[] {
     const def = kindDef(entry.kind);
     for (const width of entry.widths ?? [entry.width]) {
       for (const energy of entry.energy ?? [undefined]) {
-        const base = { ...itemFromCatalog(entry, 0, 0), id: `it-${entry.id}` };
+        const base = { ...itemFromCatalog(entry, 0, 0), id: `it-${entry.id}`, pos: 1 };
         const item = { ...base, ...variantPatch(base, entry, { width, energy }) };
         out.push({ entry, def, item, energy, label: `${entry.id} ${width}${energy ? ` ${energy}` : ""}` });
       }

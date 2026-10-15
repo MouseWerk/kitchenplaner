@@ -1,0 +1,170 @@
+/* Editor tools: the measure tool over the plan (views/MeasureLayer.tsx), the plan's context menu
+   (components/ContextMenu.tsx), aligning in the inspector (components/AlignTools.tsx) and the
+   introduction on the first start (components/Intro.tsx). Neutral like the other editing aids. */
+
+.measure-layer {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.measure-point {
+  fill: var(--draw-handle-fill);
+  stroke: var(--draw-handle);
+  stroke-width: 1.5px;
+}
+
+/* The toolbar's tool buttons that stay on (the ruler): a quiet tint while on. */
+.tb-icon[aria-pressed="true"] {
+  background: var(--bg-current);
+  color: var(--text);
+}
+
+/* ---- Context menu: the toolbar menu's look, placed at the pointer. */
+
+.context-menu {
+  min-width: 200px;
+}
+
+.menu-item.is-danger {
+  color: var(--danger);
+}
+
+.menu-hint svg {
+  display: block;
+  color: var(--text-faint);
+}
+
+/* ---- Align and distribute */
+
+.align-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.align-row .icon-btn:disabled {
+  color: var(--text-faint);
+  opacity: 0.55;
+}
+
+.align-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+}
+
+/* ---- Introduction */
+
+.intro-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+  background: var(--scrim);
+  animation: intro-fade var(--dur) var(--ease-out);
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: min(480px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--sp-5) var(--sp-6) var(--sp-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-pop);
+  color: var(--text);
+}
+
+.intro-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.intro-head .eyebrow {
+  margin: 0 0 var(--sp-1);
+}
+
+.intro-title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+}
+
+.intro-text {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-lg);
+  line-height: 1.5;
+}
+
+.intro-keys {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.intro-key {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.intro-key dt,
+.intro-key dd {
+  margin: 0;
+}
+
+.intro-key dd {
+  color: var(--text-muted);
+}
+
+.intro-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.intro-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+}
+
+.intro-dot.is-current {
+  background: var(--text-muted);
+}
+
+.intro-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.intro-spacer {
+  flex: 1;
+}
+
+@keyframes intro-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-scrim {
+    animation: none;
+  }
+}

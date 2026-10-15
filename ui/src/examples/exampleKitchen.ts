@@ -12,7 +12,7 @@
 
 import { catalogEntry, type Energy } from "../kinds/registry";
 import { lRoom } from "../model/geometry";
-import { FORMAT_VERSION, itemFromCatalog, variantPatch } from "../model/project";
+import { DEFAULT_SETTINGS, FORMAT_VERSION, itemFromCatalog, variantPatch } from "../model/project";
 import type { Item, Opening, Partition, Project } from "../model/types";
 import { t, type Lang } from "../lib/i18n";
 
@@ -200,6 +200,7 @@ function specItem(spec: Spec, index: number, lang: Lang): Item {
   return {
     ...item,
     id: `ex-${String(index + 1).padStart(2, "0")}`,
+    pos: index + 1,
     name: t(entry.name, undefined, lang),
     x: spec.x + ex / 2,
     y: spec.y + ey / 2,
@@ -212,7 +213,7 @@ export function exampleKitchen(lang: Lang): Project {
   return {
     format: "kitchenplaner",
     version: FORMAT_VERSION,
-    info: { ...INFO[lang], author: "Kitchenplaner", date: DATE },
+    info: { ...INFO[lang], author: "Kitchenplaner", date: DATE, drawingNo: "K-101", revision: "A" },
     room: {
       points: lRoom(EXAMPLE_WIDTH, EXAMPLE_DEPTH, DINING_CUT_WIDTH, DINING_CUT_DEPTH),
       height: ROOM_HEIGHT,
@@ -221,5 +222,6 @@ export function exampleKitchen(lang: Lang): Project {
       partitions: PARTITIONS.map((p) => ({ ...p, a: { ...p.a }, b: { ...p.b } })),
     },
     items: SPECS.map((s, i) => specItem(s, i, lang)),
+    settings: { ...DEFAULT_SETTINGS },
   };
 }

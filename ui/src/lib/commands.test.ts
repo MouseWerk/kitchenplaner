@@ -11,7 +11,9 @@ import {
   cancelTransform,
   combineSelection,
   confirmTransform,
+  duplicateSelected,
   registerOperator,
+  renumberItems,
   rotateItemAround,
   selectionCentre,
 } from "./commands";
@@ -201,5 +203,51 @@ describe("transform sessions and changes from elsewhere", () => {
     cancelActiveOperator();
     done();
     expect(cancelled).toBe(1);
+  });
+});
+
+describe("position numbers when adding, duplicating and deleting", () => {
+  const nums = () => st().project.items.map((i) => i.pos);
+
+  it("gives placed items the next numbers and never renumbers after a delete", () => {
+    const [a, b] = twoItems();
+    expect(nums()).toEqual([1, 2]);
+    st().select({ items: [a.id] });
+    st().removeSelected();
+    expect(st().project.items.map((i) => [i.id, i.pos])).toEqual([[b.id, 2]]);
+    // A new item does not take the freed number 1, nor repeat 2.
+    st().addItems([itemFromCatalog(CATALOG[0], 5000, 1000)]);
+    expect(nums()).toEqual([2, 3]);
+  });
+
+  it("gives copies new numbers: Ctrl+D and Shift+D", () => {
+    const [a] = twoItems();
+    st().select({ items: [a.id] });
+    duplicateSelected();
+    expect(nums()).toEqual([1, 2, 3]);
+    st().select({ items: [a.id] });
+    const s = beginDuplicate()!;
+    confirmTransform(s);
+    expect(nums()).toEqual([1, 2, 3, 4]);
+  });
+
+  it("renumbers 1 to n as one undo step, and leaves no step when nothing changes", () => {
+    st().addItems([testItem("east", "table", 7000, 3000), testItem("west", "table", 1000, 3000), testItem("north", "table", 4000, 500)]);
+    st().select({ items: ["east"] });
+    st().removeSelected();
+    st().addItems([testItem("south", "table", 4000, 5500)]);
+    expect(nums()).toEqual([2, 3, 4]);
+    const steps = st().past.length;
+    renumberItems();
+    expect(st().project.items.map((i) => [i.id, i.pos])).toEqual([
+      ["west", 3],
+      ["north", 1],
+      ["south", 2],
+    ]);
+    expect(st().past.length).toBe(steps + 1);
+    renumberItems();
+    expect(st().past.length).toBe(steps + 1);
+    st().undo();
+    expect(nums()).toEqual([2, 3, 4]);
   });
 });

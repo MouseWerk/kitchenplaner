@@ -1,0 +1,39 @@
+/* The plan set dialog („Plansatz als PDF…“): the shared dialog, fields and checks of app.css,
+   plus the sheet list and the fit messages. */
+
+.plan-set .grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.plan-set-sheets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.plan-set-sheets > legend {
+  margin-bottom: var(--sp-1);
+  padding: 0;
+}
+
+.plan-set-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-height: var(--ctl-sm);
+}
+
+.plan-set-status p {
+  margin: 0;
+}
+
+.plan-set-warning {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1.45;
+  color: var(--text);
+}

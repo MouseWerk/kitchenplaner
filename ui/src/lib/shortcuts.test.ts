@@ -82,7 +82,7 @@ describe("mode key handler", () => {
 
   it("selects all with A and nothing with Alt+A in the arrange mode", () => {
     const st = useStore.getState();
-    st.load({ ...st.project, items: [{ ...itemStub("i1") }, { ...itemStub("i2") }] }, null);
+    st.load({ ...st.project, items: [{ ...itemStub("i1", 1) }, { ...itemStub("i2", 2) }] }, null);
     press("a");
     expect(useStore.getState().selection.items).toEqual(["i1", "i2"]);
     press("a", { altKey: true, code: "KeyA" });
@@ -93,6 +93,6 @@ describe("mode key handler", () => {
   });
 });
 
-function itemStub(id: string) {
-  return { id, catalogId: "x", name: id, x: 0, y: 0, rotation: 0, width: 600, depth: 600, height: 900, elevation: 0, connections: {} };
+function itemStub(id: string, pos = 1) {
+  return { id, pos, catalogId: "x", name: id, x: 0, y: 0, rotation: 0, width: 600, depth: 600, height: 900, elevation: 0, connections: {} };
 }

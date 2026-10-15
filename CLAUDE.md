@@ -16,8 +16,11 @@ CLAUDE.md first); this file wins where it is more specific.
 - No pull requests unless asked. No force push, branch deletion or history rewrite without an
   explicit request.
 - No paid code signing. macOS builds are ad-hoc signed (`signingIdentity: "-"`), Windows builds are
-  unsigned. Open, not decided by the owner yet: Microsoft Store/winget builds and an in-app updater
-  (Arcalo has both); ask before adding either.
+  unsigned. The app updates itself (Tauri updater, signed update feed on GitHub Releases;
+  decided 2026-10-15). Open, not decided yet: Microsoft Store/winget builds; ask before adding.
+- The repository is public: MouseWerk/kitchenplaner. The website kitchenplaner.mousewerk.de lives
+  in `website/` (decided 2026-10-15).
+- Position numbers („Pos.“) are stable: deleting or reordering items never renumbers the others.
 - UI language German with "du" (default) and English; „Computer“, not „Rechner“; ellipsis directly
   after the word („Speichern…“). Glossary: `docs/i18n.md`.
 - Editing works in modes like Blender (2026-10-12): Tab switches „Einrichten“ (arrange equipment,
@@ -64,6 +67,7 @@ npm --prefix ui test
 npm --prefix ui run build
 node scripts/version.mjs            # one version in every manifest
 node --test "scripts/*.test.mjs"    # release scripts
+npm --prefix website ci && npm --prefix website test && npm --prefix website run build   # website + its checks
 npm run build            # installers in target/release/bundle
 e2e/run.sh               # end-to-end tests, Linux (builds UI + debug app, Xvfb, tauri-driver)
 e2e/run.sh tests/05-files.test.js   # one file while working
@@ -88,3 +92,11 @@ everywhere, write `docs/releases/v<version>.md`, push to main. When CI is green 
 repository variable `AUTO_RELEASE=false` switches it off; Actions -> Release -> Run workflow
 releases by hand or rebuilds a failed release. Never push notes for a version before it is meant to
 go out. After the release, run the notes' Windows checklist.
+
+Updates: the installed app checks `latest.json` of the latest release (`plugins.updater` in
+`src-tauri/tauri.conf.json`, `src-tauri/src/updater.rs`, `ui/src/lib/updates.ts`). With the secrets
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` the release signs the update
+files and publishes `latest.json`, verified against the public key in tauri.conf.json before
+publishing (`scripts/update-feed.mjs`); without them it releases without updates and says so. The
+private key never enters the repository; `bundle.createUpdaterArtifacts` stays `false` in the config
+(the release switches it on). Debug and end-to-end builds never check.

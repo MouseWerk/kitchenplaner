@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeFileName } from "./platform";
+import { mimeOf, PDF_FILTER, safeFileName } from "./platform";
 
 describe("safeFileName", () => {
   it("replaces characters the file systems refuse and trims trailing dots and spaces", () => {
@@ -28,5 +28,12 @@ describe("safeFileName", () => {
     expect(safeFileName("COM10")).toBe("COM10");
     expect(safeFileName("Küche CON")).toBe("Küche CON");
     expect(safeFileName("my.con")).toBe("my.con");
+  });
+});
+
+describe("file filters", () => {
+  it("offers the plan set as PDF, downloaded in the browser as a PDF", () => {
+    expect(PDF_FILTER.extensions).toEqual(["pdf"]);
+    expect(mimeOf(PDF_FILTER)).toBe("application/pdf");
   });
 });

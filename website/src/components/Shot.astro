@@ -1,0 +1,51 @@
+---
+/**
+ * A screenshot of the app as AVIF with a WebP fallback, in several widths. With `light`, people
+ * whose system is in light mode get the light-design screenshot instead (only one is downloaded).
+ * Below the fold the image loads lazily; the hero image is the only eager one.
+ */
+import { getImage } from 'astro:assets';
+import { shot, type ShotName } from '../data/shots';
+
+interface Props {
+  name: ShotName;
+  light?: ShotName;
+  alt: string;
+  sizes: string;
+  eager?: boolean;
+}
+
+const { name, light, alt, sizes, eager = false } = Astro.props;
+const WIDTHS = [480, 800, 1200, 1600, 2400];
+
+async function make(n: ShotName) {
+  const src = shot(n);
+  const widths = WIDTHS.filter((w) => w < src.width).concat(Math.min(src.width, 2400)).filter((w, i, a) => a.indexOf(w) === i);
+  const set = async (format: 'avif' | 'webp') =>
+    (await Promise.all(widths.map(async (w) => `${(await getImage({ src, format, width: w, quality: format === 'avif' ? 60 : 78 })).src} ${w}w`))).join(', ');
+  const fallback = await getImage({ src, format: 'webp', width: 1200, quality: 78 });
+  // The CSS size is half the pixel size (captured at device scale 2); width and height only set
+  // the aspect ratio, the layout sets the size.
+  return { avif: await set('avif'), webp: await set('webp'), src: fallback.src, w: Math.round(src.width / 2), h: Math.round(src.height / 2) };
+}
+
+const dark = await make(name);
+const lite = light ? await make(light) : null;
+const LIGHT = '(prefers-color-scheme: light)';
+---
+<picture class="shot">
+  {lite && <source media={LIGHT} type="image/avif" srcset={lite.avif} sizes={sizes} />}
+  {lite && <source media={LIGHT} type="image/webp" srcset={lite.webp} sizes={sizes} />}
+  <source type="image/avif" srcset={dark.avif} sizes={sizes} />
+  <img
+    src={dark.src}
+    srcset={dark.webp}
+    sizes={sizes}
+    width={dark.w}
+    height={dark.h}
+    alt={alt}
+    loading={eager ? 'eager' : 'lazy'}
+    decoding={eager ? 'sync' : 'async'}
+    fetchpriority={eager ? 'high' : undefined}
+  />
+</picture>

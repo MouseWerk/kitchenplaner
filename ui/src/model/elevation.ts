@@ -10,6 +10,7 @@
 
 import { dot, EPS, footprint, frontOf, openingSpan, walls, type Wall } from "./geometry";
 import { clampPartitionOpening, HATCH_SHELF_THICKNESS, openingSpanOnPartition, partitionAxes, partitionBand, partitionLength } from "./partitions";
+import { doorSetup, HANDLE_HEIGHT, HANDLE_LENGTH, SLIDE_OVERLAP, TRACK_HEIGHT } from "./doors";
 import { positions } from "./project";
 import type { Facing, Item, Opening, Partition, Project, Room, Vec2 } from "./types";
 import { mm, TEXT, type Drawing, type Pen, type Shape, type Fill, type TextShape } from "../render/drawing";
@@ -114,7 +115,8 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
     const w = ws[o.wall];
     if (!w || -dot(w.inward, v) < WALL_FACES_VIEWER) continue;
     const span = openingSpan(room, o);
-    if (span) drawOpening(o, dot(span[0], u), dot(span[1], u), shapes);
+    // Seen from inside the room: a door opening in opens towards the viewer.
+    if (span) drawOpening(o, dot(span[0], u), dot(span[1], u), doorSetup(o).swing === "in", shapes);
   }
 
   // Painter's order: whatever has its nearest corner farthest from the viewer first.
@@ -324,11 +326,20 @@ function drawPartition(project: Project, p: Partition, outline: Vec2[], cut: Vec
     const height = Math.min(c.height, p.height - c.sill);
     if (height <= 0) continue;
     const [a, b] = openingSpanOnPartition(p, c);
-    drawOpening({ ...c, height }, dot(a, u), dot(b, u), shapes);
+    const towards = doorSetup(c).swing === "in" ? -dot(left, v) > 0 : dot(left, v) > 0;
+    drawOpening({ ...c, height }, dot(a, u), dot(b, u), towards, shapes);
   }
 }
 
-function drawOpening(o: Opening, a: number, b: number, shapes: Shape[]) {
+/**
+ * An opening seen face-on; `a` and `b` are where its start and end lie along the view. Doors show
+ * their frame and leaves. A hinged leaf carries the opening triangle (DIN 1356): its tip points
+ * to the hinge side, drawn solid when the leaf opens towards the viewer (`towards`) and dashed
+ * when it opens away; the handle sits at the lock edge of the active leaf. A sliding door shows
+ * its leaf overlapping the opening, the track above it reaching over the parking place, and an
+ * arrow the way it opens; dashed when it runs on the far face.
+ */
+function drawOpening(o: Opening, a: number, b: number, towards: boolean, shapes: Shape[]) {
   const l = Math.min(a, b);
   const r = Math.max(a, b);
   const z0 = o.sill;
@@ -344,10 +355,68 @@ function drawOpening(o: Opening, a: number, b: number, shapes: Shape[]) {
   } else if (o.kind === "hatch") {
     // The counter shelf on the sill, as wide as the opening.
     shapes.push({ t: "poly", pen: "detail", fill: "item-dark", pts: rect(l, r, z0 - HATCH_SHELF_THICKNESS, z0), closed: true });
+  } else if (o.kind === "slidingDoor") {
+    drawSlidingDoorFace(o, a, b, towards, shapes);
   } else {
     // The frame inside the opening; doors have no frame along the floor.
     shapes.push({ t: "poly", pen: "opening", pts: [{ x: l + f, y: -z0 }, { x: l + f, y: -(z1 - f) }, { x: r - f, y: -(z1 - f) }, { x: r - f, y: -z0 }], closed: false });
+    drawLeavesFace(o, a + Math.sign(b - a) * f, b - Math.sign(b - a) * f, z0, z1 - f, towards, shapes);
   }
+}
+
+
+/**
+ * The leaves of a hinged door between its jambs: `a` the start jamb, `b` the end jamb (x along
+ * the view), from `z0` to `z1`.
+ */
+function drawLeavesFace(o: Opening, a: number, b: number, z0: number, z1: number, towards: boolean, shapes: Shape[]) {
+  const { hinge, leaves } = doorSetup(o);
+  const mid = (a + b) / 2;
+  // Each leaf as [hinge x, lock x]; the active leaf first.
+  const parts: [number, number][] = leaves === 1 ? [hinge === "start" ? [a, b] : [b, a]] : hinge === "start" ? [[a, mid], [b, mid]] : [[b, mid], [a, mid]];
+  if (leaves === 2) shapes.push({ t: "poly", pen: "opening", pts: [{ x: mid, y: -z0 }, { x: mid, y: -z1 }], closed: false });
+  const pen: Pen = towards ? "swing" : "hidden";
+  const zm = (z0 + z1) / 2;
+  parts.forEach(([h, k], i) => {
+    shapes.push({ t: "poly", pen, pts: [{ x: k, y: -z0 }, { x: h, y: -zm }, { x: k, y: -z1 }], closed: false });
+    if (i > 0) return;
+    // The handle at the lock edge, pointing towards the hinge.
+    const zh = Math.min(z0 + HANDLE_HEIGHT, z1);
+    const d = Math.sign(h - k);
+    const x0 = k + d * Math.min(OPENING_FRAME, Math.abs(h - k) / 4);
+    shapes.push({ t: "poly", pen: "detail", pts: [{ x: x0, y: -zh }, { x: x0 + d * HANDLE_LENGTH, y: -zh }], closed: false });
+  });
+}
+
+/** A sliding door seen face-on; `a` and `b` as in `drawOpening`. */
+function drawSlidingDoorFace(o: Opening, a: number, b: number, towards: boolean, shapes: Shape[]) {
+  const { hinge, leaves } = doorSetup(o);
+  const z0 = o.sill;
+  const z1 = o.sill + o.height + SLIDE_OVERLAP;
+  const pen: Pen = towards ? "opening" : "hidden";
+  const mid = (a + b) / 2;
+  const w = Math.abs(b - a);
+  // Each leaf as [parking side jamb x, the x it closes to]; it slides towards the first.
+  const parts: [number, number][] = leaves === 2 ? [[a, mid], [b, mid]] : [hinge === "start" ? [a, b] : [b, a]];
+  let lo = Math.min(a, b);
+  let hi = Math.max(a, b);
+  for (const [p, c] of parts) {
+    const d = Math.sign(c - p);
+    const far = leaves === 2 ? c : c + d * SLIDE_OVERLAP;
+    const near = p - d * SLIDE_OVERLAP;
+    shapes.push({ t: "poly", pen, pts: rect(Math.min(near, far), Math.max(near, far), z0, z1), closed: true });
+    const parked = p - d * (Math.abs(c - p) + SLIDE_OVERLAP);
+    lo = Math.min(lo, parked, near, far);
+    hi = Math.max(hi, parked, near, far);
+    // The arrow the way it opens, at handle height.
+    const zh = z0 + HANDLE_HEIGHT;
+    const from = p + d * Math.abs(c - p) * 0.7;
+    const to = p + d * Math.abs(c - p) * 0.15;
+    const head = Math.min(120, w * 0.1);
+    shapes.push({ t: "poly", pen: "swing", pts: [{ x: from, y: -zh }, { x: to, y: -zh }], closed: false });
+    shapes.push({ t: "poly", pen: "swing", pts: [{ x: to + d * head, y: -(zh + head / 2) }, { x: to, y: -zh }, { x: to + d * head, y: -(zh - head / 2) }], closed: false });
+  }
+  shapes.push({ t: "poly", pen: towards ? "detail" : "hidden", pts: rect(lo, hi, z1, z1 + TRACK_HEIGHT), closed: true });
 }
 
 /**
