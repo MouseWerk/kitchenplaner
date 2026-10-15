@@ -8,5 +8,10 @@ export const WORK_HEIGHT = 900;
 export const WALL_SHELF_ELEVATION = 1500;
 /** Usual lower edge of a canopy hood above the floor (mm). */
 export const HOOD_ELEVATION = 2000;
+/**
+ * Highest top of a unit set into the floor (floor drains, drainage channels, mm): its frame lies
+ * flush with the tiles, so nothing stands proud to trip over.
+ */
+export const FLUSH_HEIGHT = 5;
 /** Width steps of tables, sinks and shelves (mm). */
 export const TABLE_WIDTHS = [600, 800, 1000, 1200, 1400, 1600, 1800, 2000] as const;

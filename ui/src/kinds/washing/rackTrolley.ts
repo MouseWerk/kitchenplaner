@@ -17,6 +17,8 @@ const BASE = 0.14;
 const RACK = 0.5;
 const RACK_H = 0.1;
 const LOADED = 2;
+/** Wire distance of a dish rack as drawn (m). */
+const RACK_PITCH = 0.04;
 /** How far a runner reaches into the trolley from its post (m). */
 const RUNNER = 0.02;
 
@@ -77,6 +79,6 @@ export const rackTrolley: KindDef = {
     }
     // Dish racks on the lowest levels.
     const rack = Math.min(RACK, s.w - 2 * LEG - 0.02, s.d - 2 * LEG);
-    for (const y of levels(s.h).slice(0, LOADED)) p.box("basket", -rack / 2, rack / 2, y + 0.004, y + 0.004 + RACK_H, -rack / 2, rack / 2);
+    for (const y of levels(s.h).slice(0, LOADED)) p.wireBox(-rack / 2, rack / 2, y + 0.004, y + 0.004 + RACK_H, -rack / 2, rack / 2, RACK_PITCH);
   },
 };

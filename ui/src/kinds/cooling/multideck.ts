@@ -3,7 +3,7 @@
 // on display, and the machine behind a grille in the base.
 
 import { INSET } from "../parts/plan";
-import type { MaterialId } from "../parts/mesh";
+import { SHELF_PITCH, type MaterialId } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { grille, grilleFront, LEAF_GAP_MM, m } from "./common";
 
@@ -68,7 +68,7 @@ export const multideck: KindDef = {
     const cz = s.d / 2 - m(CANOPY_SETBACK_MM);
     p.box("steel", x0, x1, canopy, s.h, -s.d / 2 + WALL, cz);
     p.box("panel", x0 + 0.01, x1 - 0.01, canopy - 0.008, canopy, cz - 0.08, cz - 0.02);
-    p.box("basket", x0 + 0.01, x1 - 0.01, canopy - 0.004, canopy, cz - 0.16, cz - 0.09);
+    p.grid(x0 + 0.01, x1 - 0.01, canopy - 0.004, canopy, cz - 0.16, cz - 0.09, SHELF_PITCH / 2, "x");
     // Shelves stepping back towards the top, each with a price rail; products on the well and shelves.
     const pitch = (canopy - riser) / (SHELVES + 1);
     const back = -s.d / 2 + WALL + 0.01;

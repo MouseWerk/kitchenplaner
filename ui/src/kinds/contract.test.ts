@@ -16,6 +16,7 @@ import { buildItemObject } from "../three/meshes";
 import { getShared } from "../three/shared";
 import { fitOrthoCamera } from "../three/thumbnails";
 import { Front } from "./parts/elevation";
+import { FLUSH_HEIGHT } from "./parts/sizes";
 import { PlanSketch } from "./parts/plan";
 import { CATALOG, CATEGORIES, KINDS, kindDef, placementOf, variantConnections, type CatalogEntry, type Energy, type KindDef } from "./registry";
 
@@ -123,6 +124,9 @@ describe.each(CATALOG.map((e) => [e.id, e] as const))("entry %s", (_, entry) => 
     if (placement === "overhead") expect(entry.elevation, "an overhead unit hangs above the floor").toBeGreaterThan(0);
     if (placement === "tableTop") expect(entry.elevation, "a table-top unit stands on a table").toBeGreaterThan(0);
     if (placement === "flat") expect(entry.elevation, "a flat unit lies on the floor").toBe(0);
+    if (placement === "flat" && !kindDef(entry.kind).raised) {
+      expect(entry.height, "a unit set into the floor stands flush with it").toBeLessThanOrEqual(FLUSH_HEIGHT);
+    }
   });
 
   it("offers known energies and gives the default variant its connection values", () => {
@@ -133,6 +137,23 @@ describe.each(CATALOG.map((e) => [e.id, e] as const))("entry %s", (_, entry) => 
     }
     if (entry.variantConnections) {
       expect(variantConnections(entry, { width: entry.width, energy: entry.energy?.[0] })).toEqual(entry.connections);
+    }
+  });
+});
+
+/** What a model looks like, as a sorted list of its parts (material, place and size). */
+function looks(item: Item): string[] {
+  const r = (v: THREE.Vector3) => v.toArray().map((n) => n.toFixed(4)).join(",");
+  return meshesOf(buildItemObject(item))
+    .map((m) => `${(m.material as THREE.Material).name} ${r(m.position)} ${r(m.scale)}`)
+    .sort();
+}
+
+describe.each(CATALOG.filter((e) => e.energy && e.energy.length > 1).map((e) => [e.id, e] as const))("energies of %s", (_, entry) => {
+  it("look different in 3D, so a gas unit is never mistaken for its electric twin", () => {
+    for (const c of ALL.filter((x) => x.entry === entry && x.energy !== entry.energy![0])) {
+      const twin = ALL.find((x) => x.entry === entry && x.item.width === c.item.width && x.energy === entry.energy![0])!;
+      expect(looks(c.item), c.label).not.toEqual(looks(twin.item));
     }
   });
 });
@@ -270,7 +291,16 @@ describe.each(ALL.map((c) => [c.label, c] as const))("variant %s", (_, { def, it
       expect(m.userData.itemId).toBe(item.id);
       expect([shared.box, shared.cylinder]).toContain(m.geometry);
       expect(materials.has(m.material as THREE.Material), (m.material as THREE.Material).name).toBe(true);
+      // Wire work is made of rods: a wireframe shows the triangles of the unit box.
+      expect((m.material as THREE.MeshStandardMaterial).wireframe, (m.material as THREE.Material).name).not.toBe(true);
     }
+  });
+
+  it("shows its energy: a gas variant has the flue outlet in 3D and the plan, an electric one not", () => {
+    if (def.flue === false) return;
+    const flue = meshesOf(buildItemObject(item)).filter((m) => m.name === "flue");
+    if (energy === "gas") expect(flue.length, "flue parts").toBeGreaterThan(0);
+    else expect(flue).toEqual([]);
   });
 
   it("survives saving and opening the project", () => {

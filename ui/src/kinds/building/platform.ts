@@ -25,6 +25,7 @@ export const platform: KindDef = {
   // Equipment stands on it: flat, so nothing on it counts as an overlap. Its height is not added
   // to what stands on it; give those items the platform height as elevation where it matters.
   placement: "flat",
+  raised: true,
   plan(s) {
     s.line("detail", [s.L, s.F - INSET], [s.R, s.F - INSET]);
   },

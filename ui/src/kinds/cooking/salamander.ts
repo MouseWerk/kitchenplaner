@@ -2,7 +2,7 @@
 // open cavity at the front with a grid shelf on a drip tray, the controls at the right.
 
 import { INSET, PANEL } from "../parts/elevation";
-import { GAP, SHEET } from "../parts/mesh";
+import { GAP, SHEET, SHELF_PITCH } from "../parts/mesh";
 import type { KindDef } from "../types";
 
 /** Width of the control panel at the right (mm). */
@@ -47,7 +47,7 @@ export const salamander: KindDef = {
     // Drip tray and the grid shelf with its handle.
     p.tub("steelDark", -s.w / 2 + SHEET, s.w / 2 - panelW - SHEET, SHEET, SHEET + 0.025, zb + SHEET, zf - 0.01, SHEET / 2);
     const gy = cavity * 0.35;
-    p.box("basket", -s.w / 2 + SHEET * 2, s.w / 2 - panelW - SHEET * 2, gy - 0.008, gy, zb + SHEET * 2, zf - 0.03);
+    p.grid(-s.w / 2 + SHEET * 2, s.w / 2 - panelW - SHEET * 2, gy - 0.008, gy, zb + SHEET * 2, zf - 0.03, SHELF_PITCH);
     p.rod("handle", "x", -panelW / 2, gy - 0.004, zf - 0.015, s.w - panelW - 0.12, 0.006);
     // Control panel with two knobs and a pilot light.
     const px = s.w / 2 - panelW / 2;

@@ -3,7 +3,7 @@
 // the heater with its controls in the top.
 
 import { INSET as FRONT_INSET } from "../parts/elevation";
-import { GAP, HANDLE, SHEET } from "../parts/mesh";
+import { GAP, HANDLE, SHEET, SHELF_PITCH } from "../parts/mesh";
 import { INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 
@@ -57,7 +57,7 @@ export const hatchWarmer: KindDef = {
     // Wire shelves on their runners.
     for (let k = 1; k <= SHELVES; k++) {
       const y = BASE + ((yh - BASE) * k) / (SHELVES + 1);
-      p.box("basket", -s.w / 2 + SHEET * 2, s.w / 2 - SHEET * 2, y, y + 0.01, -s.d / 2 + 0.03, zf - 0.03);
+      p.grid(-s.w / 2 + SHEET * 2, s.w / 2 - SHEET * 2, y, y + 0.01, -s.d / 2 + 0.03, zf - 0.03, SHELF_PITCH);
     }
     // Glass doors on both sides, each leaf with a steel frame bar and a handle.
     const n = leaves(item.width);

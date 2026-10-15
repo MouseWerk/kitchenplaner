@@ -3,7 +3,7 @@
 // the elevations and 3D of refrigerated counters agree on.
 
 import { INSET, type Front } from "../parts/elevation";
-import { GAP, PLINTH, plinth, SHEET, type Parts, type Size } from "../parts/mesh";
+import { GAP, PLINTH, plinth, SHEET, SHELF_PITCH, type Parts, type Size } from "../parts/mesh";
 import { INSET as PLAN_INSET, type PlanSketch } from "../parts/plan";
 import { MM_PER_UNIT } from "../../three/shared";
 
@@ -210,7 +210,7 @@ export function wireShelves(p: Parts, inner: { x0: number; x1: number; y0: numbe
   const pitch = (inner.y1 - inner.y0) / (n + 1);
   for (let i = 1; i <= n; i++) {
     const y = inner.y0 + pitch * i;
-    p.box("basket", inner.x0, inner.x1, y - 0.006, y, inner.z0 + 0.02, inner.z1 - 0.03);
+    p.grid(inner.x0, inner.x1, y - 0.006, y, inner.z0 + 0.02, inner.z1 - 0.03, SHELF_PITCH);
     out.push(y);
   }
   return out;

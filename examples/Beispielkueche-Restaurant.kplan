@@ -554,7 +554,7 @@
       "rotation": 0,
       "width": 2000,
       "depth": 300,
-      "height": 30,
+      "height": 5,
       "elevation": 0,
       "connections": {
         "drain": true
@@ -1223,7 +1223,7 @@
       "rotation": 0,
       "width": 300,
       "depth": 300,
-      "height": 20,
+      "height": 5,
       "elevation": 0,
       "connections": {
         "drain": true

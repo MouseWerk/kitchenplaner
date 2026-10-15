@@ -2,7 +2,7 @@
 // thickness lever, a conveyor belt table to each side with its end roller, guards over the
 // rollers, flour trays under the belts; the stand on castors.
 
-import type { Size } from "../parts/mesh";
+import { SHELF_PITCH, type Size } from "../parts/mesh";
 import type { KindDef } from "../types";
 import { CASTOR, mBox, mCircle, metres, pRect, tableCastor } from "./common";
 
@@ -65,7 +65,7 @@ export const doughSheeter: KindDef = {
       p.rod("steelDark", "z", sx * (w / 2 - 0.025), belt.y1 - 0.01, 0, belt.z * 2, 0.025);
       // Guard over the rollers beside the housing.
       const [g0, g1] = span(sx * tower, sx * (tower + GUARD));
-      p.box("basket", g0, g1, belt.y1, belt.y1 + 0.12, -belt.z, belt.z);
+      p.wireBox(g0, g1, belt.y1, belt.y1 + 0.12, -belt.z, belt.z, SHELF_PITCH, { bottom: false, top: true });
       // Flour tray under the belt.
       const [t0, t1] = span(sx * (tower + 0.05), sx * (w / 2 - 0.15));
       p.tub("steelDark", t0, t1, belt.y0 - 0.06, belt.y0 - 0.02, -belt.z + 0.03, belt.z - 0.03);

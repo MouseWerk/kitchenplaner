@@ -3,7 +3,8 @@
 // elevation. `buildItemObject` (three/meshes.ts) places and turns the result.
 //
 // Every part is the shared unit box or unit cylinder, scaled, with a shared material
-// (three/shared.ts): a model never creates geometry or materials of its own.
+// (three/shared.ts): a model never creates geometry or materials of its own. Wire work (baskets,
+// grids, guards) is made of thin rods (`grid`, `wireBox`, `wireCage`), never of a wireframe.
 
 import * as THREE from "three";
 import { getShared, type MaterialId, type Shared } from "../../three/shared";
@@ -62,6 +63,26 @@ const FOOT = 0.022;
 const FOOT_PAD = 0.012;
 /** Largest distance between two knobs on a control strip (m). */
 const KNOB_PITCH = 0.15;
+/** Radius of a wire of baskets, grids and guards (4 mm wire). */
+export const WIRE = 0.002;
+/** Radius of the frame rods of baskets and grids (6 mm). */
+export const WIRE_FRAME = 0.003;
+/** Wire distance of baskets and dish racks. */
+export const BASKET_PITCH = 0.02;
+/** Wire distance of wire shelves, grids and guards. */
+export const SHELF_PITCH = 0.03;
+/** The axis of the unit cylinder. */
+const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Positions of the wires between `a` and `b` (exclusive) at about `pitch`, evenly spread: the
+ * ends are the frame's.
+ */
+export function wirePositions(a: number, b: number, pitch: number): number[] {
+  if (b <= a || pitch <= 0) return [];
+  const n = Math.max(1, Math.round((b - a) / pitch));
+  return Array.from({ length: n - 1 }, (_, i) => a + ((b - a) * (i + 1)) / n);
+}
 
 /** Adds parts to an item's group. */
 export class Parts {
@@ -121,6 +142,98 @@ export class Parts {
     }
     if (axis === "x") this.rod("handle", "x", (a + b) / 2, at, zc, len, r);
     else this.rod("handle", "y", at, (a + b) / 2, zc, len, r);
+  }
+
+  /** A round bar from point `a` to point `b` (any direction), for the wires of cages. */
+  bar(mat: MaterialId, a: THREE.Vector3Like, b: THREE.Vector3Like, r: number): THREE.Mesh {
+    const dir = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
+    const length = dir.length();
+    const m = new THREE.Mesh(this.s.cylinder, this.s.mat[mat]);
+    m.scale.set(2 * r, Math.max(length, MIN_PART), 2 * r);
+    if (length > 0) {
+      // The cylinder's axis along the bar, its x axis level across it: the bar's box then stays
+      // as tight as an axis-aligned rod's, so a cage keeps within its circle.
+      dir.divideScalar(length);
+      const across = new THREE.Vector3().crossVectors(UP, dir);
+      if (across.lengthSq() < 1e-12) across.set(1, 0, 0);
+      across.normalize();
+      const third = new THREE.Vector3().crossVectors(across, dir);
+      m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(across, dir, third));
+    }
+    m.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    this.g.add(m);
+    return m;
+  }
+
+  /**
+   * A flat wire grid filling the box (a wire shelf, a grill grid, a grille): a frame of rods
+   * round the edge and wires along `along` (x or z) every `pitch` between them, all in the
+   * middle of the box's height. Everything stays inside the box.
+   */
+  grid(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, pitch: number, along: "x" | "z" = "z"): void {
+    const y = (y0 + y1) / 2;
+    const rf = Math.min(WIRE_FRAME, (y1 - y0) / 2, (x1 - x0) / 4, (z1 - z0) / 4);
+    const rw = Math.min(WIRE, rf);
+    this.rod("wire", "x", (x0 + x1) / 2, y, z0 + rf, x1 - x0, rf);
+    this.rod("wire", "x", (x0 + x1) / 2, y, z1 - rf, x1 - x0, rf);
+    this.rod("wire", "z", x0 + rf, y, (z0 + z1) / 2, z1 - z0 - 4 * rf, rf);
+    this.rod("wire", "z", x1 - rf, y, (z0 + z1) / 2, z1 - z0 - 4 * rf, rf);
+    if (along === "z") {
+      for (const x of wirePositions(x0 + rf * 2, x1 - rf * 2, pitch)) this.rod("wire", "z", x, y, (z0 + z1) / 2, z1 - z0 - 4 * rf, rw);
+    } else {
+      for (const z of wirePositions(z0 + rf * 2, z1 - rf * 2, pitch)) this.rod("wire", "x", (x0 + x1) / 2, y, z, x1 - x0 - 4 * rf, rw);
+    }
+  }
+
+  /**
+   * A wire basket or cage filling the box (a fryer basket, a dish rack, a guard): rods along the
+   * top and bottom edges and at the four corners, upright wires every `pitch` in the four walls,
+   * and a grid across the bottom and, if asked, across the top.
+   */
+  wireBox(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, pitch: number, faces: { bottom?: boolean; top?: boolean } = {}): void {
+    const rf = Math.min(WIRE_FRAME, (x1 - x0) / 4, (y1 - y0) / 4, (z1 - z0) / 4);
+    const rw = Math.min(WIRE, rf);
+    const cx = (x0 + x1) / 2;
+    const cz = (z0 + z1) / 2;
+    // The frame: the rims at the top and the bottom and the corner posts.
+    for (const y of [y0 + rf, y1 - rf]) {
+      for (const z of [z0 + rf, z1 - rf]) this.rod("wire", "x", cx, y, z, x1 - x0, rf);
+      for (const x of [x0 + rf, x1 - rf]) this.rod("wire", "z", x, y, cz, z1 - z0 - 4 * rf, rf);
+    }
+    for (const x of [x0 + rf, x1 - rf]) for (const z of [z0 + rf, z1 - rf]) this.rod("wire", "y", x, (y0 + y1) / 2, z, y1 - y0 - 4 * rf, rf);
+    // Upright wires in the walls, between the rims.
+    const yc = (y0 + y1) / 2;
+    const hw = y1 - y0 - 4 * rf;
+    for (const x of wirePositions(x0 + rf * 2, x1 - rf * 2, pitch)) {
+      for (const z of [z0 + rf, z1 - rf]) this.rod("wire", "y", x, yc, z, hw, rw);
+    }
+    for (const z of wirePositions(z0 + rf * 2, z1 - rf * 2, pitch)) {
+      for (const x of [x0 + rf, x1 - rf]) this.rod("wire", "y", x, yc, z, hw, rw);
+    }
+    // Wires across the bottom and the top, front to back, inside the rims.
+    const ys = [...(faces.bottom ?? true ? [y0 + rf] : []), ...(faces.top ? [y1 - rf] : [])];
+    for (const y of ys) for (const x of wirePositions(x0 + rf * 2, x1 - rf * 2, pitch)) this.rod("wire", "z", x, y, cz, z1 - z0 - 4 * rf, rw);
+  }
+
+  /**
+   * A round wire cage standing on the circle of radius `r` round (cx, cz) from `y0` to `y1` (a
+   * bowl guard, a whisk): `wires` upright wires and a ring at the bottom and the top, the rings
+   * made of straight rods between the wires. Everything stays within `r` of the centre.
+   */
+  wireCage(cx: number, cz: number, y0: number, y1: number, r: number, wires: number): void {
+    const rf = Math.min(WIRE_FRAME, r / 4, (y1 - y0) / 4);
+    const rw = Math.min(WIRE, rf);
+    const n = Math.max(3, Math.round(wires));
+    const ring = r - rf;
+    const at = (i: number, y: number) => {
+      const a = (i / n) * Math.PI * 2;
+      return { x: cx + ring * Math.cos(a), y, z: cz + ring * Math.sin(a) };
+    };
+    for (let i = 0; i < n; i++) {
+      for (const y of [y0 + rf, y1 - rf]) this.bar("wire", at(i, y), at(i + 1, y), rf);
+      const p = at(i, 0);
+      this.rod("wire", "y", p.x, (y0 + y1) / 2, p.z, y1 - y0 - 4 * rf, rw);
+    }
   }
 
   /**

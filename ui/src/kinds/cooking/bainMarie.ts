@@ -47,7 +47,7 @@ export const bainMarie: KindDef = {
     lineModule(p, s, { base: "open", knobs: 1, underTop: s.h - TOP_SHEET, solidTo: s.h - BASIN - 0.01 });
     p.topWithHoles("steel", s.w, s.d, s.h - TOP_SHEET, s.h, [hole]);
     p.tub("steelDark", hole.x0, hole.x1, s.h - BASIN, s.h, hole.z0, hole.z1, SHEET / 2);
-    p.box("glass", hole.x0 + SHEET / 2, hole.x1 - SHEET / 2, s.h - BASIN + SHEET, s.h - 0.06, hole.z0 + SHEET / 2, hole.z1 - SHEET / 2);
+    p.box("water", hole.x0 + SHEET / 2, hole.x1 - SHEET / 2, s.h - BASIN + SHEET, s.h - 0.06, hole.z0 + SHEET / 2, hole.z1 - SHEET / 2);
     // The containers hang in the basin by their rim, filled a little below it.
     const pw = Math.min(GN_W / 1000, s.w / n - 0.02);
     const pd = Math.min(GN_D / 1000, hole.z1 - hole.z0 - 0.02);
@@ -56,7 +56,7 @@ export const bainMarie: KindDef = {
       p.tub("steel", cx - pw / 2, cx + pw / 2, s.h - PAN, s.h - 0.002, cz - pd / 2, cz + pd / 2, SHEET / 2);
       p.box("steel", cx - pw / 2 - 0.008, cx + pw / 2 + 0.008, s.h - 0.004, s.h, cz - pd / 2 - 0.008, cz - pd / 2);
       p.box("steel", cx - pw / 2 - 0.008, cx + pw / 2 + 0.008, s.h - 0.004, s.h, cz + pd / 2, cz + pd / 2 + 0.008);
-      p.box("oil", cx - pw / 2 + SHEET / 2, cx + pw / 2 - SHEET / 2, s.h - PAN, s.h - 0.04, cz - pd / 2 + SHEET / 2, cz + pd / 2 - SHEET / 2);
+      p.box("water", cx - pw / 2 + SHEET / 2, cx + pw / 2 - SHEET / 2, s.h - PAN, s.h - 0.04, cz - pd / 2 + SHEET / 2, cz + pd / 2 - SHEET / 2);
     }
   },
 };

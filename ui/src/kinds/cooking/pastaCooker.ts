@@ -1,7 +1,7 @@
 // Pasta cooker (Nudelkocher): one deep water basin per 400 mm with portion baskets hanging on a
 // bar at the back, a water inlet in the basin; doors below (drain valve behind them).
 
-import { CONTROLS, SHEET } from "../parts/mesh";
+import { BASKET_PITCH, CONTROLS, SHEET } from "../parts/mesh";
 import { CONTROL_STRIP, controlStrip, INSET } from "../parts/plan";
 import type { KindDef } from "../types";
 import { columns, lineFront, lineModule } from "./common";
@@ -46,7 +46,7 @@ export const pastaCooker: KindDef = {
     p.topWithHoles("steel", s.w, s.d, s.h - TOP_SHEET, s.h, holes);
     for (const { x0, x1 } of holes) {
       p.tub("steelDark", x0, x1, s.h - BASIN, s.h, z0, z1, SHEET / 2);
-      p.box("glass", x0 + SHEET / 2, x1 - SHEET / 2, s.h - BASIN + SHEET, s.h - WATER, z0 + SHEET / 2, z1 - SHEET / 2);
+      p.box("water", x0 + SHEET / 2, x1 - SHEET / 2, s.h - BASIN + SHEET, s.h - WATER, z0 + SHEET / 2, z1 - SHEET / 2);
       // The bar at the back the baskets hang on, and the water inlet below it.
       p.rod("handle", "x", (x0 + x1) / 2, s.h - 0.012, z0 + 0.03, x1 - x0 - SHEET, 0.006);
       p.rod("handle", "z", x0 + 0.04, s.h - WATER + 0.02, z0 + 0.025, 0.04, 0.008);
@@ -55,7 +55,7 @@ export const pastaCooker: KindDef = {
       const kw = (x1 - x0 - inset * 3) / 2;
       const kz1 = z1 - 0.08;
       for (const kx of [x0 + inset, x0 + inset * 2 + kw]) {
-        p.box("basket", kx, kx + kw, s.h - 0.22, s.h - 0.04, z0 + 0.05, kz1);
+        p.wireBox(kx, kx + kw, s.h - 0.22, s.h - 0.04, z0 + 0.05, kz1, BASKET_PITCH);
         const cx = kx + kw / 2;
         p.box("handle", cx - 0.004, cx + 0.004, s.h - 0.04, s.h - 0.012, kz1 - 0.008, kz1);
         p.rod("knob", "z", cx, s.h - 0.02, kz1 + 0.035, 0.07, 0.009);

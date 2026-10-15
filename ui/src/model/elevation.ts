@@ -358,7 +358,9 @@ function drawItem(it: Item, l: number, r: number, facesViewer: boolean, shapes: 
   const def = kindDef(kindOf(it.catalogId));
   const f = new Front(it, l, r, shapes);
   const bodyFill: Fill = def.structural ? "wall" : "item";
-  const bodyPen: Pen = def.structural ? "wall" : def.placement === "overhead" ? "overhead" : "item";
+  // Overhead units are seen in an elevation, not hidden above a cut as in the plan: drawn solid
+  // like every other unit.
+  const bodyPen: Pen = def.structural ? "wall" : "item";
 
   def.elevationBase?.(f);
   f.box(bodyPen, l, r, f.z0, f.top, bodyFill);

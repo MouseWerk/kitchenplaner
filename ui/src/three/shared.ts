@@ -40,14 +40,16 @@ export type MaterialId =
   | "panel"
   | "panelDark"
   | "oil"
-  | "basket"
+  | "water"
+  | "wire"
+  | "flue"
   | "concrete"
   | "knob"
   | "glassDark"
   | "rubber";
 
 /** Materials that should not darken what is behind them in shadows. */
-export const NO_SHADOW: ReadonlySet<MaterialId> = new Set<MaterialId>(["glass", "basket"]);
+export const NO_SHADOW: ReadonlySet<MaterialId> = new Set<MaterialId>(["glass", "water", "wire"]);
 
 let shared: Shared | null = null;
 let holders = 0;
@@ -88,7 +90,13 @@ export function getShared(): Shared {
     panel: std(0xeceeef, 0, 0.55),
     panelDark: std(0x34373b, 0.2, 0.55),
     oil: std(0x7a5a22, 0.1, 0.2),
-    basket: std(0x9ea3a8, 0.7, 0.4, { wireframe: true }),
+    // Water in basins and wells: light, glossy and see-through enough to show the basin floor.
+    water: std(0x9fbfcc, 0, 0.04, { transparent: true, opacity: 0.55, depthWrite: false }),
+    // Wires of baskets, grids and guards (`Parts.grid`, `wireBox`, `wireCage`): solid thin rods.
+    wire: std(0xb4b9be, 0.8, 0.35),
+    // The dark slots of a gas unit's flue outlet (kinds/parts/flue.ts). They lie in the plane of
+    // the top they are set into; the polygon offset draws them over it instead of flickering.
+    flue: std(0x1b1c1e, 0.2, 0.6, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     concrete: std(0xbab7b1, 0, 0.9),
     knob: std(0x1b1c1e, 0, 0.45),
     rubber: std(0x222325, 0, 0.9),

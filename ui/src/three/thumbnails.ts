@@ -1,4 +1,5 @@
-// Small 3D previews of catalog entries, rendered from the real item models (`buildItemObject`).
+// Small 3D previews of catalog entries, rendered from the real item models (`buildItemObject`),
+// merged as in the 3D view (`thumbnailModel`).
 //
 // One offscreen WebGL renderer draws them one at a time in idle slices and turns each into a
 // PNG data URL, cached by catalog id, size and device pixel ratio. Requests carry a priority:
@@ -24,6 +25,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import type { CatalogEntry } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
 import { LOOK } from "./look";
+import { disposeMerged, mergeItemObject } from "./merge";
 import { buildItemObject, releaseShared, retainShared } from "./meshes";
 
 /** Direction from the model towards the camera: front right, above (a 3/4 isometric-ish view). */
@@ -111,6 +113,15 @@ export function fitOrthoCamera(camera: THREE.OrthographicCamera, box: THREE.Box3
 // ---------------------------------------------------------------------------------------------
 // The WebGL renderer
 
+/**
+ * The model of a catalog entry as the 3D view draws it: merged per material, with UVs in metres,
+ * so the brushed grain has the size it has in the room instead of being stretched over each
+ * panel. Its geometry is its own: dispose it with `disposeMerged`.
+ */
+export function thumbnailModel(entry: CatalogEntry): THREE.Group {
+  return mergeItemObject(buildItemObject(itemFromCatalog(entry, 0, 0)));
+}
+
 /** The real renderer: one canvas with the studio environment and the lights of the 3D view. */
 export const webglFactory: RendererFactory = () => {
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -137,7 +148,7 @@ export const webglFactory: RendererFactory = () => {
 
   return {
     render(entry, widthPx, heightPx) {
-      const model = buildItemObject(itemFromCatalog(entry, 0, 0));
+      const model = thumbnailModel(entry);
       scene.add(model);
       try {
         const box = new THREE.Box3().setFromObject(model);
@@ -152,8 +163,9 @@ export const webglFactory: RendererFactory = () => {
         // Read back in the same task as the render: no preserveDrawingBuffer needed.
         return r.domElement.toDataURL("image/png");
       } finally {
-        // The model's geometry and materials are shared; removing it is enough.
+        // The merged geometry is the model's own; the materials are shared and stay.
         scene.remove(model);
+        disposeMerged(model);
       }
     },
     dispose() {

@@ -14,10 +14,12 @@ kinds/
   parts/
     plan.ts         PlanSketch (line, rect, circle, quarter) + hob, controlStrip, upstandLine, frontDoorSwing, cross
     elevation.ts    Front (box, line, circle, doors, drawers, panel, worktop, legsAndUndershelf) + doorCount
-    mesh.ts         Parts (box, cyl, rod, knob, barHandle, tub, topWithHoles) + body, plinth, doors,
-                    castor, openFrame, tap, cookingBody, controlKnobs, ovenWindow
+    mesh.ts         Parts (box, cyl, rod, bar, knob, barHandle, tub, topWithHoles, grid, wireBox,
+                    wireCage) + body, plinth, doors, castor, openFrame, tap, cookingBody,
+                    controlKnobs, ovenWindow, wirePositions
+    flue.ts         the flue outlet of gas variants (flueMesh, fluePlan, flueFront, withGasFlue)
     entries.ts      withVariants (an entry whose connection values come from its variants)
-    sizes.ts        WORK_HEIGHT, TABLE_WIDTHS, HOOD_ELEVATION, WALL_SHELF_ELEVATION
+    sizes.ts        WORK_HEIGHT, TABLE_WIDTHS, HOOD_ELEVATION, WALL_SHELF_ELEVATION, FLUSH_HEIGHT
   <area>/           cooking, cooling, washing, prep, serving, storage, ventilation, building
     entries.ts      the catalog entries of the area
     <kind>.ts       one KindDef per file: plan, elevation, mesh
@@ -44,6 +46,23 @@ preparation machines (group `prep`), `cooking` only the group `cooking`. A new a
   to the front (+d/2), y up from 0 (the elevation) to `s.h`. Use only `Parts` and the shared
   materials (`MaterialId` in three/shared.ts): no own geometry, materials or textures.
 
+Shared looks in 3D:
+
+- Wire work (baskets, dish racks, wire shelves, grill grids, guards, whisks) is made of thin rods
+  in the `wire` material, never of a wireframe (a wireframe box shows its triangles):
+  `p.grid(x0, x1, y0, y1, z0, z1, pitch, along = "z")` for a flat grid (frame and wires along x
+  or z), `p.wireBox(x0, x1, y0, y1, z0, z1, pitch, { bottom = true, top = false })` for a basket
+  or cage, `p.wireCage(cx, cz, y0, y1, r, wires)` for a round cage, `p.bar(mat, a, b, r)` for a
+  rod between two points. Each fills the box (or circle) it is given; `BASKET_PITCH` (20 mm) and
+  `SHELF_PITCH` (30 mm) are the usual wire distances. The 3D view merges all rods of an item into
+  one draw call.
+- Water in basins, bain-marie wells and pans is `water` (light, glossy, see-through); `oil` is
+  for fryers and dark drinks only.
+- Gas variants get the flue outlet (Abgasstutzen) at the back of the top from the registry
+  (`withGasFlue` in parts/flue.ts): dark slots named `flue` in 3D, a crossed rectangle in the
+  plan, a hidden outline in the front elevation. A kind does nothing for it; one that draws its
+  own outlet sets `flue: false` and must still look different from its electric variant.
+
 Every view fills exactly width × depth × height. Only these may stick out, and only declared:
 `rise` (mm above the height, for taps), door swings in the plan (arcs, an open leaf with the
 `opening` pen) at the front, and a stand below a raised floor unit (`elevationBase`, and in 3D
@@ -57,14 +76,18 @@ check lets it overlap and how it snaps. 3D and the elevations draw every unit th
 | Placement | Units | Plan | Collides with | Snapping |
 |---|---|---|---|---|
 | `floor` (default) | ranges, tables, fridges | solid, filled, first | floor units; blocks doors | back pulled to a wall within 150 mm |
-| `flat` | floor drains, drainage channels, platforms | solid, unfilled, over the floor units | nothing | as floor |
+| `flat` | floor drains, drainage channels, platforms (`raised`) | solid, unfilled, over the floor units | nothing | as floor |
 | `tableTop` | slicer, table mixer, vacuum packer, scale on a table | solid, filled, over the tables | table-top units | back to a wall only when it touches it |
 | `overhead` | hoods, wall shelves, wall basins, heat lamps | dashed, unfilled, on top | overhead units | as floor |
 
+Dashed is the plan's convention for "above the cut": in the elevations an overhead unit is seen
+and drawn solid like every other unit.
+
 Units snap flush to neighbours of their own placement and align with every item's edges in the
 plan. A `tableTop` or `overhead` unit has an elevation above the floor and its model starts
-there; a `flat` one lies at elevation 0; a `floor` unit reaches the floor (on a stand if raised,
-`elevationBase`). A platform is `flat` so that what stands on it is no overlap; set the
+there; a `flat` one lies at elevation 0 and is set into the floor, at most `FLUSH_HEIGHT` (5 mm)
+high, unless its kind is `raised` (a platform); a `floor` unit reaches the floor (on a stand if
+raised, `elevationBase`). A platform is `flat` so that what stands on it is no overlap; set the
 elevation of those items to the platform's height where it matters.
 
 `structural` units (columns, shafts) draw with the wall pen and fill. `planOutline(w, d)` replaces
@@ -121,7 +144,8 @@ export const brattPan: KindDef = {
 - the entry's kind exists, ids and kinds are unique, every kind is used, the category is known;
 - name (and description) exist in German and English; tags are lower case;
 - sizes are whole millimetres, `widths` include `width`, overhead and table-top units have an
-  elevation above the floor, flat units lie at elevation 0;
+  elevation above the floor, flat units lie at elevation 0 and, unless `raised`, at most
+  `FLUSH_HEIGHT` high;
 - energies are known; `variantConnections` gives `connections` for the default variant;
   connection values are finite and not negative, electric power has a voltage, a gas variant has
   `gasKw`, an electric variant `electricKw` and no gas;
@@ -133,7 +157,10 @@ export const brattPan: KindDef = {
   overhead, table-top and flat units start at their elevation, floor units reach the floor;
 - the model and the plan symbol turn with the item: at 90 degrees the front faces west, and
   every part is the unturned part turned (nothing depends on the rotation);
-- every mesh carries `userData.itemId` and uses only the shared geometry and materials;
+- every mesh carries `userData.itemId` and uses only the shared geometry and materials, none of
+  them a wireframe;
+- a gas variant has the `flue` parts and an electric one none (unless the kind has `flue: false`),
+  and every energy variant of an entry looks different in 3D from the default one;
 - an item of the entry survives saving and opening the project unchanged;
 - the thumbnail framing (`fitOrthoCamera`) fits the model, centred, with a margin.
 

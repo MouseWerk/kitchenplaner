@@ -36,6 +36,18 @@ describe("elevationDrawing", () => {
     expect(polys(shapes).filter((s) => s.itemId === "a" && s.pen === "detail").length).toBeGreaterThan(2);
   });
 
+  it("draws overhead units solid at their height: seen, not hidden above a cut as in the plan", () => {
+    const p = testProject([testItem("h", "hood-wall", 1600, 550), testItem("s", "wall-shelf", 4000, 200)]);
+    const shapes = elevationDrawing(p, "north", { showDims: false }).shapes;
+    const hood = body(shapes, "h");
+    expect(hood).toBeDefined();
+    const b = bounds(hood.pts);
+    expect(-b.maxY).toBe(p.items[0].elevation);
+    expect(-b.minY).toBe(p.items[0].elevation + p.items[0].height);
+    expect(body(shapes, "s")).toBeDefined();
+    expect(shapes.filter((s) => s.itemId && s.pen === "overhead")).toEqual([]);
+  });
+
   it("draws the room section: cut walls at both ends, floor and ceiling", () => {
     const shapes = elevationDrawing(testProject(), "north", { showDims: false }).shapes;
     const walls = polys(shapes).filter((s) => s.fill === "wall");

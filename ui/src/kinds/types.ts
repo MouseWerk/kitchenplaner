@@ -76,6 +76,16 @@ export interface KindDef {
   kind: string;
   /** Where the unit stands (see `Placement`); `floor` when not given. */
   placement?: Placement;
+  /**
+   * Gas variants get the flue outlet at the back of the top (parts/flue.ts) in the plan, the
+   * front elevation and 3D, added by the registry. `false` for a kind that draws its own.
+   */
+  flue?: boolean;
+  /**
+   * A `flat` unit that stands above the floor on purpose (a platform). Every other flat unit is
+   * set into the floor and at most `FLUSH_HEIGHT` high.
+   */
+  raised?: boolean;
   /** Part of the building (columns): drawn with the wall pen and fill instead of as equipment. */
   structural?: boolean;
   /**

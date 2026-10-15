@@ -15,6 +15,8 @@ const ROSETTE = 0.02;
 const HOOK_PITCH = 0.1;
 /** Radius of a hook wire. */
 const WIRE = 0.0025;
+/** Wires of a whisk. */
+const WHISK_WIRES = 8;
 /** Distance of the end brackets from the rail ends. */
 const BRACKET_INSET = 0.04;
 
@@ -39,11 +41,11 @@ function utensil(p: Parts, i: number, x: number, y: number, z: number, r: number
       break;
     case 1: // skimmer: a flat perforated disc
       p.rod("steel", "y", x, (y + r * 2) / 2, z, y - r * 2, WIRE * 1.6);
-      p.rod("basket", "z", x, r * 1.2, z, 0.004, r);
+      p.rod("wire", "z", x, r * 1.2, z, 0.004, r);
       break;
     default: // whisk: a wire balloon on a handle
       p.rod("steelDark", "y", x, (y + r * 4) / 2, z, y - r * 4, WIRE * 2.4);
-      p.cyl("basket", x, z, r * 0.8, r * 4, r * 0.7);
+      p.wireCage(x, z, r * 0.8, r * 4, r * 0.7, WHISK_WIRES);
   }
 }
 

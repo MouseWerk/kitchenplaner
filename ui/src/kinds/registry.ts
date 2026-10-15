@@ -9,6 +9,7 @@ import type { Connections } from "../model/types";
 import { building } from "./building";
 import { cooking } from "./cooking";
 import { cooling } from "./cooling";
+import { withGasFlue } from "./parts/flue";
 import { prep } from "./prep";
 import { worktable } from "./prep/worktable";
 import { serving } from "./serving";
@@ -26,7 +27,8 @@ export const CATEGORIES: readonly CategoryId[] = ["cooking", "cooling", "washing
 
 export const CATALOG: readonly CatalogEntry[] = AREAS.flatMap((a) => a.entries);
 
-export const KINDS: readonly KindDef[] = AREAS.flatMap((a) => a.kinds);
+/** Every kind as the views draw it: gas variants with their flue outlet (`withGasFlue`). */
+export const KINDS: readonly KindDef[] = AREAS.flatMap((a) => a.kinds).map(withGasFlue);
 
 const BY_ID = new Map(CATALOG.map((e) => [e.id, e]));
 const BY_KIND = new Map(KINDS.map((k) => [k.kind, k]));

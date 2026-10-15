@@ -11,6 +11,8 @@ import { machineFeet, MACHINE_FOOT, mBox, mCircle, metres, pCircle, pRect } from
 
 /** Bowl rim standing out of the bowl (m). */
 const RIM = 0.008;
+/** Upright wires of the bowl guard. */
+const GUARD_WIRES = 16;
 
 function layout({ w, d, h }: Size, floor: boolean) {
   const baseTop = MACHINE_FOOT + h * (floor ? 0.05 : 0.07);
@@ -63,7 +65,7 @@ function mesh(p: Parts, s: Size, floor: boolean) {
   const hubTop = headBottom;
   p.cyl("steelDark", 0, zb, hubTop - 0.05, hubTop, 0.045);
   p.cyl("steelDark", rb * 0.3, zb, yb1 - rb * 0.8, hubTop - 0.05, 0.008);
-  p.cyl("basket", 0, zb, yb1, yb1 + (hubTop - 0.05 - yb1) * 0.6, rb + RIM);
+  p.wireCage(0, zb, yb1, yb1 + (hubTop - 0.05 - yb1) * 0.6, rb + RIM, GUARD_WIRES);
   if (floor) {
     // Hand wheel on the right of the column lifts the bowl.
     const zc = (-d / 2 + colFront) / 2;

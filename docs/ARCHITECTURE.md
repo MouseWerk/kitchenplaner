@@ -39,7 +39,9 @@ plan symbol, the elevation front and the 3D model, drawn in the item's own frame
 building blocks in `kinds/parts/` (plan, elevation, mesh, entry helpers; whatever two areas
 share lives there, the rest in the area's `common.ts`). `kinds/registry.ts` collects the areas
 into `CATALOG`, `CATEGORIES` and the lookups `catalogEntry`, `kindOf`, `kindDef` and
-`placementOf`; unknown catalog ids (a newer file) draw as a plain table.
+`placementOf`; unknown catalog ids (a newer file) draw as a plain table. The registry also adds
+the flue outlet to every gas variant (`withGasFlue`, `kinds/parts/flue.ts`), so no kind can ship
+a gas unit that looks electric.
 
 Each kind has a placement: `floor` (the default), `tableTop` (stands on a table: slicers, table
 mixers), `overhead` (hangs: hoods, wall shelves) or `flat` (in the floor: drains, channels,

@@ -3,7 +3,8 @@ import * as THREE from "three";
 import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog } from "../model/project";
 import { buildItemObject } from "./meshes";
-import { fitOrthoCamera, PRIORITY, ThumbnailQueue, viewDirection, type RendererFactory } from "./thumbnails";
+import { disposeMerged } from "./merge";
+import { fitOrthoCamera, PRIORITY, thumbnailModel, ThumbnailQueue, viewDirection, type RendererFactory } from "./thumbnails";
 
 const entry = (id: string) => CATALOG.find((e) => e.id === id)!;
 
@@ -198,6 +199,22 @@ describe("queue", () => {
     expect(src).toMatch(/LOOK\.exposure/);
     expect(src).toMatch(/LOOK\.environmentIntensity/);
     expect(src).not.toMatch(/THREE\.\w+ToneMapping/);
+    // The model is the merged one of the 3D view (metric UVs), not the raw parts.
+    expect(src).toMatch(/const model = thumbnailModel\(entry\)/);
+  });
+
+  it("draw the model merged as the 3D view does: one mesh per material, the steel grain in metres", () => {
+    const e = entry("table");
+    const model = thumbnailModel(e);
+    const names = model.children.map((c) => c.name);
+    expect(new Set(names).size).toBe(names.length);
+    const steel = model.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh && c.name === "steel")!;
+    const uv = steel.geometry.getAttribute("uv");
+    let maxUv = 0;
+    for (let i = 0; i < uv.count; i++) maxUv = Math.max(maxUv, Math.abs(uv.getX(i)), Math.abs(uv.getY(i)));
+    // The worktop is 1.2 m wide: its grain runs 1.2 UV units (a raw part stretches it over 0..1).
+    expect(maxUv).toBeCloseTo(e.width / 1000, 3);
+    disposeMerged(model);
   });
 
   it("the real WebGL factory fails cleanly without WebGL (happy-dom)", async () => {
