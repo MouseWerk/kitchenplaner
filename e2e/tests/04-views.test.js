@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appTest, panes, pressed, pressOnViews } from "../lib/kitchen.js";
+import { appTest, panes, pressed, pressOnPlan, pressOnViews } from "../lib/kitchen.js";
 import { Key } from "../lib/harness.js";
 
 const ELEVATIONS = ["Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West"];
@@ -11,30 +11,30 @@ async function waitPanes(app, check, what) {
 appTest("the keys 1 to 4 switch the layout of the views", async (app) => {
   await pressOnViews(app, "2");
   await waitPanes(app, (p) => JSON.stringify(p) === JSON.stringify(ELEVATIONS), "2 shows the four elevations");
-  assert.equal(await pressed(app, "Ansicht wählen"), "Ansichten");
+  assert.equal(await pressed(app, "Aufteilung wählen"), "Ansichten");
 
   await pressOnViews(app, "3");
   await waitPanes(app, (p) => JSON.stringify(p) === JSON.stringify(["3D"]), "3 shows the 3D view");
-  assert.equal(await pressed(app, "Ansicht wählen"), "3D");
+  assert.equal(await pressed(app, "Aufteilung wählen"), "3D");
 
   await pressOnViews(app, "4");
   await waitPanes(app, (p) => p.length === 4 && p.includes("Grundriss") && p.includes("3D"), "4 shows plan, 3D and two elevations");
-  assert.equal(await pressed(app, "Ansicht wählen"), "Alle Ansichten");
+  assert.equal(await pressed(app, "Aufteilung wählen"), "Übersicht");
 
   await pressOnViews(app, "1");
   await waitPanes(app, (p) => JSON.stringify(p) === JSON.stringify(["Grundriss"]), "1 shows the plan");
-  assert.equal(await pressed(app, "Ansicht wählen"), "Grundriss");
+  assert.equal(await pressed(app, "Aufteilung wählen"), "Grundriss");
 });
 
 appTest("the layout buttons switch the views", async (app) => {
-  await app.click("Ansichten", "header [role=group][aria-label='Ansicht wählen']");
+  await app.click("Ansichten", "header [role=group][aria-label='Aufteilung wählen']");
   await waitPanes(app, (p) => p.length === 4 && p.every((x) => x.startsWith("Ansicht ")), "the elevations button");
 
   // The cut depth of the elevations: the app's own menu (inside the window, the current choice
   // checked), one setting for all four panes.
   const cutLabels = () => app.exec(() => [...document.querySelectorAll("section[aria-label^='Ansicht '] .pane-head [aria-haspopup=menu]")].map((b) => b.innerText.trim()));
-  assert.deepEqual(await cutLabels(), Array(4).fill("Wand (1,5 m)"));
-  await app.click("Wand (1,5 m)", "section[aria-label='Ansicht Nord'] .pane-head");
+  assert.deepEqual(await cutLabels(), Array(4).fill("1.500 mm vor der Wand"));
+  await app.click("1.500 mm vor der Wand", "section[aria-label='Ansicht Nord'] .pane-head");
   await app.waitFor("[role=menu]");
   const menu = await app.exec(() => {
     const m = document.querySelector("[role=menu]");
@@ -43,7 +43,7 @@ appTest("the layout buttons switch the views", async (app) => {
     return { items, inside: r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight, focused: document.activeElement?.getAttribute("aria-checked") };
   });
   assert.deepEqual(menu.items, [
-    { label: "Wand (1,5 m)", checked: "true" },
+    { label: "1.500 mm vor der Wand", checked: "true" },
     { label: "Halber Raum", checked: "false" },
     { label: "Ganzer Raum", checked: "false" },
   ]);
@@ -55,11 +55,11 @@ appTest("the layout buttons switch the views", async (app) => {
   await app.waitUntil(async () => JSON.stringify(await cutLabels()) === JSON.stringify(Array(4).fill("Ganzer Raum")), `the cut depth did not change: ${JSON.stringify(await cutLabels())}`);
   assert.equal(await app.exec(() => !!document.querySelector("[role=menu]")), false, "the menu stayed open");
   await app.click("Ganzer Raum", "section[aria-label='Ansicht Ost'] .pane-head");
-  await app.click("Wand (1,5 m)", "[role=menu]");
-  await app.waitUntil(async () => JSON.stringify(await cutLabels()) === JSON.stringify(Array(4).fill("Wand (1,5 m)")), "the cut depth did not change back");
-  await app.click("Alle Ansichten", "header [role=group][aria-label='Ansicht wählen']");
+  await app.click("1.500 mm vor der Wand", "[role=menu]");
+  await app.waitUntil(async () => JSON.stringify(await cutLabels()) === JSON.stringify(Array(4).fill("1.500 mm vor der Wand")), "the cut depth did not change back");
+  await app.click("Übersicht", "header [role=group][aria-label='Aufteilung wählen']");
   await waitPanes(app, (p) => p.length === 4 && p.includes("Grundriss"), "the all-views button");
-  await app.click("Grundriss", "header [role=group][aria-label='Ansicht wählen']");
+  await app.click("Grundriss", "header [role=group][aria-label='Aufteilung wählen']");
   await waitPanes(app, (p) => p.length === 1 && p[0] === "Grundriss", "the plan button");
 });
 
@@ -68,15 +68,25 @@ appTest("Tab switches between Einrichten and Raum, shown in the status bar", asy
   assert.equal(await pressed(app, "Modus"), "Einrichten");
   assert.match(await modeCell(), /Einrichten/);
 
-  await pressOnViews(app, Key.Tab);
+  await pressOnPlan(app, Key.Tab);
   await app.waitUntil(async () => (await pressed(app, "Modus")) === "Raum", "Tab did not switch to Raum");
   await app.waitUntil(async () => /Raum/.test(await modeCell()), `the status bar does not show Raum: „${await modeCell()}“`);
   // The room tools appear with the mode.
   assert.ok(await app.exec(() => !!document.querySelector("header [role=group][aria-label='Werkzeug']")), "no room tools in Raum mode");
 
-  await pressOnViews(app, Key.Tab);
+  await pressOnPlan(app, Key.Tab);
   await app.waitUntil(async () => (await pressed(app, "Modus")) === "Einrichten", "Tab did not switch back to Einrichten");
   await app.waitUntil(async () => /Einrichten/.test(await modeCell()), "the status bar does not show Einrichten");
+
+  // On a button inside the views (an elevation's cut depth) Tab moves the focus and keeps the mode.
+  await pressOnViews(app, "2");
+  await app.waitUntil(async () => (await panes(app)).length === 4, "2 did not show the elevations");
+  const cut = await app.exec(() => document.querySelector("main .pane-head button"));
+  await app.exec((e) => e.focus(), cut);
+  await app.keys(Key.Tab);
+  assert.equal(await pressed(app, "Modus"), "Einrichten");
+  assert.equal(await app.exec((e) => document.activeElement !== e, cut), true, "Tab did not move the focus");
+  await pressOnViews(app, "1");
 
   // In a text field Tab moves the focus and keeps the mode.
   const name = await app.field("Projekt");

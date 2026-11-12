@@ -14,7 +14,6 @@ export const en = {
     switchTo: 'Deutsch',
     switchShort: 'DE',
     menu: 'Menu',
-    switchLabel: 'This page in German',
   },
   footer: {
     label: 'Footer',
@@ -40,20 +39,20 @@ export const en = {
       description: 'A fully planned restaurant kitchen with 65 positions to try out: floor plan, elevations, 3D, equipment list and the exported files to look at.',
     },
     download: {
-      title: 'Download Kitchenplaner – Windows, macOS, Linux',
+      title: 'Download Kitchenplaner – free for Windows, macOS and Linux',
       description: 'Download Kitchenplaner for free for Windows 10 and 11, macOS 11 or later and Linux, with notes on SmartScreen, Gatekeeper and the checksums of every file.',
     },
     changelog: {
-      title: 'Kitchenplaner changelog – every version',
-      description: 'What changed in each version of Kitchenplaner: new features and fixed bugs, taken from the release notes of the releases on GitHub.',
+      title: 'Kitchenplaner changelog – what changed in every version',
+      description: 'What changed in each version of Kitchenplaner: new features, improvements and fixed bugs, taken from the release notes of the releases published on GitHub.',
     },
     imprint: {
-      title: 'Legal notice – Kitchenplaner',
-      description: 'Legal notice of kitchenplaner.mousewerk.de: who provides the website and the Kitchenplaner app, and how to reach the provider.',
+      title: 'Legal notice – Kitchenplaner, commercial kitchen planner',
+      description: 'Legal notice of kitchenplaner.mousewerk.de: who provides the website and the Kitchenplaner app, how to reach them and who is responsible for the content.',
     },
     privacy: {
-      title: 'Privacy – Kitchenplaner',
-      description: 'Privacy policy of kitchenplaner.mousewerk.de: no cookies, no tracking, no external fonts; what is processed when you open a page of the website.',
+      title: 'Privacy policy – Kitchenplaner, commercial kitchen planner',
+      description: 'Privacy policy of kitchenplaner.mousewerk.de: no cookies, no tracking, no external fonts; what is processed when you visit and when the app checks for updates.',
     },
     notFound: {
       title: 'Page not found – Kitchenplaner',
@@ -109,8 +108,9 @@ export const en = {
           caption: 'The whole kitchen in 3D from the south-east.',
         },
         {
-          title: 'A catalog of 359 units',
-          text: 'Cooking, cooling, washing, tables and preparation, serving, storage, ventilation and building elements such as columns and floor drains. Many units come in several widths and as electric or gas units, each with a 3D preview and its connection values.',
+          title: 'A catalog of {units} units',
+          titleUnknown: 'A catalog of units',
+          text: 'In nine groups: Cooking, Refrigeration, Washing & hygiene, Work tables, Food preparation, Serving, Storage, Ventilation and Building elements such as columns and floor drains. Many units come in several widths and as electric or gas units, each with a 3D preview and its connection values.',
           alt: 'The catalog with a 3D preview and connection values, searching for “kombi”',
           caption: 'The catalog: searching for “kombi”, next to it the preview with connection values.',
         },
@@ -213,7 +213,6 @@ export const en = {
       title: 'macOS',
       req: 'macOS 11 or later, Apple Silicon and Intel',
       primary: 'Disk image for macOS',
-      secondary: 'App as an archive',
       steps: [
         { text: 'Open the disk image and drag Kitchenplaner into the Applications folder.' },
         { text: 'The app is not notarized, so macOS blocks the first start. On macOS 15 and later, then open System Settings → Privacy & Security and click “Open Anyway” next to Kitchenplaner. On older versions, right-click the app in the Finder, choose “Open” and confirm with “Open” once more.' },
@@ -228,6 +227,7 @@ export const en = {
       steps: [
         { text: 'Debian and Ubuntu: install the .deb package in your download folder with', cmd: 'sudo apt install ./{deb}' },
         { text: 'Other distributions: make the AppImage executable and start it. It needs FUSE 2, on Ubuntu the package libfuse2 or libfuse2t64.', cmd: 'chmod +x {appimage}' },
+        { text: 'The AppImage updates itself. An installation from the .deb package cannot: it reports a new version, which you then download here and install with apt again.' },
       ],
     },
     checksums: {
@@ -243,7 +243,7 @@ export const en = {
     },
     updates: {
       title: 'Updates',
-      text: 'Kitchenplaner looks for new versions itself and shows a notice with “Update now” and “Later”; it saves unsaved changes first. You switch this off in the menu “View” with “Check for updates automatically”.',
+      text: 'Kitchenplaner looks for new versions itself and shows a notice with “Update now” and “Later”; it saves unsaved changes first. You switch this off in the menu “View” with “Check for updates automatically”. On Linux this applies to the AppImage; an installation from the .deb package only reports new versions.',
       since: '0.2.0',
     },
     older: 'Older versions and every file',
@@ -254,7 +254,6 @@ export const en = {
     lead: 'Every version, the newest first. Terms of the user interface are quoted in German in the notes, as the German edition of the app shows them.',
     version: 'Version {v}',
     released: 'Released on {date}',
-    upcoming: 'Coming soon',
     onGithub: 'Release on GitHub',
     sections: { Improved: 'Improved', Fixed: 'Fixed', Added: 'Added', Changed: 'Changed', Removed: 'Removed' },
   },
@@ -295,5 +294,6 @@ export const en = {
   notFound: {
     title: 'Page not found',
     text: 'This page does not exist (any more). Perhaps one of these pages helps:',
+    home: 'Home',
   },
 };

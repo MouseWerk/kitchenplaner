@@ -1,13 +1,14 @@
 // Updates of the installed app. At start and every few hours the shell asks the release feed
 // (src-tauri/src/updater.rs); a newer version shows a quiet notice (components/UpdateNotice.tsx)
 // with „Jetzt aktualisieren“ and „Später“. Installing saves the project first if the user wants to
-// keep its changes, downloads with progress, and restarts into the new version. Never in the
+// keep its changes, downloads with progress, asks again about changes made during the download,
+// and restarts into the new version. Never in the
 // browser, in debug builds or under the end-to-end tests. A failed check is only logged and noted
 // in the settings menu: it must never get in the way of planning.
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
-import { saveFile } from "./actions";
+import { commitFocusedField, saveFile } from "./actions";
 import { t } from "./i18n";
 import { confirmDialog, isTauri } from "./platform";
 import { getSettings } from "./settings";
@@ -32,8 +33,10 @@ export interface UpdateProgress {
 export interface UpdaterApi {
   enabled(): Promise<boolean>;
   check(): Promise<UpdateInfo | null>;
-  /** Resolves only if the app did not restart (it normally does). */
-  install(onProgress: (p: UpdateProgress) => void): Promise<void>;
+  /** Downloads the update of the last check and verifies it; a new check drops the download. */
+  download(onProgress: (p: UpdateProgress) => void): Promise<void>;
+  /** Installs the downloaded update; resolves only if the app did not restart (it normally does). */
+  install(): Promise<void>;
 }
 
 export interface UpdateState {
@@ -53,6 +56,13 @@ const INITIAL: UpdateState = { supported: false, available: null, later: null, p
 
 let state: UpdateState = INITIAL;
 let api: UpdaterApi | null = null;
+/** The version the shell holds downloaded, ready to install; null when none. */
+let downloaded: string | null = null;
+/**
+ * The check under way, if any. Its answer replaces the shell's update and drops a download, so a
+ * download waits for it instead of being dropped when the answer comes in after it.
+ */
+let checking: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<UpdateState>) {
@@ -78,11 +88,12 @@ export function useUpdates(): UpdateState {
 export const tauriUpdater: UpdaterApi = {
   enabled: () => invoke<boolean>("update_enabled"),
   check: () => invoke<UpdateInfo | null>("update_check"),
-  async install(onProgress) {
+  async download(onProgress) {
     const channel = new Channel<UpdateProgress>();
     channel.onmessage = onProgress;
-    await invoke("update_install", { onProgress: channel });
+    await invoke("update_download", { onProgress: channel });
   },
+  install: () => invoke("update_install"),
 };
 
 const underTest = () => typeof window !== "undefined" && (window as { __KITCHENPLANER_E2E__?: boolean }).__KITCHENPLANER_E2E__ === true;
@@ -110,6 +121,8 @@ export function startUpdates(updater?: UpdaterApi): () => void {
     stopped = true;
     if (timer) clearInterval(timer);
     api = null;
+    downloaded = null;
+    checking = null;
     state = INITIAL;
   };
 }
@@ -119,9 +132,21 @@ export function startUpdates(updater?: UpdaterApi): () => void {
  * there is none or the check failed.
  */
 export async function checkForUpdate(fromMenu = false): Promise<void> {
+  // None while downloading or installing: its answer would drop the download in the shell.
   if (!api || !state.supported || state.progress) return;
+  const run = askFeed(api, fromMenu);
+  checking = run;
   try {
-    const found = await api.check();
+    await run;
+  } finally {
+    if (checking === run) checking = null;
+  }
+}
+
+async function askFeed(updater: UpdaterApi, fromMenu: boolean): Promise<void> {
+  try {
+    const found = await updater.check();
+    downloaded = null;
     set({ available: found, checkFailed: false, installFailed: false, later: fromMenu ? null : state.later });
     if (fromMenu && !found) toast(t("update.upToDate"));
   } catch (e) {
@@ -142,24 +167,50 @@ export function noticeVisible(s: UpdateState): boolean {
 
 /**
  * Installs the found update and restarts. Unsaved changes are saved first, or the update waits:
- * the restart would lose them.
+ * the restart would lose them. Planning goes on during the download, so the question comes again
+ * before the restart when there are new changes; cancelled there, the download is kept for the
+ * next „Jetzt aktualisieren“.
  */
 export async function installUpdate(): Promise<void> {
   const found = state.available;
   if (!api || !found || found.manual || state.progress) return;
-  if (useStore.getState().dirty) {
-    const save = await confirmDialog(t("update.saveFirst"), t("app.name"), t("update.saveAndUpdate"), t("common.cancel"));
-    if (!save || !(await saveFile())) return;
-  }
+  if (!(await saveChanges())) return;
   set({ progress: { downloaded: 0, total: null }, installFailed: false });
+  // A check that started before: its answer is waited for, and the update goes on only when it is
+  // still this version (a newer one shows in the notice instead).
+  if (checking) {
+    await checking;
+    if (state.available?.version !== found.version || state.available.manual) {
+      set({ progress: null });
+      return;
+    }
+  }
   try {
-    await api.install((p) => set({ progress: p }));
+    if (downloaded !== found.version) {
+      await api.download((p) => set({ progress: p }));
+      downloaded = found.version;
+    }
+    if (!(await saveChanges())) {
+      set({ progress: null });
+      return;
+    }
+    await api.install();
     // Still here: the platform did not restart by itself.
     set({ progress: null });
   } catch (e) {
     console.warn("update install failed:", e);
+    // The shell keeps neither a failed download nor one it failed to install: the retry loads again.
+    downloaded = null;
     set({ progress: null, installFailed: true });
   }
+}
+
+/** Applies a typed field value, then saves unsaved changes if the user agrees; false: no update now. */
+async function saveChanges(): Promise<boolean> {
+  commitFocusedField();
+  if (!useStore.getState().dirty) return true;
+  const save = await confirmDialog(t("update.saveFirst"), t("app.name"), t("update.saveAndUpdate"), t("common.cancel"));
+  return save && (await saveFile());
 }
 
 /** Download progress in percent, or null while the size is unknown. */

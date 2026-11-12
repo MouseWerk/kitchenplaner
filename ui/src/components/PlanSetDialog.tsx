@@ -75,7 +75,7 @@ export function PlanSetDialog(props: { onClose: () => void }) {
     if (ok) props.onClose();
   };
 
-  const cutName = t(`view.cut.${cut}` as const, { m: WALL_CUT_DEPTH / 1000 });
+  const cutName = t(`view.cut.${cut}` as const, { mm: WALL_CUT_DEPTH });
   const scaleOptions: { value: ScaleChoice; label: string }[] = [{ value: "auto", label: t("planSet.scaleAuto") }, ...PLAN_SCALES.map((s) => ({ value: s, label: `1:${s}` }))];
 
   return createPortal(

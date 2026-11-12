@@ -12,19 +12,27 @@ import "./styles/tools.css";
 import "./styles/plan-set.css";
 import "./styles/update.css";
 import { App } from "./App";
+import { ErrorBoundary, installErrorHandlers } from "./components/ErrorBoundary";
 import { applySettings } from "./lib/settings";
 import { useStore } from "./store/store";
 import { newProject } from "./model/project";
 import { startAutosave } from "./lib/autosave";
+import { installCloseGuard } from "./lib/closeGuard";
 
+// An error no code caught shows as a message rather than as an action that silently did nothing.
+installErrorHandlers();
 applySettings();
 // The first project is created after the language is known, so its name is translated.
 useStore.getState().load(newProject(), null);
 // Backups of unsaved changes from here on (lib/autosave.ts).
 startAutosave();
+// The question before closing over unsaved changes: outside the app, so it outlives a crash of the view.
+installCloseGuard();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

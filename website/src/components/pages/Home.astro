@@ -3,7 +3,8 @@ import Base from '../../layouts/Base.astro';
 import Shot from '../Shot.astro';
 import { dicts, fill, type Lang } from '../../i18n';
 import { getDownloads, available } from '../../data/release.mjs';
-import { ROUTES, REPO_URL, ISSUES_URL, LATEST_URL } from '../../data/site.mjs';
+import { ANCHORS, ROUTES, REPO_URL, ISSUES_URL, LATEST_URL } from '../../data/site.mjs';
+import { catalogUnits } from '../../data/catalog.mjs';
 import { softwareApplication } from '../../data/jsonld';
 import { shot, crop, type ShotName } from '../../data/shots';
 import { variant, DESKTOP_WIDTHS, PHONE_WIDTHS, PHONE, PHONE_SIZES } from '../../data/images';
@@ -15,11 +16,20 @@ const h = t.home;
 const d = await getDownloads();
 
 const FEATURE_SHOTS: ShotName[] = ['02-grundriss', '08-ansichten', '04-3d-uebersicht', '10-katalog-vorschau', '11-operator-verschieben', '12-raum-wand'];
-const FEATURE_SIZES = '(min-width: 1244px) 680px, (min-width: 960px) 56vw, calc(100vw - 32px)';
+// From 960 px a feature's screenshot takes 7 of 12 columns of the 1180 px page, less the 48 px gap.
+const FEATURE_SIZES = '(min-width: 1244px) 660px, (min-width: 960px) calc(58.34vw - 66px), (min-width: 720px) calc(100vw - 64px), calc(100vw - 32px)';
 const more = h.features.more.filter((m) => available(d, 'since' in m ? m.since : undefined));
+// The catalog's size is that of the release people download (catalog.mjs), never main's.
+const units = catalogUnits(d.latest?.version);
+const features = h.features.items.map((f) => ({
+  ...f,
+  title: 'titleUnknown' in f ? (units ? fill(f.title, { units: units.toLocaleString(lang === 'de' ? 'de-DE' : 'en-GB') }) : f.titleUnknown) : f.title,
+}));
 
 // The hero is the largest paint: preload the one variant the browser will show (same files as Shot).
-const HERO_SIZES = '(min-width: 1244px) 1180px, calc(100vw - 32px)';
+// From 1200 px text and screenshot stand side by side (7 of 12 columns, site.css), below that the
+// screenshot spans the page.
+const HERO_SIZES = '(min-width: 1244px) 660px, (min-width: 1200px) calc(58.34vw - 66px), (min-width: 720px) calc(100vw - 64px), calc(100vw - 32px)';
 const [heroDark, heroLight, heroPhone] = await Promise.all([
   variant(shot('01-alle-ansichten'), DESKTOP_WIDTHS, 1200),
   variant(shot('14-hell-alle-ansichten'), DESKTOP_WIDTHS, 1200),
@@ -33,36 +43,40 @@ const preload = [
 
 const app = await softwareApplication(lang, d, {
   description: t.meta.home.description,
-  features: [...h.features.items.map((f) => f.title), ...more.map((m) => m.title)],
-  shots: [['01-alle-ansichten', h.heroAlt], ...FEATURE_SHOTS.map((s, i): [ShotName, string] => [s, h.features.items[i].alt])],
+  features: [...features.map((f) => f.title), ...more.map((m) => m.title)],
+  shots: [['01-alle-ansichten', h.heroAlt], ...FEATURE_SHOTS.map((s, i): [ShotName, string] => [s, features[i].alt])],
 });
 ---
 <Base lang={lang} page="home" title={t.meta.home.title} description={t.meta.home.description} schema={[app]} preload={preload}>
-  <section class="hero" aria-labelledby="titel">
-    <div class="wrap">
+  <section class="hero" aria-labelledby="hero-h">
+    <div class="wrap hero-grid">
       <div class="hero-text">
         <p class="eyebrow">{h.eyebrow}</p>
-        <h1 id="titel">{h.title}</h1>
+        <h1 id="hero-h">{h.title}</h1>
         <p class="lead">{h.lead}</p>
         <div class="buttons">
           <a class="btn btn-primary" href={ROUTES.download[lang]}>{h.download}</a>
           <a class="btn btn-secondary" href={ROUTES.example[lang]}>{h.example}</a>
         </div>
         <p class="facts">
-          {d.latest
-            ? <a href={ROUTES.changelog[lang]}>{fill(h.version, { v: d.latest.version })}</a>
-            : <a href={LATEST_URL} rel="noopener">GitHub</a>}
-          {h.facts.map((f) => <><span class="sep" aria-hidden="true">·</span><span>{f}</span></>)}
+          {/* Lines break only between facts; the dot in front of the first fact of a line is cut
+              off (site.css), so no line starts with one. */}
+          <span class="facts-row">
+            {d.latest
+              ? <a class="fact" href={ROUTES.changelog[lang]}>{fill(h.version, { v: d.latest.version })}</a>
+              : <a class="fact" href={LATEST_URL} rel="noopener">GitHub</a>}
+            {h.facts.map((f) => <span class="fact">{f}</span>)}
+          </span>
         </p>
       </div>
       <Shot name="01-alle-ansichten" light="14-hell-alle-ansichten" phone="05-3d-kochinsel" alt={h.heroAlt} sizes={HERO_SIZES} eager />
     </div>
   </section>
 
-  <section class="section section-alt" id="fuer-wen" aria-labelledby="fuer-wen-titel">
+  <section class="section section-alt" id={ANCHORS.audience[lang]} aria-labelledby={`${ANCHORS.audience[lang]}-h`}>
     <div class="wrap">
       <div class="section-head">
-        <h2 id="fuer-wen-titel">{h.audience.title}</h2>
+        <h2 id={`${ANCHORS.audience[lang]}-h`}>{h.audience.title}</h2>
       </div>
       <ul class="cards">
         {h.audience.items.map((a) => (
@@ -75,14 +89,14 @@ const app = await softwareApplication(lang, d, {
     </div>
   </section>
 
-  <section class="section" id="funktionen" aria-labelledby="funktionen-titel">
+  <section class="section" id={ANCHORS.features[lang]} aria-labelledby={`${ANCHORS.features[lang]}-h`}>
     <div class="wrap">
       <div class="section-head">
-        <h2 id="funktionen-titel">{h.features.title}</h2>
+        <h2 id={`${ANCHORS.features[lang]}-h`}>{h.features.title}</h2>
         <p class="lead">{h.features.intro}</p>
       </div>
       <div class="features">
-        {h.features.items.map((f, i) => (
+        {features.map((f, i) => (
           <div class="feature">
             <div class="feature-text">
               <h3><span class="pos" aria-hidden="true">{i + 1}</span>{f.title}</h3>
@@ -107,10 +121,10 @@ const app = await softwareApplication(lang, d, {
     </div>
   </section>
 
-  <section class="section section-alt" id="open-source" aria-labelledby="open-source-titel">
+  <section class="section section-alt" id="open-source" aria-labelledby="open-source-h">
     <div class="wrap split">
       <div>
-        <h2 id="open-source-titel">{h.open.title}</h2>
+        <h2 id="open-source-h">{h.open.title}</h2>
         <p class="lead">{h.open.text}</p>
         <div class="buttons">
           <a class="btn btn-secondary" href={REPO_URL} rel="noopener">{h.open.source}</a>
@@ -118,7 +132,7 @@ const app = await softwareApplication(lang, d, {
         </div>
       </div>
       <div>
-        <h2 id="ausprobieren-titel">{h.cta.title}</h2>
+        <h2 id="try-h">{h.cta.title}</h2>
         <p class="lead">{h.cta.text}</p>
         <div class="buttons">
           <a class="btn btn-primary" href={ROUTES.download[lang]}>{h.cta.button}</a>

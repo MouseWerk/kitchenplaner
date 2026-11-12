@@ -107,14 +107,20 @@ export function numberNew(existing: readonly Item[], added: readonly Item[]): It
 }
 
 /**
- * Makes the position numbers valid: an item keeps its number when it is a whole number >= 1 that
- * no item before it in the list has; every other one gets the next free number above the highest,
- * in list order. Deterministic, so a damaged file always opens with the same numbers.
+ * Highest position number a file may hold. Far beyond any kitchen; a larger one is damage, and
+ * near 2^53 the next number would no longer be a different one.
+ */
+export const MAX_POS = 1_000_000;
+
+/**
+ * Makes the position numbers valid: an item keeps its number when it is a whole number from 1 to
+ * MAX_POS that no item before it in the list has; every other one gets the next free number above
+ * the highest, in list order. Deterministic, so a damaged file always opens with the same numbers.
  */
 export function repairPositions(items: readonly Item[]): Item[] {
   const seen = new Set<number>();
   const keep = items.map((it) => {
-    const ok = Number.isInteger(it.pos) && it.pos >= 1 && !seen.has(it.pos);
+    const ok = Number.isInteger(it.pos) && it.pos >= 1 && it.pos <= MAX_POS && !seen.has(it.pos);
     if (ok) seen.add(it.pos);
     return ok;
   });

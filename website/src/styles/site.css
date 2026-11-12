@@ -129,7 +129,7 @@ code {
   top: var(--sp-3);
 }
 
-/* Header: name and navigation in one row. Below 820px the navigation folds into a menu button
+/* Header: name and navigation in one row. Below 740px the navigation folds into a menu button
    (a <details> element; public/menu.js adds Escape and outside clicks), next to a short language
    switch. */
 
@@ -286,7 +286,7 @@ code {
   background: var(--bg-hover);
 }
 
-@media (max-width: 819px) {
+@media (max-width: 739px) {
   .nav-desktop {
     display: none;
   }
@@ -302,6 +302,13 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-3);
+}
+
+/* A list of buttons (the 404 page) shows no bullets. */
+ul.buttons {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .btn {
@@ -340,6 +347,16 @@ code {
 
 .btn small {
   font-weight: var(--fw-normal);
+}
+
+/* A file button: the name above, type and size below, so neither breaks into a ragged column. */
+.btn-stack {
+  flex-direction: column;
+  gap: 0;
+}
+
+.btn-stack small {
+  font-size: var(--fs-sm);
 }
 
 /* Screenshots */
@@ -419,15 +436,52 @@ figcaption {
   color: var(--text-muted);
   font-size: var(--fs-sm);
   line-height: 1.9;
+  /* The row starts one separator further left; clipping hides the separator in front of the
+     first fact of every line. The small margin keeps the focus ring of the first link visible. */
+  overflow: clip;
+  overflow-clip-margin: var(--sp-1);
+}
+
+.facts-row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-left: calc(-1 * var(--sp-5));
 }
 
 .facts a {
   color: inherit;
 }
 
-.facts .sep {
-  margin: 0 var(--sp-2);
+.facts .fact {
+  white-space: nowrap;
+}
+
+.facts .fact::before {
+  content: "·" / "";
+  display: inline-block;
+  width: var(--sp-5);
+  text-align: center;
   color: var(--text-faint);
+}
+
+/* From 1200 px the hero's text and screenshot stand side by side, so the app is in the first
+   screen on desktops too. */
+
+@media (min-width: 1200px) {
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--sp-7);
+    align-items: center;
+  }
+
+  .hero-grid .hero-text {
+    margin-bottom: 0;
+  }
+
+  .hero-grid h1 {
+    font-size: var(--fs-h1-split);
+  }
 }
 
 /* Position bubbles, as on the drawings: a number in a neutral circle. */
@@ -790,6 +844,13 @@ figcaption {
   padding-left: 1.25rem;
 }
 
+.release-meta a,
+.legal address a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
 .release h3 {
   margin-top: var(--sp-3);
 }
@@ -865,15 +926,19 @@ figcaption {
 }
 
 .footer-grid ul {
+  display: grid;
+  gap: var(--sp-1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+/* A link that wraps keeps its lines close, so the gap between links stays the larger one. */
 .footer-grid a {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
+  line-height: var(--lh-tight);
   color: var(--text-muted);
 }
 

@@ -79,3 +79,8 @@
   -webkit-user-select: none;
   z-index: var(--z-inline);
 }
+
+/* The plan is a tab stop (keyboard operation): its focus ring inside the pane, which clips. */
+.view2d[data-drawing]:focus-visible {
+  outline-offset: -2px;
+}

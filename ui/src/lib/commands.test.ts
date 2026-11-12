@@ -165,17 +165,41 @@ describe("transform sessions and changes from elsewhere", () => {
     expect(st().dirty).toBe(false);
   });
 
-  it("G, an edit in the inspector, Escape: the edit stays and stays undoable", () => {
+  it("G, an edit in the inspector, Escape: the edit stays and stays undoable, the move goes", () => {
     const s = beginTransform()!;
     applyTransform(s, (o) => ({ x: o.x + 500 }));
     st().updateItems(["a1"], () => ({ name: "Pass" }));
-    const edited = st().project;
     cancelTransform(s);
-    expect(st().project).toBe(edited);
     expect(st().project.items[0].name).toBe("Pass");
+    expect(st().project.items[0].x).toBe(1000);
     expect(st().dirty).toBe(true);
     expect(st().past.length).toBeGreaterThan(0);
     expect(st().isGestureActive()).toBe(false);
+  });
+
+  // The operator's next move used to note the edited project as its own, and Escape then put
+  // back the state from before the operator: the edit was gone, and not in the undo history.
+  it("G, an edit in the inspector, a further move, Escape: the edit stays", () => {
+    const s = beginTransform()!;
+    applyTransform(s, (o) => ({ x: o.x + 500 }));
+    st().updateItems(["a1"], () => ({ width: 1500 }));
+    applyTransform(s, (o) => ({ x: o.x + 700 }));
+    expect(st().project.items[0].width).toBe(1500);
+    cancelTransform(s);
+    expect(st().project.items[0].width).toBe(1500);
+    expect(st().project.items[0].x).toBe(1000);
+    expect(st().selection.items).toEqual(["a1"]);
+    expect(st().dirty).toBe(true);
+  });
+
+  it("Shift+D, an edit in the inspector, Escape: the copies go, the edit stays", () => {
+    const s = beginDuplicate()!;
+    applyTransform(s, (o) => ({ x: o.x + 500 }));
+    st().updateItems(["a1"], () => ({ name: "Pass" }));
+    applyTransform(s, (o) => ({ x: o.x + 600 }));
+    cancelTransform(s);
+    expect(st().project.items.map((i) => [i.id, i.name, i.x])).toEqual([["a1", "Pass", 1000]]);
+    expect(st().selection.items).toEqual(["a1"]);
   });
 
   it("a mode switch in the middle cancels without bringing the old mode's selection along", () => {

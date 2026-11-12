@@ -10,6 +10,8 @@ vi.mock("./platform", async (orig) => ({
   ...(await orig<typeof import("./platform")>()),
   confirmDialog: async () => ui.answer,
 }));
+// The unsaved-changes question: yes is „Nicht speichern“, no is „Abbrechen“.
+vi.mock("./unsaved", () => ({ askUnsaved: async () => (ui.answer ? "discard" : "cancel") }));
 
 const { AUTOSAVE_DELAY, AUTOSAVE_MAX_WAIT, autosaveStatus, backupDetails, browserBackend, discardOwnBackup, lastAutosave, restoreBackup, startAutosave } = await import("./autosave");
 type Backend = import("./autosave").AutosaveBackend;
@@ -134,6 +136,22 @@ describe("writing backups", () => {
     expect(b.log).toEqual(["write A", "clear"]);
   });
 
+  // The backup of an edit made while the file was written used to be removed with the save.
+  it("keeps the backup of an edit made while the file was written", async () => {
+    const b = fakeBackend();
+    stop = startAutosave(b);
+    rename("A");
+    const written = st().project;
+    rename("B");
+    st().markSaved("/a.kplan", written);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_MAX_WAIT);
+    expect(b.log).toEqual(["write B"]);
+    // An undo back to what was written is saved: the backup goes.
+    st().undo();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(b.log).toEqual(["write B", "clear"]);
+  });
+
   it("closing without saving removes the backup", async () => {
     const b = fakeBackend();
     stop = startAutosave(b);
@@ -241,7 +259,7 @@ describe("restoring", () => {
   it("describes a backup with its name, time and file", () => {
     const at = new Date("2026-10-15T14:32:00+02:00").getTime();
     expect(backupDetails({ ...backup, savedAt: at }, "de")).toEqual({ name: "Küche Süd", when: "Gesichert 15.10.2026, 14:32", file: "Datei „Küche.kplan“" });
-    expect(backupDetails({ ...backup, savedAt: at, pathExists: false }, "de").file).toBe("„Küche.kplan“ gibt es nicht mehr, öffnet als neues Projekt");
+    expect(backupDetails({ ...backup, savedAt: at, pathExists: false }, "de").file).toBe("„Küche.kplan“ gibt es nicht mehr; die Sicherung wird als neues Projekt geöffnet");
     expect(backupDetails({ ...backup, savedAt: at, path: null, name: "" }, "en")).toEqual({ name: "Untitled project", when: "Saved 15 Oct 2026, 14:32", file: "Never saved" });
   });
 });

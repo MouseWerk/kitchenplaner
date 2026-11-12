@@ -2,7 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import { dicts, fill, type Lang } from '../../i18n';
 import { getDownloads, formatDate } from '../../data/release.mjs';
-import { readNotes } from '../../data/notes.mjs';
+import { readNotes, publishedNotes } from '../../data/notes.mjs';
 
 
 interface Props { lang: Lang }
@@ -10,7 +10,7 @@ const { lang } = Astro.props;
 const t = dicts[lang];
 const c = t.changelog;
 const d = await getDownloads();
-const notes = await readNotes();
+const notes = publishedNotes(await readNotes(), d);
 const sectionTitle = (s: string) => (c.sections as Record<string, string>)[s] ?? s;
 ---
 <Base lang={lang} page="changelog" title={t.meta.changelog.title} description={t.meta.changelog.description}>
@@ -24,12 +24,14 @@ const sectionTitle = (s: string) => (c.sections as Record<string, string>)[s] ??
         const rel = d.byTag.get(`v${n.version}`);
         const id = `v${n.version.replace(/\./g, '-')}`;
         return (
-          <article class="release" id={id} aria-labelledby={`${id}-titel`} lang="en">
-            <h2 id={`${id}-titel`} lang={lang}>{fill(c.version, { v: n.version })}</h2>
-            <p class="release-meta" lang={lang}>
-              <span>{rel?.publishedAt ? fill(c.released, { date: formatDate(rel.publishedAt, lang) }) : c.upcoming}</span>
-              {rel && <a href={rel.htmlUrl} rel="noopener">{c.onGithub}</a>}
-            </p>
+          <article class="release" id={id} aria-labelledby={`${id}-h`} lang="en">
+            <h2 id={`${id}-h`} lang={lang}>{fill(c.version, { v: n.version })}</h2>
+            {rel && (
+              <p class="release-meta" lang={lang}>
+                {rel.publishedAt && <span>{fill(c.released, { date: formatDate(rel.publishedAt, lang) })}</span>}
+                <a href={rel.htmlUrl} rel="noopener">{c.onGithub}</a>
+              </p>
+            )}
             {n.intro.map((p) => <p set:html={p} />)}
             {n.sections.map((s) => (
               <>

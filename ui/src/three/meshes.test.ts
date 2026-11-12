@@ -4,7 +4,8 @@ import { CATALOG, kindDef, kindOf, placementOf } from "../kinds/registry";
 import { sinkBowlCount } from "../kinds/washing/sink";
 import { frontOf } from "../model/geometry";
 import type { Item } from "../model/types";
-import { buildItemObject, itemIdOf } from "./meshes";
+import { buildItemObject, itemIdOf, placeItemObject, sameModel } from "./meshes";
+import { mergeItemObject } from "./merge";
 import { isSharedGeometry } from "./shared";
 
 /** Tolerance for sizes in metres (a tenth of a millimetre). */
@@ -133,6 +134,35 @@ describe("buildItemObject", () => {
     expect(kindOf("from-a-newer-version")).toBe("worktable");
     const b = boxOf(buildItemObject(item("table", { catalogId: "from-a-newer-version" })));
     expect(b.max.y).toBeCloseTo(0.9, 4);
+  });
+});
+
+describe("moving a model instead of building it again", () => {
+  it("sameModel: only x, y and rotation may differ", () => {
+    const a = item("fridge-700");
+    expect(sameModel(a, { ...a, x: 10, y: 20, rotation: 45 })).toBe(true);
+    for (const patch of [{ elevation: 100 }, { width: 600 }, { depth: 600 }, { height: 1000 }, { catalogId: "table" }, { name: "x" }, { energy: "gas" as const }, { connections: {} }]) {
+      expect(sameModel(a, { ...a, ...patch }), JSON.stringify(patch)).toBe(false);
+    }
+  });
+
+  // The 3D view keeps the model of a moved or turned item and only places it again: that must
+  // give what a new build at the new place gives, for every kind.
+  it("placeItemObject on a merged model matches a new build at the new place", () => {
+    for (const entry of CATALOG) {
+      const before = item(entry.id);
+      const after = { ...before, x: 4321, y: 1234, rotation: 30 };
+      const kept = mergeItemObject(buildItemObject(before));
+      placeItemObject(kept, after);
+      const fresh = mergeItemObject(buildItemObject(after));
+      const a = boxOf(kept);
+      const b = boxOf(fresh);
+      for (const k of ["x", "y", "z"] as const) {
+        expect(a.min[k], `${entry.id} min ${k}`).toBeCloseTo(b.min[k], 5);
+        expect(a.max[k], `${entry.id} max ${k}`).toBeCloseTo(b.max[k], 5);
+      }
+      kept.matrixWorld.elements.forEach((v, i) => expect(v, `${entry.id} matrix ${i}`).toBeCloseTo(fresh.matrixWorld.elements[i], 9));
+    }
   });
 });
 

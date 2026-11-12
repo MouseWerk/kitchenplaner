@@ -50,7 +50,7 @@ describe("equipmentCsv", () => {
     expect(lines[1]).toBe("1,Herd; 6 Platten,,,,1200 × 900 × 900,22.4,400,,,,,,");
     expect(csv).toContain(',"Tisch, Edelstahl",');
     expect(csv).toContain(",Total,,,,,40.5,,12.5,");
-    expect(csv).toContain(",Connection values are typical values; check the manufacturer's data.,");
+    expect(csv).toContain(",Connection values are typical values; check the manufacturer’s data.,");
   });
 
   it("quotes only fields that need it", () => {

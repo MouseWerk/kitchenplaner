@@ -1,8 +1,11 @@
 // The translation check (design/writing.md): de.ts and en.ts have the same keys, no empty texts,
-// the same placeholders and plural shape per key, no emoji, no space before an ellipsis, the
-// glossary is kept and no German is left in English texts. True exceptions go into ALLOWED with
-// the reason.
+// the same placeholders and plural shape per key, no emoji, no space before an ellipsis, no straight
+// quotes or apostrophes, the glossary (docs/i18n.md) is kept, one term per concept in both
+// languages, German says "du", no German is left in English texts, and every key is used by the
+// app. True exceptions go into ALLOWED with the reason.
 
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { de, type Msg } from "../locales/de";
 import { en } from "../locales/en";
@@ -11,7 +14,10 @@ type Lang = "de" | "en";
 type Text = { key: string; where: string; lang: Lang; text: string };
 
 /** A finding of `rule` at `where` (a key, or `key.one`/`key.other`) that is accepted. */
-const ALLOWED: { rule: string; where: string; reason: string }[] = [];
+const ALLOWED: { rule: string; where: string; reason: string }[] = [
+  { rule: "one-term", where: "view3d.face.back", reason: "„Hinten“, the back face of the view cube, and „Zurück“, going back, are both “Back” in English." },
+  { rule: "glossary", where: "catDesc.donerGrill", reason: "A „senkrechter Drehspieß“ is the vertical spit itself, not a direction on the drawing." },
+];
 const allowed = (rule: string, where: string) => ALLOWED.some((a) => a.rule === rule && (a.where === where || where.startsWith(`${a.where}.`)));
 
 const catalogs: Record<Lang, Record<string, Msg>> = { de, en };
@@ -97,15 +103,17 @@ describe("catalogs", () => {
 
 describe("typography", () => {
   it("has no emoji", () => {
-    expect(check("emoji", all, (t) => /\p{Extended_Pictographic}|️/u.test(t.text.replace(/[©®™]/g, "")))).toEqual([]);
+    expect(check("emoji", all, (t) => /\p{Extended_Pictographic}|\u{FE0F}/u.test(t.text.replace(/[©®™]/g, "")))).toEqual([]);
   });
 
   it("puts the ellipsis right after the word, as one character", () => {
     expect(check("ellipsis", all, (t) => /\s…/.test(t.text) || /\.\.\./.test(t.text))).toEqual([]);
   });
 
-  it("uses typographic quotes in each language", () => {
+  it("uses typographic quotes and apostrophes in each language", () => {
     expect(check("quotes", all, (t) => /"/.test(t.text))).toEqual([]);
+    // „Los geht’s“, “manufacturer’s”: the apostrophe is ’, never '.
+    expect(check("apostrophe", all, (t) => /'/.test(t.text))).toEqual([]);
     // German „…“, English “…”.
     expect(check("quotes", textsOf("en"), (t) => /„/.test(t.text))).toEqual([]);
     expect(check("quotes", textsOf("de"), (t) => /”/.test(t.text))).toEqual([]);
@@ -115,6 +123,43 @@ describe("typography", () => {
 describe("glossary and leftovers", () => {
   it("German texts say „Computer“, not „Rechner“", () => {
     expect(check("glossary", textsOf("de"), (t) => /rechner/i.test(t.text))).toEqual([]);
+  });
+
+  // Terms the glossary (docs/i18n.md) decided against, with the term to use instead.
+  const AVOID: { lang: Lang; avoid: string; term: RegExp; use: string }[] = [
+    { lang: "de", avoid: "Aufschlagrichtung", term: /Aufschlagrichtung/, use: "Öffnungsrichtung" },
+    { lang: "de", avoid: "Wandansicht", term: /Wandansicht/, use: "Ansicht" },
+    { lang: "de", avoid: "Aufriss", term: /Aufriss/, use: "Ansicht" },
+    { lang: "de", avoid: "waagrecht/senkrecht", term: /(?<!\p{L})(waagrecht|senkrecht)/iu, use: "horizontal/vertikal" },
+    { lang: "en", avoid: "catalog", term: /(?<!\p{L})catalog(?!ue)/iu, use: "catalogue" },
+    { lang: "en", avoid: "American spelling", term: /(?<!\p{L})(colors?|centers?|liters?|meters?)(?!\p{L})/iu, use: "British spelling" },
+  ];
+  for (const a of AVOID) {
+    it(`${a.lang === "de" ? "German" : "English"} texts say ${a.use}, not ${a.avoid}`, () => {
+      expect(check("glossary", textsOf(a.lang), (t) => a.term.test(t.text))).toEqual([]);
+    });
+  }
+
+  it("use one term per concept: the same text in one language is the same text in the other", () => {
+    // Two keys with the same German text and different English texts (or the other way round) are
+    // one concept named twice, or two concepts sharing a name.
+    const bad: string[] = [];
+    for (const [from, to] of [["de", "en"], ["en", "de"]] as const) {
+      const byText = new Map<string, string[]>();
+      for (const [key, msg] of Object.entries(catalogs[from])) if (typeof msg === "string") byText.set(msg, [...(byText.get(msg) ?? []), key]);
+      for (const [text, keys] of byText) {
+        const shown = keys.filter((k) => !allowed("one-term", k));
+        const other = new Set(shown.map((k) => JSON.stringify(catalogs[to][k])));
+        if (other.size > 1) bad.push(`${from} „${text}“: ${shown.map((k) => `${k} = ${JSON.stringify(catalogs[to][k])}`).join(", ")}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("German texts say „du“, not „Sie“", () => {
+    // „Sie“ starting a sentence may be „it“ or „they“; inside a sentence and „Ihnen“ it is formal.
+    const formal = /(?<![.!?:]\s|^)(?<!\p{L})(Sie|Ihr|Ihre|Ihren|Ihrem|Ihrer|Ihres)(?!\p{L})|(?<!\p{L})Ihnen(?!\p{L})/u;
+    expect(check("formal", textsOf("de"), (t) => formal.test(t.text))).toEqual([]);
   });
 
   it("English texts have no German umlauts or ß left over", () => {
@@ -134,5 +179,23 @@ describe("glossary and leftovers", () => {
   it("German texts write umlauts, not ae/oe/ue", () => {
     const translit = /\p{L}*(geraet|tuer|groess|hoehe|aender|loesch|oeffn|kuehl|spuel|fuer|ueber|waehl|zurueck|moeglich)\p{L}*/iu;
     expect(check("transliteration", textsOf("de"), (t) => translit.test(t.text))).toEqual([]);
+  });
+});
+
+describe("keys", () => {
+  // The app's sources without the catalogs and the tests: a key only a test uses is dead text.
+  const root = resolve(__dirname, "..");
+  const sources = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? (e.name === "locales" ? [] : sources(join(dir, e.name))) : /\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [readFileSync(join(dir, e.name), "utf8")] : [],
+    );
+  const code = sources(root).join("\n");
+  // Keys written out in quotes, and the fixed start of keys built at run time (`facing.${f}`).
+  const literal = new Set([...code.matchAll(/["'`]([A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)["'`]/g)].map((m) => m[1]));
+  const prefixes = [...new Set([...code.matchAll(/`([A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9.]*)\$\{/g)].map((m) => m[1]))];
+
+  it("are all used by the app", () => {
+    const unused = Object.keys(de).filter((k) => !literal.has(k) && !prefixes.some((p) => k.startsWith(p)) && !allowed("unused", k));
+    expect(unused).toEqual([]);
   });
 });

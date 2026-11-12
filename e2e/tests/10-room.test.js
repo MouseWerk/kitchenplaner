@@ -3,12 +3,12 @@
 
 import assert from "node:assert/strict";
 import { formatVersion, Key } from "../lib/harness.js";
-import { appTest, clickAt, hover, panes, planRect, pressed, pressOnViews } from "../lib/kitchen.js";
+import { appTest, clickAt, hover, panes, planRect, pressed, pressOnPlan, pressOnViews } from "../lib/kitchen.js";
 
 appTest("a partition drawn with a typed length is saved with that length, a hatch in it too", async (app) => {
   await pressOnViews(app, "1");
   await app.waitUntil(async () => JSON.stringify(await panes(app)) === '["Grundriss"]', "the plan layout did not open");
-  await pressOnViews(app, Key.Tab);
+  await pressOnPlan(app, Key.Tab);
   await app.waitUntil(async () => (await pressed(app, "Modus")) === "Raum", "Tab did not switch to Raum");
   await app.click("Trennwand", "header [role=group][aria-label='Werkzeug']");
   await app.waitUntil(async () => (await pressed(app, "Werkzeug")) === "Trennwand", "the partition tool is not active");

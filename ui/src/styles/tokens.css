@@ -70,18 +70,23 @@
   --bg-active: rgb(255 255 255 / 0.08);
   --bg-selected: rgb(255 255 255 / 0.1);
   --bg-current: rgb(255 255 255 / 0.12);
+  /* Icon-only toggles that are on: no text to set in bold, so the tint itself carries the state
+     (3:1 against the bars they sit on). */
+  --bg-pressed: #696a6e;
 
   --border: rgb(255 255 255 / 0.08);
   --border-strong: rgb(255 255 255 / 0.14);
+  /* Edges of text fields and selects: 3:1 against every surface, so a field is found without hovering. */
+  --border-input: #6b6e75;
   --border-focus: #8a8d96;
   --focus-soft: rgb(255 255 255 / 0.07);
 
   --text: #e8e9ec;
-  --text-muted: #a3a6ae;
-  --text-faint: #8a8d95;
+  --text-muted: #a6a9b1;
+  --text-faint: #93969e;
 
   --accent: #5b8def;
-  --accent-strong: #4a7de0;
+  --accent-strong: #4371ca;
   --on-accent: #ffffff;
 
   --success: #4fbf7f;
@@ -132,22 +137,24 @@
     --bg-active: rgb(0 0 0 / 0.065);
     --bg-selected: rgb(0 0 0 / 0.075);
     --bg-current: rgb(0 0 0 / 0.09);
+    --bg-pressed: #888888;
 
     --border: rgb(0 0 0 / 0.08);
     --border-strong: rgb(0 0 0 / 0.14);
+    --border-input: #86888e;
     --border-focus: #6b6e76;
     --focus-soft: rgb(0 0 0 / 0.06);
 
     --text: #1d1e21;
-    --text-muted: #5c5f66;
-    --text-faint: #6e7178;
+    --text-muted: #5b5e65;
+    --text-faint: #63666d;
 
     --accent: #2f62d0;
     --accent-strong: #2553b8;
     --on-accent: #ffffff;
 
-    --success: #1f8a4c;
-    --warning: #9a6200;
+    --success: #1b7a43;
+    --warning: #8b5900;
     --danger: #c7372f;
     --warning-soft: rgb(196 128 0 / 0.12);
     --danger-soft: rgb(199 55 47 / 0.1);
@@ -189,22 +196,24 @@
   --bg-active: rgb(0 0 0 / 0.065);
   --bg-selected: rgb(0 0 0 / 0.075);
   --bg-current: rgb(0 0 0 / 0.09);
+  --bg-pressed: #888888;
 
   --border: rgb(0 0 0 / 0.08);
   --border-strong: rgb(0 0 0 / 0.14);
+  --border-input: #86888e;
   --border-focus: #6b6e76;
   --focus-soft: rgb(0 0 0 / 0.06);
 
   --text: #1d1e21;
-  --text-muted: #5c5f66;
-  --text-faint: #6e7178;
+  --text-muted: #5b5e65;
+  --text-faint: #63666d;
 
   --accent: #2f62d0;
   --accent-strong: #2553b8;
   --on-accent: #ffffff;
 
-  --success: #1f8a4c;
-  --warning: #9a6200;
+  --success: #1b7a43;
+  --warning: #8b5900;
   --danger: #c7372f;
   --warning-soft: rgb(196 128 0 / 0.12);
   --danger-soft: rgb(199 55 47 / 0.1);
@@ -231,4 +240,53 @@
 
   --shadow-pop: 0 8px 28px rgb(0 0 0 / 0.14), 0 1px 3px rgb(0 0 0 / 0.1);
   --scrim: rgb(0 0 0 / 0.3);
+}
+
+/* More contrast, when the system asks for it (Windows contrast themes without forced colors,
+   macOS "Increase contrast"): stronger borders and tints, muted text close to the main text.
+   Written for each theme block above; styles.test.ts checks these too. */
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="dark"] {
+    --bg-hover: rgb(255 255 255 / 0.08);
+    --bg-active: rgb(255 255 255 / 0.12);
+    --bg-selected: rgb(255 255 255 / 0.16);
+    --bg-current: rgb(255 255 255 / 0.2);
+    --border: rgb(255 255 255 / 0.24);
+    --border-strong: rgb(255 255 255 / 0.4);
+    --border-input: #9a9da5;
+    --border-focus: #d6d8dd;
+    --text-muted: #c8cbd1;
+    --text-faint: #b6b9c0;
+  }
+}
+
+@media (prefers-contrast: more) and (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg-hover: rgb(0 0 0 / 0.06);
+    --bg-active: rgb(0 0 0 / 0.1);
+    --bg-selected: rgb(0 0 0 / 0.12);
+    --bg-current: rgb(0 0 0 / 0.15);
+    --border: rgb(0 0 0 / 0.24);
+    --border-strong: rgb(0 0 0 / 0.4);
+    --border-input: #5f6268;
+    --border-focus: #2e3035;
+    --text-muted: #3d4046;
+    --text-faint: #484b51;
+      }
+}
+
+@media (prefers-contrast: more) {
+  :root[data-theme="light"] {
+    --bg-hover: rgb(0 0 0 / 0.06);
+    --bg-active: rgb(0 0 0 / 0.1);
+    --bg-selected: rgb(0 0 0 / 0.12);
+    --bg-current: rgb(0 0 0 / 0.15);
+    --border: rgb(0 0 0 / 0.24);
+    --border-strong: rgb(0 0 0 / 0.4);
+    --border-input: #5f6268;
+    --border-focus: #2e3035;
+    --text-muted: #3d4046;
+    --text-faint: #484b51;
+      }
 }

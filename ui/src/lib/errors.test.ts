@@ -17,6 +17,7 @@ describe("errorText", () => {
       ["notUtf8", "error.notProjectFile"],
       ["notProject", "error.notProjectFile"],
       ["readOnly", "error.readOnly"],
+      ["inUse", "error.inUse"],
       ["notFound", "error.notFound"],
       ["permissionDenied", "error.permissionDenied"],
       ["badExtension", "error.badExtension"],
@@ -36,6 +37,13 @@ describe("errorText", () => {
 
   it("shows the OS text for the generic kind", () => {
     expect(errorText(cmd("io", "a.svg", "Das Gerät ist nicht bereit."))).toBe(t("error.generic", { message: "Das Gerät ist nicht bereit." }));
+  });
+
+  it("the generic text fits every error it stands for, with the system's message last", () => {
+    // Not only file errors end up here (a failed export, a plain Error): no advice about folders.
+    expect(errorText(new Error("kaputt"))).toBe("Das hat nicht geklappt. Versuch es noch einmal; wenn es wieder passiert, starte Kitchenplaner neu. Meldung: kaputt");
+    setLang("en");
+    expect(errorText(new Error("broken"))).toBe("That did not work. Try again; if it happens again, restart Kitchenplaner. Message: broken");
   });
 
   it("falls back to the generic text for unknown kinds and missing names", () => {

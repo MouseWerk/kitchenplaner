@@ -18,6 +18,9 @@ const todo = (field: string) => `TODO: ${field}`;
 const val = (v: string | null, field: string) => v ?? todo(field);
 const title = kind === 'imprint' ? l.imprint.title : l.privacy.title;
 const GITHUB_PRIVACY = 'https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement';
+// The provider's details are German (name, legal form, street, country): on the English pages they
+// carry lang="de", so screen readers pronounce them in German.
+const de = lang === 'de' ? undefined : 'de';
 ---
 <Base lang={lang} page={kind} title={t.meta[kind].title} description={t.meta[kind].description} noindex={draft}>
   <div class="wrap page-head">
@@ -35,7 +38,7 @@ const GITHUB_PRIVACY = 'https://docs.github.com/site-policy/privacy-policies/git
       {kind === 'imprint' ? (
         <>
           <h2>{l.imprint.provider}</h2>
-          <address>
+          <address lang={de}>
             <span class:list={{ todo: !LEGAL.name }}>{val(LEGAL.name, 'name')}</span><br />
             <span class:list={{ todo: !LEGAL.street }}>{val(LEGAL.street, 'street')}</span><br />
             <span class:list={{ todo: !LEGAL.city }}>{val(LEGAL.city, 'city')}</span><br />
@@ -50,7 +53,7 @@ const GITHUB_PRIVACY = 'https://docs.github.com/site-policy/privacy-policies/git
           {LEGAL.register && <><h2>{l.imprint.register}</h2><p>{LEGAL.register}</p></>}
           {LEGAL.vat && <><h2>{l.imprint.vat}</h2><p>{LEGAL.vat}</p></>}
           <h2>{l.imprint.responsible}</h2>
-          <p><span class:list={{ todo: !LEGAL.responsible }}>{val(LEGAL.responsible, 'responsible')}</span></p>
+          <p><span lang={de} class:list={{ todo: !LEGAL.responsible }}>{val(LEGAL.responsible, 'responsible')}</span></p>
         </>
       ) : (
         <>
@@ -58,9 +61,9 @@ const GITHUB_PRIVACY = 'https://docs.github.com/site-policy/privacy-policies/git
           <ul>{l.privacy.shortItems.map((i) => <li>{i}</li>)}</ul>
           <h2>{l.privacy.controllerTitle}</h2>
           <address>
-            <span class:list={{ todo: !LEGAL.name }}>{val(LEGAL.name, 'name')}</span><br />
-            <span class:list={{ todo: !LEGAL.street }}>{val(LEGAL.street, 'street')}</span><br />
-            <span class:list={{ todo: !LEGAL.city }}>{val(LEGAL.city, 'city')}</span><br />
+            <span lang={de} class:list={{ todo: !LEGAL.name }}>{val(LEGAL.name, 'name')}</span><br />
+            <span lang={de} class:list={{ todo: !LEGAL.street }}>{val(LEGAL.street, 'street')}</span><br />
+            <span lang={de} class:list={{ todo: !LEGAL.city }}>{val(LEGAL.city, 'city')}</span><br />
             {LEGAL.email ? <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> : <span class="todo">{todo('email')}</span>}
           </address>
           <h2>{l.privacy.hostingTitle}</h2>

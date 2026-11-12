@@ -1,17 +1,20 @@
 // The equipment catalog in the left sidebar: search, categories, drag into the plan or click to
 // place at a free spot. Every entry shows a small 3D preview of its model; hovering or focusing a
 // row opens a larger preview with the dimensions and connection values next to the sidebar.
+//
+// The rows are one tab stop (a roving tabindex): Up and Down move between them, Home and End go
+// to the first and the last, across the groups that are open.
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
-import { CATALOG, CATEGORIES, kindOf, placementOf, SUBGROUPS, wallSnapReach, type CatalogEntry, type CategoryId, type GroupId } from "../kinds/registry";
+import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import { CATALOG, CATEGORIES, SUBGROUPS, type CatalogEntry, type CategoryId, type GroupId } from "../kinds/registry";
 import { drainText, waterText } from "../model/equipment";
-import { bounds, convexOverlap, footprint, snapItem } from "../model/geometry";
+import { freeSpot } from "../model/freeSpot";
+import { bounds } from "../model/geometry";
 import { itemFromCatalog } from "../model/project";
-import type { Item } from "../model/types";
 import { useStore } from "../store/store";
-import { CATALOG_DRAG_TYPE } from "../views/PlanView";
+import { announcePlaced, CATALOG_DRAG_TYPE } from "../views/PlanView";
 import { currentLang, num, t as translate, useT } from "../lib/i18n";
 import { prefetchThumbnails, PRIORITY, useThumbnail, type Priority } from "../three/thumbnails";
 
@@ -109,6 +112,9 @@ export function CatalogPanel() {
   const scroller = useRef<HTMLDivElement>(null);
   const observe = useVisibilityObserver(scroller);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  /** The row that holds the catalog's tab stop. */
+  const [current, setCurrent] = useState<string | null>(null);
   const q = query.trim();
 
   const groups = useMemo(
@@ -119,6 +125,28 @@ export function CatalogPanel() {
       })).filter((g) => g.entries.length > 0),
     [q, t],
   );
+
+  const hits = groups.reduce((n, g) => n + g.entries.length, 0);
+  const isOpen = (id: string) => q !== "" || !closed.has(id);
+  // The tab stop stays on its row while that row is shown, else it moves to the first row shown.
+  const shown = groups.filter((g) => isOpen(g.id)).flatMap((g) => g.entries.map((e) => e.id));
+  const tabStop = current !== null && shown.includes(current) ? current : (shown[0] ?? null);
+
+  const clearSearch = () => {
+    setQuery("");
+    searchRef.current?.focus();
+  };
+
+  const onRowKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>(".cat-row");
+    if (!row || e.altKey || e.ctrlKey || e.metaKey) return;
+    const to = rovingTarget([...(scroller.current?.querySelectorAll<HTMLElement>(".cat-row") ?? [])], row, e.key);
+    if (!to) return;
+    // The window's shortcuts would nudge the selected units with the same arrows.
+    e.preventDefault();
+    e.stopPropagation();
+    to.focus();
+  };
 
   useEffect(() => {
     const id = setTimeout(() => prefetchThumbnails(CATALOG, ROW_THUMB.w, ROW_THUMB.h), PREFETCH_DELAY_MS);
@@ -167,14 +195,43 @@ export function CatalogPanel() {
         <h2 className="eyebrow">{t("catalog.title")}</h2>
         <label className="search">
           <Search size={14} strokeWidth={1.75} aria-hidden />
-          <input type="search" value={query} placeholder={t("catalog.search")} onChange={(e) => setQuery(e.target.value)} aria-label={t("catalog.search")} />
+          <input
+            ref={searchRef}
+            type="search"
+            value={query}
+            placeholder={t("catalog.search")}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && query !== "") {
+                e.preventDefault();
+                e.stopPropagation();
+                setQuery("");
+              }
+            }}
+            aria-label={t("catalog.search")}
+          />
+          {query !== "" && (
+            <button type="button" className="icon-btn search-clear" onClick={clearSearch} title={t("catalog.clearSearch")} aria-label={t("catalog.clearSearch")}>
+              <X size={14} strokeWidth={1.75} aria-hidden />
+            </button>
+          )}
         </label>
+        <p className="sr-only" role="status">
+          {q !== "" ? t("catalog.found", { n: hits }) : ""}
+        </p>
       </div>
-      <div ref={scroller} className="sidebar-scroll" onScroll={preview ? hide : undefined}>
+      <div ref={scroller} className="sidebar-scroll" onScroll={preview ? hide : undefined} onKeyDown={onRowKey}>
         <VisibilityContext.Provider value={observe}>
-          {groups.length === 0 && <p className="empty">{t("catalog.noMatch")}</p>}
+          {groups.length === 0 && (
+            <div className="empty">
+              <p>{t("catalog.noMatch")}</p>
+              <button type="button" className="btn small" onClick={clearSearch}>
+                {t("catalog.clearSearch")}
+              </button>
+            </div>
+          )}
           {groups.map((g) => {
-            const open = q !== "" || !closed.has(g.id);
+            const open = isOpen(g.id);
             return (
               <section key={g.id} className="cat-group">
                 <button
@@ -190,7 +247,7 @@ export function CatalogPanel() {
                     })
                   }
                 >
-                  {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                  {open ? <ChevronDown size={14} strokeWidth={1.75} aria-hidden /> : <ChevronRight size={14} strokeWidth={1.75} aria-hidden />}
                   <span>{t(`category.${g.id}` as const)}</span>
                   <span className="count">{g.entries.length}</span>
                 </button>
@@ -198,7 +255,7 @@ export function CatalogPanel() {
                   subgroupsOf(g.id, g.entries).map((part) => (
                     <div key={part.id ?? "all"} className="cat-part" role={part.id ? "group" : undefined} aria-label={part.id ? t(`group.${part.id}` as const) : undefined}>
                       {part.id && (
-                        <h3 className="cat-subhead" aria-hidden>
+                        <h3 className="cat-subhead" aria-hidden title={t(`group.${part.id}` as const)}>
                           <span>{t(`group.${part.id}` as const)}</span>
                           <span className="count">{part.entries.length}</span>
                         </h3>
@@ -206,7 +263,7 @@ export function CatalogPanel() {
                       <ul className="cat-list">
                         {part.entries.map((e) => (
                           <li key={e.id}>
-                            <CatalogRow entry={e} events={rowEvents} described={preview?.entry.id === e.id} />
+                            <CatalogRow entry={e} events={rowEvents} described={preview?.entry.id === e.id} tabbable={e.id === tabStop} onCurrent={setCurrent} />
                           </li>
                         ))}
                       </ul>
@@ -233,7 +290,15 @@ interface RowEvents {
 
 const PREVIEW_ID = "catalog-preview";
 
-function CatalogRow({ entry, events, described }: { entry: CatalogEntry; events: RowEvents; described: boolean }) {
+/** Where Up, Down, Home and End move from `row` among `rows`; null for any other key or at an end. */
+export function rovingTarget<T>(rows: readonly T[], row: T, key: string): T | null {
+  const i = rows.indexOf(row);
+  if (i < 0 || rows.length === 0) return null;
+  const to = key === "ArrowDown" ? i + 1 : key === "ArrowUp" ? i - 1 : key === "Home" ? 0 : key === "End" ? rows.length - 1 : -1;
+  return to >= 0 && to < rows.length && to !== i ? rows[to] : null;
+}
+
+function CatalogRow({ entry, events, described, tabbable, onCurrent }: { entry: CatalogEntry; events: RowEvents; described: boolean; tabbable: boolean; onCurrent: (id: string) => void }) {
   const t = useT();
   const observe = useContext(VisibilityContext);
   const ref = useRef<HTMLButtonElement>(null);
@@ -245,6 +310,7 @@ function CatalogRow({ entry, events, described }: { entry: CatalogEntry; events:
       ref={ref}
       type="button"
       className="cat-row"
+      tabIndex={tabbable ? 0 : -1}
       draggable
       aria-describedby={described ? PREVIEW_ID : undefined}
       onDragStart={(ev) => {
@@ -259,6 +325,7 @@ function CatalogRow({ entry, events, described }: { entry: CatalogEntry; events:
       onMouseEnter={(ev) => events.onHover(entry, ev.currentTarget)}
       onMouseLeave={() => events.onLeave()}
       onFocus={(ev) => {
+        onCurrent(entry.id);
         // A click focuses the row too; the preview opens on keyboard focus only (hover covers the mouse).
         if (ev.currentTarget.matches(":focus-visible")) events.onFocus(entry, ev.currentTarget);
       }}
@@ -371,28 +438,15 @@ function CatalogPreview({ entry, row, sidebar }: { entry: CatalogEntry; row: HTM
   );
 }
 
-/** Places an entry against the first wall stretch that has room, else in the middle of the room. */
+/**
+ * Places an entry where the plan check has nothing to say about it (`freeSpot`): against a wall
+ * when one has room, else free in the room; in the middle of the room only when it fits nowhere.
+ */
 export function placeAtFreeSpot(entry: CatalogEntry) {
   const st = useStore.getState();
-  const { room, items } = st.project;
-  const b = bounds(room.points);
-  const centre = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 };
-  const draft = itemFromCatalog(entry, centre.x, centre.y);
-  const placement = placementOf(entry.kind);
-  const others = items.filter((i) => placementOf(kindOf(i.catalogId)) === placement);
-  // Try along the north wall first, left to right in grid steps, then the middle.
-  const step = Math.max(st.prefs.grid, 50);
-  for (let x = b.minX + entry.width / 2; x <= b.maxX - entry.width / 2; x += step) {
-    const s = snapItem({ ...draft, x, y: b.minY + entry.depth / 2 }, room, others, st.prefs.grid, true, wallSnapReach(entry.kind));
-    const candidate = { ...draft, ...s };
-    if (!others.some((o) => overlapsItem(o, candidate))) {
-      st.addItems([{ ...draft, x: s.x, y: s.y, rotation: s.rotation }]);
-      return;
-    }
-  }
-  st.addItems([draft]);
-}
-
-function overlapsItem(a: Item, b: Item): boolean {
-  return convexOverlap(footprint(a), footprint(b));
+  const b = bounds(st.project.room.points);
+  const draft = itemFromCatalog(entry, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2);
+  const spot = freeSpot(st.project, draft, st.prefs.grid);
+  st.addItems([spot ? { ...draft, ...spot } : draft]);
+  announcePlaced(draft.id);
 }

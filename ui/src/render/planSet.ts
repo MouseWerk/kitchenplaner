@@ -140,7 +140,7 @@ function drawingSources(project: Project, opts: PlanSetOptions, ctx: PlanSetCont
   const out: DrawingSheetSource[] = [];
   const tr = (k: TKey, vars?: Record<string, string | number>) => t(k, vars, ctx.lang);
   if (opts.plan) out.push({ kind: "drawing", title: tr("view.plan"), at: (ps) => planDrawing(project, { showNames: opts.names, showDims: true, paperScale: ps }) });
-  const cutName = tr(`view.cut.${ctx.cut}`, { m: WALL_CUT_DEPTH / 1000 });
+  const cutName = tr(`view.cut.${ctx.cut}`, { mm: WALL_CUT_DEPTH });
   for (const facing of FACINGS) {
     if (!opts.elevations.includes(facing)) continue;
     const view = tr("view.elevation", { facing: tr(`facing.${facing}`) });

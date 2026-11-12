@@ -42,6 +42,18 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 const fitTo = (box: FitBox, width: number, height: number) => fitViewport(typeof box === "function" ? box(width, height) : box, width, height);
 
 /**
+ * The viewport after the pane changed from `old` to `next` (pixels): fitted anew while the view
+ * follows the pane (`auto`, the user has not panned or zoomed), else shifted so what was in the
+ * middle stays there. A layout switch or a window resize thus re-fits an untouched plan.
+ */
+export function resizedViewport(vp: Viewport, old: { w: number; h: number }, next: { w: number; h: number }, auto: boolean, box: FitBox): Viewport {
+  if (next.w <= 0 || next.h <= 0) return vp;
+  if (auto) return fitTo(box, next.w, next.h);
+  if (old.w <= 0 || old.h <= 0 || (old.w === next.w && old.h === next.h)) return vp;
+  return { ...vp, ox: vp.ox + (next.w - old.w) / 2, oy: vp.oy + (next.h - old.h) / 2 };
+}
+
+/**
  * What a view fits: a box, or the box for a pane size, for a drawing whose annotations grow
  * when the pane is small (the elevations).
  */
@@ -64,17 +76,19 @@ export function useViewport(box: FitBox, fitKey: unknown) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // The last size seen here, outside React's state: the viewport follows it in the same
+    // callback, never from inside a state updater (which React may run late or twice).
+    let last = { w: 0, h: 0 };
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      setSize((old) => {
-        if (auto.current) {
-          if (r.width > 0 && r.height > 0) setVp(fitTo(boxRef.current, r.width, r.height));
-        } else if (old.w > 0 && old.h > 0 && (old.w !== r.width || old.h !== r.height)) {
-          // Keep what was in the middle in the middle.
-          setVp((v) => ({ ...v, ox: v.ox + (r.width - old.w) / 2, oy: v.oy + (r.height - old.h) / 2 }));
-        }
-        return { w: r.width, h: r.height };
-      });
+      const next = { w: r.width, h: r.height };
+      if (next.w === last.w && next.h === last.h) return;
+      const old = last;
+      last = next;
+      const follow = auto.current;
+      const box = boxRef.current;
+      setVp((v) => resizedViewport(v, old, next, follow, box));
+      setSize(next);
     });
     ro.observe(el);
     return () => ro.disconnect();

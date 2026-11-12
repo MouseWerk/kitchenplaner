@@ -32,6 +32,18 @@ describe("checkProject", () => {
     ]);
   });
 
+  it("lets hung units at different heights share a spot, but not ones that meet in height", () => {
+    // A hand-wash basin under a wall shelf, and a second shelf right on top of the first.
+    const p = testProject([testItem("hw", "handwash", 1000, 175), testItem("s1", "wall-shelf", 1000, 175, 0, { width: 400 })]);
+    const [hw, s1] = p.items;
+    expect(hw.elevation + hw.height).toBeLessThanOrEqual(s1.elevation);
+    p.items.push(testItem("s2", "wall-shelf", 1000, 175, 0, { width: 400, elevation: s1.elevation + s1.height }));
+    expect(checkProject(p)).toEqual([]);
+    // Lowered into the basin's range, the shelf collides with it.
+    p.items[1] = { ...s1, elevation: hw.elevation + hw.height - 50 };
+    expect(checkProject(p)).toEqual([{ key: "check.overlap", vars: { a: 1, b: 2 }, itemIds: ["hw", "s1"] }]);
+  });
+
   it("lets table-top units stand on a table and collide only with each other", () => {
     const p = testProject([
       testItem("t", "table", 2000, 350),
@@ -69,6 +81,14 @@ describe("checkProject", () => {
   it("reports items reaching outside the room", () => {
     const p = testProject([testItem("a", "table", 300, 3000), testItem("b", "table", 4000, 3000)]);
     expect(checkProject(p)).toEqual([{ key: "check.outside", vars: { pos: 1 }, itemIds: ["a"] }]);
+  });
+
+  it("reports an item turned across the inner corner of an L-shaped room, though all its corners are inside", () => {
+    // The inner corner is at (5000, 4000); the turned table's edge runs through it.
+    const p = testProject([testItem("t", "table", 4900, 3900, -45), testItem("ok", "table", 3000, 3600)]);
+    p.room.points = lRoom(8000, 6000, 3000, 2000);
+    p.room.openings = [];
+    expect(checkProject(p)).toEqual([{ key: "check.outside", vars: { pos: 1 }, itemIds: ["t"] }]);
   });
 
   it("reports floor items in front of a door, but not hoods above it", () => {

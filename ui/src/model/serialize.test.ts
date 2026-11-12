@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseProject, ProjectError, serializeProject } from "./serialize";
-import { FORMAT_VERSION } from "./project";
+import { FORMAT_VERSION, MAX_POS, nextPos } from "./project";
 import { testItem, testProject } from "./testProject";
 
 function sample() {
@@ -121,6 +121,23 @@ describe("parseProject", () => {
     for (const edit of cases) expect(errorOf(withRaw(edit)).key).toBe("error.invalid");
     // 100 m itself is still a size.
     expect(parseProject(withRaw((r) => (r.items[0].width = 100_000))).items[0].width).toBe(100_000);
+  });
+
+  it("rejects positions farther than 100 m from the origin", () => {
+    const cases: ((r: any) => void)[] = [
+      (r) => (r.items[0].x = 1e300),
+      (r) => (r.items[0].y = -1e300),
+      (r) => (r.items[0].x = -100_001),
+      (r) => (r.room.points[0].x = 1e9),
+    ];
+    for (const edit of cases) expect(errorOf(withRaw(edit)).key).toBe("error.invalid");
+    expect(parseProject(withRaw((r) => (r.items[0].x = -100_000))).items[0].x).toBe(-100_000);
+  });
+
+  it("renumbers a position number too large to count on from", () => {
+    const p = parseProject(withRaw((r) => (r.items[0].pos = 2 ** 53)));
+    expect(p.items[0].pos).toBeLessThanOrEqual(MAX_POS);
+    expect(nextPos(p.items)).not.toBe(p.items[0].pos);
   });
 
   it("rejects rooms without a floor area", () => {

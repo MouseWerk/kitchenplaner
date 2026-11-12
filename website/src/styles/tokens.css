@@ -12,6 +12,8 @@
   --fs-h3: 1.125rem;
   --fs-h2: clamp(1.5rem, 1.2rem + 1.2vw, 2.125rem);
   --fs-h1: clamp(2rem, 1.35rem + 2.8vw, 3.5rem);
+  /* The start page's headline beside the screenshot (from 1200 px). */
+  --fs-h1-split: clamp(2.25rem, 1rem + 1.6vw, 2.875rem);
   --lh-tight: 1.15;
   --lh-body: 1.6;
   --ls-tight: -0.02em;

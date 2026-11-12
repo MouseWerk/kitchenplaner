@@ -278,6 +278,7 @@ pub fn run() {
             autosave::autosave_discard,
             updater::update_enabled,
             updater::update_check,
+            updater::update_download,
             updater::update_install,
         ]);
     #[cfg(target_os = "macos")]

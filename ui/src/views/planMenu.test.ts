@@ -70,7 +70,7 @@ describe("the arrange menu", () => {
     act(() => st().select({ items: ["a", "b"] }));
     const align = entry(arrangeMenu(), "Ausrichten und verteilen") as { children: ContextEntry[] };
     // Two items have one gap: nothing to distribute.
-    expect(entry(align.children, "Waagrecht gleichmäßig verteilen")).toMatchObject({ disabled: true });
+    expect(entry(align.children, "Horizontal gleichmäßig verteilen")).toMatchObject({ disabled: true });
     const past = st().past.length;
     run(entry(align.children, "Oben ausrichten"));
     expect(st().past.length).toBe(past + 1);
@@ -96,7 +96,7 @@ describe("the room menu", () => {
     const m = roomMenu({ x: 1200, y: 6000 }, { kind: "opening", id: "door1" } as RoomHit);
     run(entry(m, "Anschlag wechseln"));
     expect(st().project.room.openings[0].hinge).toBe("end");
-    run(entry(m, "Aufschlagrichtung wechseln"));
+    run(entry(m, "Öffnungsrichtung wechseln"));
     expect(st().project.room.openings[0].swing).toBe("out");
     run(entry(roomMenu({ x: 0, y: 0 }, null), "Löschen"));
     expect(st().project.room.openings).toHaveLength(0);

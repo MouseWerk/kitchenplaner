@@ -98,7 +98,7 @@ textarea {
   height: var(--ctl-sm);
   padding: 0 var(--sp-2);
   background: var(--bg-input);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-input);
   border-radius: var(--r-sm);
   outline: none;
   user-select: text;

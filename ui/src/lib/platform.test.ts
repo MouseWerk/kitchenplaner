@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { mimeOf, PDF_FILTER, safeFileName } from "./platform";
+import { MAX_FILE_STEM, mimeOf, PDF_FILTER, safeFileName } from "./platform";
 
 describe("safeFileName", () => {
   it("replaces characters the file systems refuse and trims trailing dots and spaces", () => {
     expect(safeFileName('Küche: "Krone" 1/2')).toBe("Küche_ _Krone_ 1_2");
     expect(safeFileName("Plan. ")).toBe("Plan");
     expect(safeFileName("  ")).toBe("Kitchenplaner");
+  });
+
+  it("keeps the name short enough for every file system, without a trailing dot or space", () => {
+    expect(safeFileName("K".repeat(300))).toBe("K".repeat(MAX_FILE_STEM));
+    // Cut where a dot or space follows: those go too, as at the end of any name.
+    expect(safeFileName(`${"K".repeat(MAX_FILE_STEM - 2)}. Kantine`)).toBe("K".repeat(MAX_FILE_STEM - 2));
+    // A no-break space after the dot no longer keeps the dot.
+    expect(safeFileName("Plan. ")).toBe("Plan");
+    // Characters outside the BMP are not split in half.
+    expect(safeFileName("\u{1d538}".repeat(200))).toBe("\u{1d538}".repeat(MAX_FILE_STEM));
   });
 
   it("keeps clear of the device names Windows reserves", () => {

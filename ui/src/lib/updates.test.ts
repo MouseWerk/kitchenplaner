@@ -12,6 +12,10 @@ vi.mock("./platform", async (orig) => ({
   },
 }));
 vi.mock("./actions", () => ({
+  commitFocusedField: () => {
+    const el = document.activeElement;
+    if (el instanceof HTMLInputElement) el.blur();
+  },
   saveFile: async () => {
     ui.saves++;
     if (ui.saved) useStore.getState().markSaved("/a.kplan");
@@ -26,9 +30,12 @@ const { t } = await import("./i18n");
 type UpdaterApi = import("./updates").UpdaterApi;
 type UpdateInfo = import("./updates").UpdateInfo;
 
-/** A shell that offers `offer`, records checks and installs, and reports progress. */
-function fakeUpdater(offer: UpdateInfo | null, opts: { enabled?: boolean; failCheck?: boolean; failInstall?: boolean } = {}) {
-  const calls = { checks: 0, installs: 0 };
+/**
+ * A shell that offers `offer`, records checks, downloads and installs, and reports progress.
+ * `duringDownload` runs while the download is under way (the user planning on).
+ */
+function fakeUpdater(offer: UpdateInfo | null, opts: { enabled?: boolean; failCheck?: boolean; failInstall?: boolean; duringDownload?: () => void } = {}) {
+  const calls = { checks: 0, downloads: 0, installs: 0 };
   const api: UpdaterApi = {
     enabled: async () => opts.enabled ?? true,
     check: async () => {
@@ -36,10 +43,14 @@ function fakeUpdater(offer: UpdateInfo | null, opts: { enabled?: boolean; failCh
       if (opts.failCheck) throw { kind: "io", path: null, detail: "offline" };
       return offer;
     },
-    install: async (onProgress) => {
-      calls.installs++;
+    download: async (onProgress) => {
+      calls.downloads++;
       onProgress({ downloaded: 50, total: 200 });
       expect(getUpdateState().progress).toEqual({ downloaded: 50, total: 200 });
+      opts.duringDownload?.();
+    },
+    install: async () => {
+      calls.installs++;
       if (opts.failInstall) throw { kind: "io", path: null, detail: "signature" };
     },
   };
@@ -125,7 +136,7 @@ describe("looking for updates", () => {
 
   it("„Später“ hides the version until a newer one comes or the user asks", async () => {
     let offer: UpdateInfo = { version: "0.2.1", manual: false };
-    const api: UpdaterApi = { enabled: async () => true, check: async () => offer, install: async () => {} };
+    const api: UpdaterApi = { enabled: async () => true, check: async () => offer, download: async () => {}, install: async () => {} };
     stop = startUpdates(api);
     await settle();
     putOffUpdate();
@@ -190,6 +201,106 @@ describe("installing", () => {
     expect(noticeVisible(s)).toBe(true);
     await installUpdate();
     expect(calls.installs).toBe(2);
+    // The shell dropped the failed one: the retry downloads again.
+    expect(calls.downloads).toBe(2);
+  });
+
+  it("asks again when the project changed during the download, and keeps the download when cancelled", async () => {
+    const { api, calls } = fakeUpdater({ version: "0.2.1", manual: false }, { duringDownload: () => useStore.getState().updateRoom((r) => ({ height: r.height + 100 })) });
+    stop = startUpdates(api);
+    await settle();
+    ui.answer = false;
+    await installUpdate();
+    // Saved before, changed during the download: asked once, not restarted over the change.
+    expect(ui.asked).toEqual([t("update.saveFirst")]);
+    expect(calls.installs).toBe(0);
+    expect(useStore.getState().dirty).toBe(true);
+    expect(getUpdateState().progress).toBeNull();
+    // The next try uses the download it has, saves and installs.
+    ui.answer = true;
+    await installUpdate();
+    expect(calls.downloads).toBe(1);
+    expect(ui.saves).toBe(1);
+    expect(calls.installs).toBe(1);
+  });
+
+  it("counts a value typed in a field but not applied yet as a change", async () => {
+    const { api, calls } = fakeUpdater({ version: "0.2.1", manual: false });
+    stop = startUpdates(api);
+    await settle();
+    // A field that applies its text when it loses focus, as the inspector's do.
+    const field = document.createElement("input");
+    field.addEventListener("blur", () => useStore.getState().updateRoom((r) => ({ height: r.height + 100 })));
+    document.body.append(field);
+    field.focus();
+    ui.answer = false;
+    await installUpdate();
+    field.remove();
+    expect(ui.asked).toEqual([t("update.saveFirst")]);
+    expect(calls.downloads).toBe(0);
+    expect(calls.installs).toBe(0);
+  });
+
+  it("a new check drops a kept download", async () => {
+    const { api, calls } = fakeUpdater({ version: "0.2.1", manual: false }, { duringDownload: () => useStore.getState().updateRoom((r) => ({ height: r.height + 100 })) });
+    stop = startUpdates(api);
+    await settle();
+    ui.answer = false;
+    await installUpdate();
+    await checkForUpdate();
+    useStore.getState().load(testProject([]), "/a.kplan");
+    await installUpdate();
+    expect(calls.downloads).toBe(2);
+  });
+
+  it("a check under way when „Jetzt aktualisieren“ comes is waited for, so its answer cannot drop the download", async () => {
+    const { api, calls } = fakeUpdater({ version: "0.2.1", manual: false });
+    stop = startUpdates(api);
+    await settle();
+    // The shell's order of events: a check's answer drops what was downloaded before it.
+    const order: string[] = [];
+    let answer: (v: UpdateInfo | null) => void = () => {};
+    api.check = () => new Promise((r) => (answer = r));
+    const download = api.download;
+    api.download = async (p) => {
+      order.push("download");
+      await download(p);
+    };
+    const install = api.install;
+    api.install = async () => {
+      order.push("install");
+      await install();
+    };
+    const check = checkForUpdate();
+    const installing = installUpdate();
+    await settle();
+    expect(calls.downloads).toBe(0);
+    // No second check while it installs.
+    void checkForUpdate();
+    order.push("answer");
+    answer({ version: "0.2.1", manual: false });
+    await Promise.all([check, installing]);
+    expect(order).toEqual(["answer", "download", "install"]);
+    expect(calls.installs).toBe(1);
+  });
+
+  it("the answer of a check under way names a newer version: that one shows, nothing is installed", async () => {
+    const { api, calls } = fakeUpdater({ version: "0.2.1", manual: false });
+    stop = startUpdates(api);
+    await settle();
+    let answer: (v: UpdateInfo | null) => void = () => {};
+    api.check = () => new Promise((r) => (answer = r));
+    const check = checkForUpdate();
+    const installing = installUpdate();
+    await settle();
+    answer({ version: "0.2.2", manual: false });
+    await Promise.all([check, installing]);
+    expect(calls.downloads).toBe(0);
+    expect(calls.installs).toBe(0);
+    const s = getUpdateState();
+    expect(s.available?.version).toBe("0.2.2");
+    expect(s.progress).toBeNull();
+    expect(noticeVisible(s)).toBe(true);
   });
 
   it("a copy that cannot install the file itself is only told about it", async () => {

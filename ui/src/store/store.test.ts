@@ -99,6 +99,49 @@ describe("undo history", () => {
   });
 });
 
+describe("changed or not", () => {
+  it("an undo back to the saved state is not a change, a redo away from it is", () => {
+    st().addItems([itemFromCatalog(CATALOG[0], 1000, 1000)]);
+    st().markSaved("/a.kplan");
+    st().updateItems(st().selection.items, () => ({ x: 1500 }));
+    expect(st().dirty).toBe(true);
+    st().undo();
+    expect(st().dirty).toBe(false);
+    st().redo();
+    expect(st().dirty).toBe(true);
+    st().undo();
+    st().undo();
+    expect(st().dirty).toBe(true);
+  });
+
+  it("a change of nothing adds no undo step and changes nothing", () => {
+    const steps = st().past.length;
+    st().updateItems(["gone"], () => ({ x: 1 }));
+    st().updateOpening("gone", { width: 1 });
+    expect(st().past.length).toBe(steps);
+    expect(st().dirty).toBe(false);
+  });
+
+  it("edits made while the file was written stay marked as changed", () => {
+    st().addItems([itemFromCatalog(CATALOG[0], 1000, 1000)]);
+    const written = st().project;
+    st().updateItems(st().selection.items, () => ({ x: 1500 }));
+    st().markSaved("/a.kplan", written);
+    expect(st().dirty).toBe(true);
+    expect(st().path).toBe("/a.kplan");
+    st().undo();
+    expect(st().dirty).toBe(false);
+  });
+
+  it("a restored backup counts as changed until it is saved", () => {
+    const p = newProject(new Date(2026, 9, 12));
+    st().load(p, null, { dirty: true });
+    expect(st().dirty).toBe(true);
+    st().markSaved("/a.kplan");
+    expect(st().dirty).toBe(false);
+  });
+});
+
 describe("selection commands", () => {
   it("rotates, nudges, duplicates and deletes the selection", () => {
     const a = itemFromCatalog(CATALOG[0], 1000, 1000);

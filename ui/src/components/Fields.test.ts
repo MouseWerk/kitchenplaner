@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { DateField, NumberField, TextField } from "./Fields";
+import { DateField, NumberField, parseNumber, TextField } from "./Fields";
 import { formatDate, parseDate, setLang } from "../lib/i18n";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -78,6 +78,50 @@ describe("NumberField", () => {
     expect(onChange).toHaveBeenCalledWith(800);
   });
 
+  // A switch used to leave „3.200“ in an English field; leaving it read 3.2 and clamped to the minimum.
+  it.each([
+    ["de", "en", "3,200"],
+    ["en", "de", "3.200"],
+  ] as const)("shows the value in the new language after a switch (%s to %s) and changes nothing when left", (from, to, shown) => {
+    setLang(from);
+    const onChange = vi.fn();
+    act(() => root.render(createElement(NumberField, { label: "Raumhöhe", value: 3200, min: 2000, onChange })));
+    act(() => setLang(to));
+    expect(input().value).toBe(shown);
+    focus();
+    blur();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input().value).toBe(shown);
+  });
+
+  it("keeps the focus on Enter and shows the applied value", () => {
+    let value = 1200;
+    const onChange = vi.fn((v: number) => (value = v));
+    const render = () => act(() => root.render(createElement(NumberField, { label: "Breite", value, max: 3000, onChange })));
+    render();
+    focus();
+    type("5000");
+    key("Enter");
+    render();
+    expect(onChange).toHaveBeenCalledWith(3000);
+    expect(document.activeElement).toBe(input());
+    expect(input().value).toBe("3.000");
+    // Leaving afterwards applies nothing more.
+    blur();
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves an Enter that confirms an input method's composition alone", () => {
+    const onChange = vi.fn();
+    act(() => root.render(createElement(NumberField, { label: "Breite", value: 1200, onChange })));
+    focus();
+    type("800");
+    act(() => void input().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true })));
+    expect(onChange).not.toHaveBeenCalled();
+    key("Enter");
+    expect(onChange).toHaveBeenCalledWith(800);
+  });
+
   it("steps from the shown value with the arrow keys", () => {
     const onChange = vi.fn();
     act(() => root.render(createElement(NumberField, { label: "Höhe", value: 1.234, digits: 3, step: 1, onChange })));
@@ -87,7 +131,28 @@ describe("NumberField", () => {
   });
 });
 
+describe("parseNumber", () => {
+  it("reads the typographic minus as a minus", () => {
+    expect(parseNumber("−500", "de")).toBe(-500);
+    expect(parseNumber("−1.250,5", "de")).toBe(-1250.5);
+  });
+
+  it.each(["0x10", "1e3", "Infinity", "12abc", "-", "."])("refuses %j, which is no plain decimal", (text) => {
+    expect(parseNumber(text, "en")).toBeNull();
+  });
+});
+
 describe("TextField", () => {
+  it("applies on Enter and keeps the focus", () => {
+    const onChange = vi.fn();
+    act(() => root.render(createElement(TextField, { label: "Name", value: "Küche", onChange })));
+    focus();
+    type("Bar");
+    key("Enter");
+    expect(onChange).toHaveBeenCalledWith("Bar");
+    expect(document.activeElement).toBe(input());
+  });
+
   it("reverts the typed text on Escape and applies nothing when left", () => {
     const onChange = vi.fn();
     act(() => root.render(createElement(TextField, { label: "Name", value: "Küche", onChange })));

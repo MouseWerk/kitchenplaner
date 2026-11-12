@@ -67,6 +67,7 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
   const [cutaway, setCutaway] = useState(true);
   const [ortho, setOrtho] = useState(false);
   const [walking, setWalking] = useState(false);
+  const [building, setBuilding] = useState(false);
   const [quality, setQuality] = useState<Quality>(readQuality);
   const [section, setSection] = useState<number | null>(null);
   const [width, setWidth] = useState(0);
@@ -85,6 +86,7 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
         onStatus: setStatus,
         onOrtho: setOrtho,
         onWalk: setWalking,
+        onBuilding: setBuilding,
         canvasLabel: t("view3d.canvas"),
       });
     } catch (e) {
@@ -162,7 +164,8 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
   const rootClass = ["v3d", layout.compact ? "is-compact" : "", props.className ?? ""].filter(Boolean).join(" ");
 
   return (
-    <div ref={rootRef} className={rootClass} tabIndex={-1}>
+    // `data-drawing`: with the focus on the view itself, Tab switches the mode (lib/shortcuts.ts).
+    <div ref={rootRef} className={rootClass} tabIndex={-1} data-drawing="">
       <div ref={hostRef} className="v3d-host" />
       {status === "ok" ? (
         <>
@@ -170,13 +173,19 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
             <div className="v3d-toolbar" role="toolbar" aria-label={t("view3d.toolbar")}>
               {shownViews.map(({ key, keys, icon: Icon, run }) => (
                 <button key={key} type="button" className="v3d-btn" onClick={run} title={label(key, keys)} aria-label={t(key)}>
-                  <Icon size={16} aria-hidden />
+                  <Icon size={16} strokeWidth={1.75} aria-hidden />
                 </button>
               ))}
               <span className="v3d-sep" aria-hidden />
               {layout.compact ? (
                 <Menu
-                  label={<Ellipsis size={16} aria-label={t("view3d.more")} />}
+                  label={
+                    // The button's name: a title alone is no reliable accessible name.
+                    <>
+                      <Ellipsis size={16} strokeWidth={1.75} aria-hidden />
+                      <span className="sr-only">{t("view3d.more")}</span>
+                    </>
+                  }
                   title={t("view3d.more")}
                   align="end"
                   entries={[
@@ -188,7 +197,7 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
               ) : (
                 toggles.map(({ key, keys, icon: Icon, on, run }) => (
                   <button key={key} type="button" className="v3d-btn" onClick={run} title={label(key, keys)} aria-label={t(key)} aria-pressed={on}>
-                    <Icon size={16} aria-hidden />
+                    <Icon size={16} strokeWidth={1.75} aria-hidden />
                   </button>
                 ))
               )}
@@ -221,6 +230,11 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
           {walking && (
             <p className="v3d-hint" role="status">
               {t("view3d.walkHint")}
+            </p>
+          )}
+          {building && !walking && (
+            <p className="v3d-hint" role="status">
+              {t("view.loading3d")}
             </p>
           )}
         </>

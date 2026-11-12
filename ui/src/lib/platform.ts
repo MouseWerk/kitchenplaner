@@ -100,15 +100,23 @@ export async function addRecentFile(path: string): Promise<void> {
   if (isTauri()) await invoke("add_recent_file", { path });
 }
 
+/**
+ * Under the end-to-end tests: records the question `message` and returns the test's answer to it
+ * (taken once; none: no). Null in normal use, where the question is really asked.
+ */
+export function e2eAnswer(message: string): boolean | null {
+  const hooks = e2e();
+  if (!hooks) return null;
+  (hooks.__E2E_ASKED__ ??= []).push(message);
+  const answer = hooks.__E2E_NEXT_ANSWER__ === true;
+  hooks.__E2E_NEXT_ANSWER__ = null;
+  return answer;
+}
+
 /** A yes/no question; the native dialog in the app. */
 export async function confirmDialog(message: string, title: string, okLabel: string, cancelLabel: string): Promise<boolean> {
-  const hooks = e2e();
-  if (hooks) {
-    (hooks.__E2E_ASKED__ ??= []).push(message);
-    const answer = hooks.__E2E_NEXT_ANSWER__ === true;
-    hooks.__E2E_NEXT_ANSWER__ = null;
-    return answer;
-  }
+  const answer = e2eAnswer(message);
+  if (answer !== null) return answer;
   if (isTauri()) {
     const { ask } = await import("@tauri-apps/plugin-dialog");
     return ask(message, { title, kind: "warning", okLabel, cancelLabel });
@@ -136,9 +144,18 @@ export function baseName(path: string): string {
  */
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)$/i;
 
+/**
+ * Longest file name stem (characters) made from a project name: file systems allow 255, and the
+ * exports add a suffix (" - Ansicht Nord.svg").
+ */
+export const MAX_FILE_STEM = 120;
+
 /** A file name without characters or names Windows, macOS or Linux refuse. */
 export function safeFileName(name: string): string {
-  const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, "").trim();
+  const replaced = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
+  // Cut by code points (no half surrogate pair), then drop trailing dots and spaces of any kind,
+  // which Windows strips or refuses: last, so neither the cut nor a no-break space brings one back.
+  const cleaned = Array.from(replaced).slice(0, MAX_FILE_STEM).join("").replace(/[.\s]+$/u, "");
   if (!cleaned) return "Kitchenplaner";
   // Windows matches the part before the first dot, ignoring spaces before that dot.
   const dot = cleaned.indexOf(".");

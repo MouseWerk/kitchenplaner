@@ -32,7 +32,10 @@ export async function inspectorName(app) {
   }, INSPECTOR);
 }
 
-/** Types `text` into the inspector field `label` like a user (focus selects it) and confirms with Enter. */
+/**
+ * Types `text` into the inspector field `label` like a user (focus selects it) and confirms with
+ * Enter, which keeps the focus in the field; then leaves it, so the next keys reach the views.
+ */
 export async function setField(app, label, text) {
   const input = await app.field(label);
   await input.click();
@@ -41,14 +44,18 @@ export async function setField(app, label, text) {
   await app.keys([Key.Ctrl, "a"]);
   await app.type(text);
   await app.keys(Key.Enter);
-  await app.waitUntil(() => app.exec((e) => document.activeElement !== e, input), `field „${label}“ kept the focus after Enter`);
+  await app.waitUntil(() => app.exec((e) => document.activeElement === e, input), `field „${label}“ lost the focus on Enter`);
+  await app.blur();
 }
 
-/** The pressed button of a toolbar button group (aria-pressed), by the group's label. */
+/**
+ * The pressed button of a toolbar button group (aria-pressed), by the group's label. Its name: in
+ * a narrow window the button shows only an icon and is named by aria-label, its innerText empty.
+ */
 export async function pressed(app, group) {
   return app.exec((group) => {
-    const g = document.querySelector(`header [role=group][aria-label='${group}']`);
-    return g?.querySelector("[aria-pressed=true]")?.innerText.trim() ?? null;
+    const b = document.querySelector(`header [role=group][aria-label='${group}'] [aria-pressed=true]`);
+    return b ? (b.getAttribute("aria-label") || b.innerText).trim() : null;
   }, group);
 }
 
@@ -60,6 +67,12 @@ export async function panes(app) {
 /** Presses a key with nothing focused, as on the views (shortcuts do not fire in fields). */
 export async function pressOnViews(app, key) {
   await app.blur();
+  await app.keys(key);
+}
+
+/** Presses a key with the floor plan focused, as after a click into it (Tab switches the mode only there). */
+export async function pressOnPlan(app, key) {
+  await app.exec(() => document.querySelector("section[aria-label='Grundriss'] [data-drawing]").focus());
   await app.keys(key);
 }
 

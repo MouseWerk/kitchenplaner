@@ -97,3 +97,12 @@ export async function readNotes(dir = NOTES_DIR) {
   for (const f of files) out.push(parseNotes(f.slice(1, -3), await readFile(join(dir, f), 'utf8')));
   return out.sort((a, b) => compareVersions(b.version, a.version));
 }
+
+/**
+ * The notes the changelog shows: those of published releases only. Notes for the next version are
+ * written (and pushed) before its release exists; they show once it is out. Without the API
+ * (offline build, latest unknown) every note shows, without dates.
+ * @param {Notes[]} notes
+ * @param {{ latest: { version: string } | null }} d
+ */
+export const publishedNotes = (notes, d) => (d.latest ? notes.filter((n) => compareVersions(n.version, d.latest.version) <= 0) : notes);

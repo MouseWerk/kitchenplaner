@@ -8,6 +8,19 @@
 import { ProjectError } from "../model/serialize";
 import { t, type TKey } from "./i18n";
 
+/** An error the app raises itself: `key` is the message for the user, `detail` stays for logs. */
+export class UserError extends Error {
+  readonly key: TKey;
+  readonly detail: string;
+
+  constructor(key: TKey, detail = "") {
+    super(detail ? `${key}: ${detail}` : key);
+    this.name = "UserError";
+    this.key = key;
+    this.detail = detail;
+  }
+}
+
 /** The error kinds of `kitchen_core::ErrorKind` with their own text; others fall back to generic. */
 const KIND_KEYS: Record<string, TKey> = {
   tooLarge: "error.tooLarge",
@@ -15,6 +28,7 @@ const KIND_KEYS: Record<string, TKey> = {
   notUtf8: "error.notProjectFile",
   notProject: "error.notProjectFile",
   readOnly: "error.readOnly",
+  inUse: "error.inUse",
   notFound: "error.notFound",
   permissionDenied: "error.permissionDenied",
   badExtension: "error.badExtension",
@@ -26,7 +40,7 @@ const field = (e: unknown, name: string): string | null =>
 
 /** A message for the user from any error: project errors by their key, command errors by kind. */
 export function errorText(e: unknown): string {
-  if (e instanceof ProjectError) return t(e.key);
+  if (e instanceof ProjectError || e instanceof UserError) return t(e.key);
   const kind = field(e, "kind");
   const name = field(e, "path");
   const key = kind ? KIND_KEYS[kind] : undefined;

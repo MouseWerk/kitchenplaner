@@ -1,12 +1,12 @@
 // Plausibility checks of a plan: what a planner would otherwise notice only on site.
 
-import { collides, kindOf, placementOf } from "../kinds/registry";
+import { collides, kindOf, placementOf, type Placement } from "../kinds/registry";
 import { across, doorLeaves, doorSetup, isDoor, leafRect, openingFrame, SLIDE_CLEAR, swingFrame } from "./doors";
 import { convexOverlap, cross, EPS, footprint, pointInPolygon, sub } from "./geometry";
 import { bandPiece, partitionBand, partitionLength, partitionOutline } from "./partitions";
 import { positions } from "./project";
 import { selfIntersects } from "./roomEdit";
-import type { Project, Room, Vec2 } from "./types";
+import type { Item, Partition, Project, Room, Vec2 } from "./types";
 import type { TKey } from "../lib/i18n";
 
 /** One finding: a message key with its values and the items (and partitions) it concerns. */
@@ -26,6 +26,8 @@ export interface Issue {
  *
  * Items only collide with items of the same placement (`collides`): a hood above a range or a
  * slicer on a table is the normal case, and flat ones (drains, platforms) collide with nothing.
+ * Hung and table-top units also have to meet in height: a hand-wash basin under a wall shelf or
+ * two shelves one above the other are apart. Floor units block the floor whatever their height.
  * The overlap uses the footprint rectangle, also of a unit drawn round. A partition collides with
  * every item that starts below its top except flat ones, so a wall shelf may hang above a
  * half-height partition. Only floor units block a door.
@@ -43,8 +45,7 @@ export function checkProject(project: Project): Issue[] {
 
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      if (!collides(placement[i], placement[j])) continue;
-      if (!convexOverlap(fps[i], fps[j])) continue;
+      if (!inEachOthersWay(items[i], items[j], placement[i], placement[j], fps[i], fps[j])) continue;
       // The lower number first, whatever the list order: "Pos. 3 und Pos. 12".
       const [pa, pb] = [posOf(items[i].id), posOf(items[j].id)].sort((x, y) => x - y);
       issues.push({ key: "check.overlap", vars: { a: pa, b: pb }, itemIds: [items[i].id, items[j].id] });
@@ -54,15 +55,14 @@ export function checkProject(project: Project): Issue[] {
   const roomPoly = project.room.points;
   if (roomPoly.length >= 3) {
     items.forEach((it, i) => {
-      if (fps[i].some((p) => !pointInPolygon(p, roomPoly))) issues.push({ key: "check.outside", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
+      if (!footprintInside(fps[i], roomPoly)) issues.push({ key: "check.outside", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
     });
   }
 
   const parts = project.room.partitions.filter((p) => partitionLength(p) >= EPS);
   const outlines = parts.map((p) => partitionOutline(p));
   items.forEach((it, i) => {
-    if (placement[i] === "flat") return;
-    const hit = parts.filter((p, k) => it.elevation < p.height && convexOverlap(fps[i], outlines[k]));
+    const hit = partitionsHit(it, placement[i], fps[i], parts, outlines);
     if (hit.length > 0) issues.push({ key: "check.partitionOverlap", vars: { pos: posOf(it.id) }, itemIds: [it.id], partitionIds: hit.map((p) => p.id) });
   });
 
@@ -74,8 +74,7 @@ export function checkProject(project: Project): Issue[] {
 
   const doorAreas = doorClearances(project);
   items.forEach((it, i) => {
-    if (placement[i] !== "floor") return;
-    if (doorAreas.some((area) => convexOverlap(fps[i], area))) issues.push({ key: "check.doorBlocked", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
+    if (blocksDoor(placement[i], fps[i], doorAreas)) issues.push({ key: "check.doorBlocked", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
   });
 
   items.forEach((it) => {
@@ -84,6 +83,62 @@ export function checkProject(project: Project): Issue[] {
   });
 
   return issues;
+}
+
+/**
+ * A test whether a unit would stand in the project without a finding of its own: no overlap, inside
+ * the room, clear of partitions and doors (the rules of `checkProject`; its height does not depend
+ * on where it stands). Prepared once for the project, for trying many spots for a new unit.
+ */
+export function freeSpotTest(project: Project): (item: Item) => boolean {
+  const others = project.items.map((it) => ({ it, placement: placementOf(kindOf(it.catalogId)), fp: footprint(it) }));
+  const roomPoly = project.room.points;
+  const parts = project.room.partitions.filter((p) => partitionLength(p) >= EPS);
+  const outlines = parts.map((p) => partitionOutline(p));
+  const doorAreas = doorClearances(project);
+  return (item) => {
+    const placement = placementOf(kindOf(item.catalogId));
+    const fp = footprint(item);
+    if (roomPoly.length >= 3 && !footprintInside(fp, roomPoly)) return false;
+    if (blocksDoor(placement, fp, doorAreas)) return false;
+    if (partitionsHit(item, placement, fp, parts, outlines).length > 0) return false;
+    return !others.some((o) => o.it.id !== item.id && inEachOthersWay(item, o.it, placement, o.placement, fp, o.fp));
+  };
+}
+
+/** Do two items stand in each other's way (the overlap finding)? */
+function inEachOthersWay(a: Item, b: Item, pa: Placement, pb: Placement, fa: Vec2[], fb: Vec2[]): boolean {
+  return collides(pa, pb) && (pa === "floor" || heightsMeet(a, b)) && convexOverlap(fa, fb);
+}
+
+/** The partitions an item stands in; flat ones lie across them, hung ones may hang above. */
+function partitionsHit(it: Item, placement: Placement, fp: Vec2[], parts: Partition[], outlines: Vec2[][]): Partition[] {
+  if (placement === "flat") return [];
+  return parts.filter((p, k) => it.elevation < p.height && convexOverlap(fp, outlines[k]));
+}
+
+/** Does an item stand in a door's free area? Only floor units do. */
+function blocksDoor(placement: Placement, fp: Vec2[], doorAreas: Vec2[][]): boolean {
+  return placement === "floor" && doorAreas.some((area) => convexOverlap(fp, area));
+}
+
+/** Do the height ranges of two items overlap (stacked ones that only touch do not)? */
+function heightsMeet(a: Item, b: Item): boolean {
+  return a.elevation < b.elevation + b.height && b.elevation < a.elevation + a.height;
+}
+
+/**
+ * Is a footprint inside the room? All its corners must be, and no edge may cross a wall: a unit
+ * turned across the inner corner of an L-shaped room has every corner inside.
+ */
+function footprintInside(fp: Vec2[], room: Vec2[]): boolean {
+  if (fp.some((p) => !pointInPolygon(p, room))) return false;
+  for (let i = 0; i < fp.length; i++) {
+    for (let k = 0; k < room.length; k++) {
+      if (properlyCross(fp[i], fp[(i + 1) % fp.length], room[k], room[(k + 1) % room.length])) return false;
+    }
+  }
+  return true;
 }
 
 /**

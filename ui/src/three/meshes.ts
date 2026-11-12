@@ -43,12 +43,39 @@ export function buildItemObject(item: Item): THREE.Group {
     }
   });
 
+  placeItemObject(g, item);
+  return g;
+}
+
+/**
+ * Places and turns an item's model (built or merged) where the item stands. A move or turn needs
+ * only this, not a new model (`sameModel`).
+ */
+export function placeItemObject(g: THREE.Object3D, item: Item): void {
   // Plan (x, y) -> three (x, z); a clockwise turn on the plan (y down) is a negative turn about
   // three's y axis (seen from above, with z pointing towards the viewer's bottom).
   g.position.set(item.x / MM_PER_UNIT, item.elevation / MM_PER_UNIT, item.y / MM_PER_UNIT);
-  g.rotation.y = -rad(item.rotation);
+  g.rotation.set(0, -rad(item.rotation), 0);
   g.updateMatrixWorld(true);
-  return g;
+}
+
+/**
+ * The item fields that only say where a model stands. The elevation is not one of them: some
+ * models reach down to the floor from it (the stand of a combi oven on a base).
+ */
+const PLACEMENT_FIELDS: ReadonlySet<string> = new Set<keyof Item>(["x", "y", "rotation"]);
+
+/**
+ * True when `a` and `b` build the same model and differ at most in where it stands: moving or
+ * turning items then moves their models instead of building them again. Nested values compare by
+ * reference, as the store keeps them on a move; a copied one only costs a rebuild.
+ */
+export function sameModel(a: Item, b: Item): boolean {
+  const ra = a as unknown as Record<string, unknown>;
+  const rb = b as unknown as Record<string, unknown>;
+  for (const k of Object.keys(ra)) if (!PLACEMENT_FIELDS.has(k) && ra[k] !== rb[k]) return false;
+  for (const k of Object.keys(rb)) if (!(k in ra)) return false;
+  return true;
 }
 
 /** Shows an item model as selected (a neutral tint) or plain. */

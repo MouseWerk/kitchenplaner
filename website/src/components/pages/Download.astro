@@ -2,7 +2,7 @@
 import Base from '../../layouts/Base.astro';
 import { dicts, fill, type Lang } from '../../i18n';
 import { getDownloads, button, formatSize, formatDate, available } from '../../data/release.mjs';
-import { ROUTES, RELEASES_URL } from '../../data/site.mjs';
+import { ANCHORS, ROUTES, RELEASES_URL } from '../../data/site.mjs';
 
 interface Props { lang: Lang }
 const { lang } = Astro.props;
@@ -14,7 +14,7 @@ const vars = { deb: button(d, 'linux-deb').file ?? `Kitchenplaner_${v}_amd64.deb
 
 const platforms = [
   { id: 'windows', text: dl.windows, primary: button(d, 'win-setup'), secondary: null },
-  { id: 'macos', text: dl.mac, primary: button(d, 'mac-dmg'), secondary: button(d, 'mac-app') },
+  { id: 'macos', text: dl.mac, primary: button(d, 'mac-dmg'), secondary: null },
   { id: 'linux', text: dl.linux, primary: button(d, 'linux-appimage'), secondary: button(d, 'linux-deb') },
 ] as const;
 const sums = button(d, 'checksums');
@@ -38,8 +38,8 @@ const meta = (b: { file: string | null; size: number | null }) => [b.file?.repla
     <div class="wrap">
       <div class="platforms">
         {platforms.map((p) => (
-          <section class="platform" id={p.id} aria-labelledby={`${p.id}-titel`}>
-            <h2 id={`${p.id}-titel`}>{p.text.title}</h2>
+          <section class="platform" id={p.id} aria-labelledby={`${p.id}-h`}>
+            <h2 id={`${p.id}-h`}>{p.text.title}</h2>
             <p class="muted">{p.text.req}</p>
             <a class="btn btn-primary" href={p.primary.href} rel="noopener" title={p.primary.file ?? undefined}>
               <span>{p.text.primary}</span>
@@ -64,20 +64,20 @@ const meta = (b: { file: string | null; size: number | null }) => [b.file?.repla
       </div>
 
       <div class="tiles">
-        <section class="block" id="pruefsummen" aria-labelledby="pruefsummen-titel">
-          <h2 id="pruefsummen-titel">{dl.checksums.title}</h2>
+        <section class="block" id={ANCHORS.checksums[lang]} aria-labelledby={`${ANCHORS.checksums[lang]}-h`}>
+          <h2 id={`${ANCHORS.checksums[lang]}-h`}>{dl.checksums.title}</h2>
           <p class="muted">{dl.checksums.text}</p>
           <code class="cmd" tabindex="0">{dl.checksums.cmd}</code>
           <p><a href={sums.href} rel="noopener">{dl.checksums.file}</a></p>
         </section>
         {available(d, dl.updates.since) && (
-          <section class="block" id="updates" aria-labelledby="updates-titel">
-            <h2 id="updates-titel">{dl.updates.title}</h2>
+          <section class="block" id="updates" aria-labelledby="updates-h">
+            <h2 id="updates-h">{dl.updates.title}</h2>
             <p class="muted">{dl.updates.text}</p>
           </section>
         )}
-        <section class="block" aria-labelledby="beispiel-titel">
-          <h2 id="beispiel-titel">{dl.example.title}</h2>
+        <section class="block" aria-labelledby="example-h">
+          <h2 id="example-h">{dl.example.title}</h2>
           <p class="muted">{dl.example.text}</p>
           <p><a href={ROUTES.example[lang]}>{dl.example.link}</a></p>
           <p class="muted">{dl.older}: <a href={RELEASES_URL} rel="noopener">{dl.releases}</a></p>

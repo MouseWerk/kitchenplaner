@@ -12,6 +12,12 @@ import { ChevronDown } from "lucide-react";
  */
 export type MenuEntry = { label: string; onSelect: () => void; hint?: string; checked?: boolean; radio?: boolean; disabled?: boolean } | "sep";
 
+/**
+ * The popup before it is placed: already fixed, so it is measured at its own width. Inside its
+ * anchor (a narrow button) it would shrink to the anchor's width and cut its labels.
+ */
+const UNPLACED: CSSProperties = { position: "fixed", left: 0, top: 0, right: "auto", visibility: "hidden" };
+
 /** Gap between the button and the popup, and the least distance to the window's edges (px). */
 const GAP = 4;
 const MARGIN = 8;
@@ -40,8 +46,11 @@ export function menuPosition(button: Rect, size: { width: number; height: number
   return { left, top: button.bottom + GAP, maxHeight: Math.max(0, below) };
 }
 
-/** `className` replaces the button's class ("tb-btn", a toolbar button), e.g. for a pane header. */
-export function Menu(props: { label: ReactNode; title: string; entries: MenuEntry[]; align?: "start" | "end"; className?: string }) {
+/**
+ * `className` replaces the button's class ("tb-btn", a toolbar button), e.g. for a pane header.
+ * `ariaLabel` names a button whose label is only an icon.
+ */
+export function Menu(props: { label: ReactNode; title: string; entries: MenuEntry[]; align?: "start" | "end"; className?: string; ariaLabel?: string }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -66,11 +75,29 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
     return () => window.removeEventListener("resize", fit);
   }, [open, props.align]);
 
+  // A label cut at the popup's widest shows in full as a tooltip.
+  useLayoutEffect(() => {
+    for (const label of list.current?.querySelectorAll<HTMLElement>(".menu-label") ?? []) {
+      if (label.scrollWidth > label.clientWidth) label.title = label.textContent ?? "";
+      else label.removeAttribute("title");
+    }
+  }, [place]);
+
+  // Focus only once the popup is placed: while it is measured it is hidden (UNPLACED), and a
+  // hidden element cannot take the focus, so the keys would never reach the entries.
+  const placed = place !== undefined;
+  useEffect(() => {
+    if (!open || !placed) return;
+    // A list of choices opens on the current one, as a select does; a menu that also has
+    // commands and switches opens on its first entry.
+    const items = [...(list.current?.querySelectorAll<HTMLButtonElement>("[role^=menuitem]") ?? [])];
+    const choices = items.length > 0 && items.every((b) => b.getAttribute("role") === "menuitemradio");
+    const first = (choices ? list.current?.querySelector<HTMLButtonElement>("[role=menuitemradio][aria-checked=true]:not(:disabled)") : null) ?? list.current?.querySelector<HTMLButtonElement>("[role^=menuitem]:not(:disabled)");
+    first?.focus();
+  }, [open, placed]);
+
   useEffect(() => {
     if (!open) return;
-    // A list of choices opens on the current one, as a select does.
-    const first = list.current?.querySelector<HTMLButtonElement>("[role=menuitemradio][aria-checked=true]:not(:disabled)") ?? list.current?.querySelector<HTMLButtonElement>("[role^=menuitem]:not(:disabled)");
-    first?.focus();
     const onDown = (e: PointerEvent) => {
       if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -113,6 +140,7 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
+        aria-label={props.ariaLabel}
         title={props.title}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => {
@@ -126,7 +154,7 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
         <ChevronDown size={13} strokeWidth={1.75} aria-hidden />
       </button>
       {open && (
-        <div ref={list} id={id} role="menu" className={props.align === "end" ? "menu end" : "menu"} style={place} onKeyDown={onKey}>
+        <div ref={list} id={id} role="menu" className={props.align === "end" ? "menu end" : "menu"} style={place ?? UNPLACED} onKeyDown={onKey}>
           {props.entries.map((e, i) =>
             e === "sep" ? (
               <div key={i} className="menu-sep" role="separator" />

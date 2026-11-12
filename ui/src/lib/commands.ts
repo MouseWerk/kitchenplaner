@@ -82,18 +82,18 @@ export function rotateItemAround(it: Item, pivot: Vec2, deg: number): Pick<Item,
  * The state before an operator (a G or R operator, a mouse drag in the plan, the room mode or the
  * 3D view): what a cancel puts back. A cancel restores it only while the store still holds the
  * operator's own last result: an open, a new project or an edit from the inspector in between
- * stays, and a save in between leaves the project marked as changed when what is shown is no
+ * stays, and after a save in between the project counts as changed when what is shown is no
  * longer what was written.
  */
 export interface OperatorSnapshot {
-  before: Pick<AppState, "project" | "past" | "future" | "dirty" | "selection" | "mode" | "loadCount" | "saveCount">;
+  before: Pick<AppState, "project" | "past" | "future" | "selection" | "mode" | "loadCount">;
   /** The project as the operator last left it. */
   last: Project;
 }
 
 export function takeSnapshot(): OperatorSnapshot {
-  const { project, past, future, dirty, selection, mode, loadCount, saveCount } = useStore.getState();
-  return { before: { project, past, future, dirty, selection, mode, loadCount, saveCount }, last: project };
+  const { project, past, future, selection, mode, loadCount } = useStore.getState();
+  return { before: { project, past, future, selection, mode, loadCount }, last: project };
 }
 
 /** Notes the store's project as the operator's own result (after each of its changes). */
@@ -101,21 +101,24 @@ export function noteOperatorChange(s: OperatorSnapshot) {
   s.last = useStore.getState().project;
 }
 
-/** Puts back the state before the operator, as far as it is still the operator's to put back. */
-export function restoreSnapshot(s: OperatorSnapshot) {
+/**
+ * Puts back the state before the operator, as far as it is still the operator's to put back;
+ * returns whether it did.
+ */
+export function restoreSnapshot(s: OperatorSnapshot): boolean {
   const st = useStore.getState();
   const b = s.before;
-  if (st.loadCount !== b.loadCount || st.project !== s.last) return;
-  const saved = st.saveCount !== b.saveCount;
+  if (st.loadCount !== b.loadCount || st.project !== s.last) return false;
   useStore.setState({
     project: b.project,
     past: b.past,
     future: b.future,
-    // After a save the file holds the operator's result: shown is the state before it.
-    dirty: saved ? b.project !== st.project : b.dirty,
+    // Measured against the file: after a save in between it holds the operator's result.
+    dirty: b.project !== st.saved,
     // The selection belongs to its mode; a switch in between already set the new mode's one.
     ...(st.mode === b.mode ? { selection: b.selection } : {}),
   });
+  return true;
 }
 
 /** The cancel of the running operator, so the file commands can end it before they act. */
@@ -173,13 +176,18 @@ export function beginDuplicate(): TransformSession | null {
   return s;
 }
 
-/** Sets the transformed items from their start state. */
+/**
+ * Sets the transformed items from their start state. After a change from elsewhere (an inspector
+ * edit while G runs) the result is no longer the operator's own alone: `last` stays behind, so a
+ * cancel leaves the project as it is instead of dropping that edit with the move.
+ */
 export function applyTransform(s: TransformSession, fn: (orig: Item) => Partial<Item>) {
+  const own = useStore.getState().project === s.last;
   useStore.getState().updateItems([...s.origin.keys()], (it) => {
     const orig = s.origin.get(it.id);
     return orig ? fn(orig) : {};
   }, { gesture: true });
-  noteOperatorChange(s);
+  if (own) noteOperatorChange(s);
 }
 
 /** Ends the transform and keeps the result; a transform that changed nothing leaves no undo step. */
@@ -195,8 +203,29 @@ export function confirmTransform(s: TransformSession) {
   if (unchanged && !added) restoreSnapshot(s);
 }
 
-/** Ends the transform and restores everything as it was before it (no undo step). */
+/**
+ * Ends the transform and restores everything as it was before it (no undo step). After an edit
+ * from elsewhere in between only the transform is taken back: the items return to where they
+ * stood, copies of a Shift+D go, and the edit stays.
+ */
 export function cancelTransform(s: TransformSession) {
-  useStore.getState().endGesture();
-  restoreSnapshot(s);
+  const st = useStore.getState();
+  st.endGesture();
+  if (restoreSnapshot(s) || st.loadCount !== s.before.loadCount) return;
+  const existed = new Set(s.before.project.items.map((i) => i.id));
+  // After `endGesture` a gesture change records no step, as the cancel of an untouched transform.
+  st.change(
+    (p) => ({
+      ...p,
+      items: p.items
+        .filter((it) => !s.origin.has(it.id) || existed.has(it.id))
+        .map((it) => {
+          const o = s.origin.get(it.id);
+          return o ? { ...it, x: o.x, y: o.y, rotation: o.rotation } : it;
+        }),
+    }),
+    { gesture: true },
+  );
+  const now = useStore.getState();
+  if (now.mode === s.before.mode) now.select({ items: s.before.selection.items.filter((id) => now.project.items.some((i) => i.id === id)) });
 }

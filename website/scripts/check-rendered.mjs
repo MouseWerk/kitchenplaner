@@ -5,6 +5,8 @@
 // - an image does not load after scrolling through the page;
 // - a link, button or menu button on a phone is smaller than 44 px (links inside running text
 //   excepted, WCAG 2.5.8);
+// - a link or button's accessible name (aria-label) does not contain its visible text (WCAG 2.5.3);
+// - a list of buttons shows bullets;
 // - the keyboard focus ring is missing, not neutral (gray), or shows after a mouse click;
 // - a selected navigation entry has a colored frame (border, outline or shadow);
 // - an anchor target lands outside the window or under the header;
@@ -117,11 +119,16 @@ for (const scheme of ['dark', 'light']) {
               .filter((e) => {
                 const b = e.getBoundingClientRect();
                 const visible = b.width > 0 && getComputedStyle(e).visibility !== 'hidden' && !e.classList.contains('skip');
-                const inText = !!e.closest('p, dd, address, .steps li, .release li, .legal li');
+                const inText = !!e.closest('p:not(.release-meta), dd, .steps li, .release li, .legal li');
                 return visible && !inText && (b.height < 44 || b.width < 44);
               })
               .map((e) => `${(e.textContent || '').trim().slice(0, 24)} (${Math.round(e.getBoundingClientRect().width)} x ${Math.round(e.getBoundingClientRect().height)})`)
           : [];
+        // Label in name: what people see is part of what screen readers say.
+        out.label = [...document.querySelectorAll('a[aria-label], button[aria-label], summary[aria-label]')]
+          .filter((e) => (e.textContent || '').trim() && !e.getAttribute('aria-label').toLowerCase().includes((e.textContent || '').trim().toLowerCase()))
+          .map((e) => `"${(e.textContent || '').trim()}" named "${e.getAttribute('aria-label')}"`);
+        out.bullets = [...document.querySelectorAll('ul.buttons')].filter((e) => getComputedStyle(e).listStyleType !== 'none').length;
         out.current = [...document.querySelectorAll('[aria-current="page"]')].map((e) => {
           const cs = getComputedStyle(e);
           return { border: cs.borderTopWidth !== '0px' && cs.borderTopStyle !== 'none' ? cs.borderTopColor : null, outline: cs.outlineStyle !== 'none' ? cs.outlineColor : null, shadow: cs.boxShadow !== 'none' ? cs.boxShadow : null };
@@ -133,6 +140,8 @@ for (const scheme of ['dark', 'light']) {
       if (r.overflow > 0) fail(where, `scrolls sideways by ${r.overflow} px (${r.wide.join(', ')})`);
       if (r.broken.length) fail(where, `images not loaded: ${r.broken.slice(0, 3).join(', ')}`);
       if (r.small.length) fail(where, `tap targets under 44 px: ${r.small.slice(0, 4).join(' | ')}`);
+      if (r.label.length) fail(where, `accessible name without the visible text: ${r.label.slice(0, 3).join(' | ')}`);
+      if (r.bullets) fail(where, `${r.bullets} list(s) of buttons with bullets`);
       for (const c of r.current) if (c.border || c.outline || c.shadow) fail(where, `the current navigation entry has a frame: ${JSON.stringify(c)}`);
       if (logs.length) fail(where, `console: ${[...new Set(logs)].slice(0, 3).join(' | ')}`);
 
@@ -167,13 +176,18 @@ for (const scheme of ['dark', 'light']) {
       await page.hover(target);
       await page.mouse.down();
       const ring = await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
+      // Released elsewhere, so the press is no click: clicking the link would start a navigation
+      // that destroys the page under the next evaluate (a flaky "Execution context was destroyed").
+      await page.mouse.move(1, 1);
       await page.mouse.up();
       if (ring !== 'none') fail(`${width} mouse`, `focus ring shows after a mouse click (${ring})`);
 
-      // Anchors land inside the window, below the header.
-      await page.goto(BASE + '/#funktionen', { waitUntil: 'load' });
-      const a = await page.evaluate(() => ({ top: document.getElementById('funktionen').getBoundingClientRect().top, header: document.querySelector('.site-header').getBoundingClientRect().bottom }));
-      if (a.top < Math.max(0, a.header) - 1 || a.top > 200) fail(`${width} anchor`, `#funktionen lands at ${Math.round(a.top)} px (header ends at ${Math.round(a.header)} px)`);
+      // Anchors land inside the window, below the header (in both languages).
+      for (const [path, id] of [['/', 'funktionen'], ['/en/', 'features']]) {
+        await page.goto(`${BASE}${path}#${id}`, { waitUntil: 'load' });
+        const a = await page.evaluate((id) => ({ top: document.getElementById(id).getBoundingClientRect().top, header: document.querySelector('.site-header').getBoundingClientRect().bottom }), id);
+        if (a.top < Math.max(0, a.header) - 1 || a.top > 200) fail(`${width} anchor`, `${path}#${id} lands at ${Math.round(a.top)} px (header ends at ${Math.round(a.header)} px)`);
+      }
     }
 
     // The phone menu: opens, Escape closes it and returns the focus to its button.

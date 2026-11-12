@@ -12,6 +12,8 @@ pub enum ErrorKind {
     NotUtf8,
     NotProject,
     ReadOnly,
+    /// The target is held open by another program (a CSV in Excel on Windows).
+    InUse,
     NotFound,
     PermissionDenied,
     BadExtension,
@@ -32,6 +34,12 @@ pub enum FileError {
     NotProject { path: String, reason: String },
     #[error("„{path}“ ist schreibgeschützt. Speichere unter einem anderen Namen oder hebe den Schreibschutz auf.")]
     ReadOnly { path: String },
+    #[error("„{path}“ ist in einem anderen Programm geöffnet und kann nicht ersetzt werden: {source}")]
+    InUse {
+        path: String,
+        #[source]
+        source: io::Error,
+    },
     #[error("„{path}“ hat keine der erlaubten Endungen ({allowed}).")]
     BadExtension { path: String, allowed: String },
     #[error("„{path}“ ist kein absoluter Dateipfad.")]
@@ -52,6 +60,7 @@ impl FileError {
             FileError::NotUtf8 { .. } => ErrorKind::NotUtf8,
             FileError::NotProject { .. } => ErrorKind::NotProject,
             FileError::ReadOnly { .. } => ErrorKind::ReadOnly,
+            FileError::InUse { .. } => ErrorKind::InUse,
             FileError::BadExtension { .. } => ErrorKind::BadExtension,
             FileError::BadPath { .. } => ErrorKind::BadPath,
             FileError::Io { source, .. } => match source.kind() {
@@ -70,6 +79,7 @@ impl FileError {
             | FileError::NotUtf8 { path }
             | FileError::NotProject { path, .. }
             | FileError::ReadOnly { path }
+            | FileError::InUse { path, .. }
             | FileError::BadExtension { path, .. }
             | FileError::BadPath { path }
             | FileError::Io { path, .. } => path,
@@ -139,11 +149,12 @@ mod tests {
 
     #[test]
     fn every_kind_the_user_can_hit_has_its_own_name() {
-        let cases: [(FileError, &str); 10] = [
+        let cases: [(FileError, &str); 11] = [
             (FileError::TooLarge { path: "a".into(), size: 2, limit: 1 }, "tooLarge"),
             (FileError::NotUtf8 { path: "a".into() }, "notUtf8"),
             (FileError::NotProject { path: "a".into(), reason: "x".into() }, "notProject"),
             (FileError::ReadOnly { path: "a".into() }, "readOnly"),
+            (FileError::InUse { path: "a".into(), source: io::Error::other("OS-Text") }, "inUse"),
             (FileError::BadExtension { path: "a".into(), allowed: ".kplan".into() }, "badExtension"),
             (FileError::BadPath { path: "a".into() }, "badPath"),
             (io_error(io::ErrorKind::NotFound), "notFound"),

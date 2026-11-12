@@ -1,9 +1,12 @@
 // PNG export: rasterizes an SVG document (from svg.ts) in the webview, so the PNG shows
 // exactly what the SVG export shows.
 
+import { UserError } from "../lib/errors";
+
 /**
  * Renders an SVG document to PNG bytes `widthPx` wide (height from the SVG's aspect ratio) on
- * the given background. Rejects when the SVG cannot be loaded or the canvas is unavailable.
+ * the given background. Rejects with a UserError („error.pngFailed“) when the SVG cannot be loaded,
+ * the canvas is unavailable or encoding fails.
  */
 export async function svgToPng(svg: string, widthPx: number, background = "#fff"): Promise<Uint8Array> {
   const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
@@ -16,11 +19,11 @@ export async function svgToPng(svg: string, widthPx: number, background = "#fff"
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("PNG export: no 2D canvas available");
+    if (!ctx) throw new UserError("error.pngFailed", "no 2D canvas available");
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0, width, height);
-    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("PNG export: encoding failed"))), "image/png"));
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new UserError("error.pngFailed", "encoding failed"))), "image/png"));
     return new Uint8Array(await blob.arrayBuffer());
   } finally {
     URL.revokeObjectURL(url);
@@ -31,7 +34,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("PNG export: the SVG could not be loaded"));
+    img.onerror = () => reject(new UserError("error.pngFailed", "the SVG could not be loaded"));
     img.src = url;
   });
 }

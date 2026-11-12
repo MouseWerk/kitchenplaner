@@ -9,7 +9,7 @@ einzelne Datei (`.kplan`). Für Windows, macOS und Linux, auf Deutsch und Englis
 [Installation](#download-und-installation) · [Tastenkürzel](#tastenkürzel) ·
 [Entwicklung](#entwicklung) · [English](#english)
 
-![Grundriss, 3D und zwei Wandansichten der Beispielküche, links der Katalog, rechts die Anschlusswerte](pitch/01-alle-ansichten.png)
+![Grundriss, 3D und zwei Ansichten der Beispielküche, links der Katalog, rechts die Anschlusswerte](pitch/01-alle-ansichten.png)
 
 ## Funktionen
 
@@ -19,10 +19,10 @@ einzelne Datei (`.kplan`). Für Windows, macOS und Linux, auf Deutsch und Englis
   Schnitttiefe wählst du: nur die Wand, der halbe oder der ganze Raum.
 - **3D**: die Küche räumlich, in Perspektive oder Parallelprojektion, mit Ansichtswürfel,
   Höhenschnitt und „Begehen“ auf Augenhöhe (W A S D).
-- **Katalog mit 359 Geräten** in acht Bereichen: Kochen, Kühlen, Spülen, Tische und Vorbereitung,
-  Ausgabe, Lagern, Lüftung und Bauteile (Stützen, Schächte, Bodenabläufe, Rinnen, Podeste), viele
+- **Katalog mit 359 Geräten** in neun Bereichen: Kochen, Kühlen, Spülen & Hygiene, Arbeitstische,
+  Vorbereitung, Ausgabe, Lagern, Lüftung und Bauteile (Stützen, Schächte, Bodenabläufe, Rinnen, Podeste), viele
   in mehreren Breiten und als Elektro- oder Gasgerät, jedes mit 3D-Vorschau.
-- **Bearbeiten wie in Blender**: Tab wechselt zwischen „Einrichten“ (Geräte anordnen) und „Raum“
+- **Bearbeiten in zwei Modi**: Tab wechselt zwischen „Einrichten“ (Geräte anordnen) und „Raum“
   (Ecken, Wände, Trennwände, Öffnungen); G verschiebt, R dreht, X/Y sperren eine Achse, eine
   getippte Zahl gibt das genaue Maß.
 - **Raum zeichnen**: „Umriss zeichnen“ Wand für Wand mit getippten Längen und Einrasten auf 90° und
@@ -53,9 +53,9 @@ einzelne Datei (`.kplan`). Für Windows, macOS und Linux, auf Deutsch und Englis
 | ![Die Küche in 3D aus Südost](pitch/04-3d-uebersicht.png) | ![Nah an der Kochinsel in 3D](pitch/05-3d-kochinsel.png) |
 | Die Küche in 3D; die Wände zur Kamera blendet die App aus. | Jedes Gerät mit eigenem 3D-Modell. |
 
-![Alle vier Wandansichten, bemaßt](pitch/08-ansichten.png)
+![Alle vier Ansichten, bemaßt](pitch/08-ansichten.png)
 
-*Alle vier Wandansichten, bemaßt, mit allem, was bis 1,5 m vor der Wand steht.* Mehr Bilder mit
+*Alle vier Ansichten, bemaßt, mit allem, was bis 1.500 mm vor der Wand steht.* Mehr Bilder mit
 Bildunterschriften: [pitch/](pitch/README.md).
 
 ## Beispielküche
@@ -101,13 +101,13 @@ Auf dem Mac steht ⌘ statt Strg.
 | Strg+Umschalt+S | Speichern unter |
 | Strg+Z, Strg+Umschalt+Z / Strg+Y | Rückgängig, Wiederholen |
 | Tab | Modus wechseln: Einrichten / Raum |
-| 1, 2, 3, 4 | Grundriss, Ansichten, 3D, Alle Ansichten |
-| F | Ansichten einpassen |
-| Mausrad, mittlere oder rechte Maustaste ziehen, Leertaste+Ziehen | Zoomen, Ansicht verschieben |
+| 1, 2, 3, 4 | Grundriss, Ansichten, 3D, Übersicht |
+| F | Alles einpassen |
+| Mausrad, mittlere oder rechte Maustaste ziehen, Leertaste+Ziehen | Zoomen, Bild verschieben |
 | M | Messen im Grundriss: zwei Punkte klicken (rastet an Ecken, Kanten, Wänden und Raster ein), Umschalt hält 45°-Schritte, Alt misst frei; Esc, M oder Rechtsklick beendet |
-| Rechtsklick ohne Ziehen | Kontextmenü im Grundriss: Duplizieren, Drehen, Ausrichten, Löschen; im Modus „Raum“ Ecke einfügen, Türanschlag wechseln |
+| Rechtsklick ohne Ziehen | Kontextmenü im Grundriss: Duplizieren, Drehen, Ausrichten, Löschen; im Modus „Raum“ Ecke einfügen, Anschlag oder Öffnungsrichtung einer Tür wechseln |
 
-Im Modus „Einrichten“ (Geräte anordnen, wie Blenders Objektmodus):
+Im Modus „Einrichten“ (Geräte anordnen):
 
 | Kürzel | Aktion |
 |---|---|
@@ -116,7 +116,7 @@ Im Modus „Einrichten“ (Geräte anordnen, wie Blenders Objektmodus):
 | B | Auswahlrahmen aufziehen, auch über Geräten |
 | A, Alt+A, Strg+A | Alles auswählen, Auswahl aufheben, Alles auswählen |
 | G | Verschieben: folgt der Maus ohne Taste |
-| R | Drehen um die Mitte der Auswahl in 15°-Schritten (mit Alt frei); über anderen Ansichten 90° nach rechts, Umschalt+R nach links |
+| R | Drehen um die Mitte der Auswahl in 15°-Schritten (mit Alt frei); in den Ansichten und in 3D 90° nach rechts, Umschalt+R nach links |
 | X, Y während G | Achse sperren (nochmals: frei) |
 | Zahl während G oder R | Genauer Wert in mm oder Grad |
 | Eingabe, Leertaste oder Klick | Bestätigen |
@@ -182,10 +182,10 @@ runs entirely on your computer, without an account; a project is a single `.kpla
 
 - Floor plan to scale in millimetres, four dimensioned elevations with a selectable cut depth, and a
   3D view with a section height and a walk mode.
-- A catalog of 359 units in eight areas (cooking, cooling, washing, tables and preparation, serving,
-  storage, ventilation, building elements), many in several widths and as electric or gas units,
+- A catalogue of 359 units in nine areas (cooking, refrigeration, washing & hygiene, work tables,
+  food preparation, serving, storage, ventilation, building elements), many in several widths and as electric or gas units,
   each with a 3D preview.
-- Editing in two modes like Blender (Tab: arrange units or edit the room; G moves, R rotates, X/Y
+- Editing in two modes (Tab: arrange units or edit the room; G moves, R rotates, X/Y
   lock an axis, a typed number gives the exact value), a wall-by-wall room tool, partitions, doors
   (hinge side, opening in or out, double leaves, sliding doors), windows and pass-through hatches;
   measuring, aligning and distributing, and a right-click menu.

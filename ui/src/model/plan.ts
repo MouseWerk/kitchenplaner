@@ -103,12 +103,14 @@ export function labelCentres(items: readonly Item[], ps: number): Vec2[] {
   const r = TEXT.normal * CIRCLE_RADIUS * ps;
   const clear = 2 * r + LABEL_GAP * ps;
   const placed: Vec2[] = [];
+  const near = new BoxGrid<Vec2>(clear);
+  // `!(d >= ...)`, not `d < ...`: a place compared with NaN is taken, as with `every` over all.
+  const free = (q: Vec2) => !near.some(around(q, clear), (o) => !(Math.hypot(o.x - q.x, o.y - q.y) >= clear - EPS));
   for (const it of items) {
     const placement = placementOf(kindOf(it.catalogId));
     const raised = placement === "overhead" || placement === "tableTop";
     // In the item's frame: x along the width, y towards the front.
     const home = raised ? { x: Math.max(0, it.width / 2 - r * 1.5), y: Math.max(0, it.depth / 2 - r * 1.5) } : { x: 0, y: 0 };
-    const free = (q: Vec2) => placed.every((o) => Math.hypot(o.x - q.x, o.y - q.y) >= clear - EPS);
     const first = toPlan(it, home);
     let best = first;
     if (!free(first)) {
@@ -144,8 +146,83 @@ export function labelCentres(items: readonly Item[], ps: number): Vec2[] {
       }
     }
     placed.push(best);
+    near.add(around(best, 0), best);
   }
   return placed;
+}
+
+// ---- Labels nearby ----
+
+/** Cells a box may cover in a `BoxGrid`; a larger one goes into a list tested every time. */
+const GRID_MAX_CELLS = 64;
+/** Cell indices stay below this, so a cell's key (`cellKey`) is one exact number. */
+const GRID_MAX_INDEX = 2 ** 25;
+
+const cellKey = (ix: number, iy: number) => ix * 2 * GRID_MAX_INDEX + iy;
+
+/** The box around `p` reaching `d` in each direction. */
+const around = (p: Vec2, d: number): Box => ({ minX: p.x - d, minY: p.y - d, maxX: p.x + d, maxY: p.y + d });
+const grown = (b: Box, d: number): Box => ({ minX: b.minX - d, minY: b.minY - d, maxX: b.maxX + d, maxY: b.maxY + d });
+
+/**
+ * Boxes (plan mm) in a uniform grid, to find the ones near a place. Placing the numbers and names
+ * tries many places for each label, each against every label and unit: tested against all of
+ * them that grows with the square of the items (90 ms for 500 items, on every change). A query
+ * looks only at the cells its box touches; every box that reaches into the query box shares one
+ * of them, so the caller's exact test sees all it would have seen and decides the same.
+ */
+class BoxGrid<T> {
+  private readonly cells = new Map<number, T[]>();
+  /** Values whose box covers too many cells or is not finite: tested by every query. */
+  private readonly loose: T[] = [];
+  private readonly all: T[] = [];
+  private readonly size: number;
+
+  constructor(size: number) {
+    this.size = Number.isFinite(size) && size > 0 ? size : 1;
+  }
+
+  /** The cells `b` covers, or null when it covers too many (or is not finite). */
+  private cellsOf(b: Box): { x0: number; y0: number; x1: number; y1: number } | null {
+    const x0 = Math.floor(b.minX / this.size);
+    const y0 = Math.floor(b.minY / this.size);
+    const x1 = Math.floor(b.maxX / this.size);
+    const y1 = Math.floor(b.maxY / this.size);
+    const ok = [x0, y0, x1, y1].every((v) => Number.isFinite(v) && Math.abs(v) < GRID_MAX_INDEX);
+    if (!ok || x1 < x0 || y1 < y0 || (x1 - x0 + 1) * (y1 - y0 + 1) > GRID_MAX_CELLS) return null;
+    return { x0, y0, x1, y1 };
+  }
+
+  add(b: Box, v: T): void {
+    this.all.push(v);
+    const c = this.cellsOf(b);
+    if (!c) {
+      this.loose.push(v);
+      return;
+    }
+    for (let x = c.x0; x <= c.x1; x++) {
+      for (let y = c.y0; y <= c.y1; y++) {
+        const key = cellKey(x, y);
+        const list = this.cells.get(key);
+        if (list) list.push(v);
+        else this.cells.set(key, [v]);
+      }
+    }
+  }
+
+  /** True when `test` holds for a value; tested are at least all whose box meets `b` (edges included). */
+  some(b: Box, test: (v: T) => boolean): boolean {
+    const c = this.cellsOf(b);
+    if (!c) return this.all.some(test);
+    if (this.loose.some(test)) return true;
+    for (let x = c.x0; x <= c.x1; x++) {
+      for (let y = c.y0; y <= c.y1; y++) {
+        const list = this.cells.get(cellKey(x, y));
+        if (list && list.some(test)) return true;
+      }
+    }
+    return false;
+  }
 }
 
 /**
@@ -230,6 +307,18 @@ export function nameLabels(items: readonly Item[], centres: readonly Vec2[], ps:
   const gap = NAME_CLEAR * ps;
   const boxes = items.map((it) => bounds(footprint(it)));
   const out: NameLabel[] = [];
+  // Numbers and names in cells about a name's height; units in cells about a unit's size.
+  const reach = r + gap;
+  const numbers = new BoxGrid<Vec2>(4 * Math.max(reach, h));
+  for (const c of centres) numbers.add(around(c, 0), c);
+  const names = new BoxGrid<NameLabel>(4 * Math.max(reach, h));
+  const meanSize = boxes.reduce((a, b) => a + (b.maxX - b.minX + b.maxY - b.minY) / 2, 0) / Math.max(1, boxes.length);
+  const units = new BoxGrid<number>(Math.max(meanSize, 4 * reach));
+  boxes.forEach((b, j) => units.add(b, j));
+  const place = (label: NameLabel) => {
+    out.push(label);
+    names.add(label.box, label);
+  };
   items.forEach((it, i) => {
     const name = it.name?.trim();
     if (!name) return;
@@ -243,10 +332,10 @@ export function nameLabels(items: readonly Item[], centres: readonly Vec2[], ps:
     const asc = TEXT_ASCENT * h;
     const desc = TEXT_DESCENT * h;
 
-    const free = (b: Box) => centres.every((o) => !boxMeetsCircle(b, o, r + gap)) && out.every((n) => !boxesMeet(b, n.box, gap));
+    const free = (b: Box) => !numbers.some(grown(b, reach), (o) => boxMeetsCircle(b, o, reach)) && !names.some(grown(b, gap), (n) => boxesMeet(b, n.box, gap));
     const inside = (b: Box) => corners({ minX: b.minX - gap, minY: b.minY - gap, maxX: b.maxX + gap, maxY: b.maxY + gap }).every((q) => pointInPolygon(q, fp));
     const clearOutside = (b: Box) =>
-      (!room || corners(b).every((q) => pointInPolygon(q, room.points))) && boxes.every((o, j) => j === i || !boxesMeet(b, o, 0)) && !boxesMeet(b, own, 0);
+      (!room || corners(b).every((q) => pointInPolygon(q, room.points))) && !units.some(b, (j) => j !== i && boxesMeet(b, boxes[j], 0)) && !boxesMeet(b, own, 0);
 
     // Inside the unit: under and above the number, then rows across the unit, nearest first.
     const within: Vec2[] = [
@@ -271,14 +360,14 @@ export function nameLabels(items: readonly Item[], centres: readonly Vec2[], ps:
     for (const p of nearest(within)) {
       const b = nameBox(p, w, h);
       if (inside(b) && free(b)) {
-        out.push({ itemId: it.id, p, text, box: b });
+        place({ itemId: it.id, p, text, box: b });
         return;
       }
     }
     for (const p of outside) {
       const b = nameBox(p, w, h);
       if (clearOutside(b) && free(b)) {
-        out.push({ itemId: it.id, p, text, box: b });
+        place({ itemId: it.id, p, text, box: b });
         return;
       }
     }

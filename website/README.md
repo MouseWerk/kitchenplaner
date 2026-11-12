@@ -27,7 +27,11 @@ Where the content comes from:
   `src/assets/crops/`)
 - downloads and the version: the GitHub API at build time (`src/data/release.mjs`); without it, the
   buttons link to the latest release's page
-- changelog: `docs/releases/v*.md` (`src/data/notes.mjs`), without the Windows checklist
+- changelog: `docs/releases/v*.md` (`src/data/notes.mjs`), without the Windows checklist; notes of a
+  version show once its release is published
+- the number of catalog units per release: `src/data/catalog.mjs` (add a row when a release changes
+  the catalog; a unit test checks it against that version's release notes)
+- section anchors per language: `ANCHORS` in `src/data/site.mjs`
 - example kitchen exports: `pitch/exports/`, published under `/beispiel/`
 - legal notice, privacy policy and the Organization in the structured data: `src/data/legal.mjs`
 - link previews: `src/pages/og/[page].jpg.ts`
@@ -45,4 +49,5 @@ The deploy is skipped while the legal notice is incomplete (`scripts/legal-ready
 
 GitHub Pages cannot send response headers: the CSP is a `<meta>` tag (so `frame-ancestors`, HSTS,
 `nosniff` and Permissions-Policy are not available), and assets are cached for 10 minutes instead
-of a year.
+of a year. The owner keeps GitHub Pages (decided 2026-10-15). The workflow runs again after every
+successful „Release“ or „Auto release“ run, so the downloads follow each release.

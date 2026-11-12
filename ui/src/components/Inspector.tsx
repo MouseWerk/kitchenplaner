@@ -15,6 +15,7 @@ import {
   MIN_PARTITION_LENGTH,
   moveCorner,
   newOpening,
+  OPENING_DEFAULTS,
   openingHost,
   partitionLength,
   selectedWall,
@@ -78,7 +79,7 @@ function Section(props: { title: string; children: React.ReactNode; actions?: Re
   return (
     <section className="insp-section">
       <div className="insp-section-head">
-        <h3 className="eyebrow">{props.title}</h3>
+        <h3 className="eyebrow" tabIndex={-1}>{props.title}</h3>
         {props.actions}
       </div>
       {props.children}
@@ -110,7 +111,7 @@ function ItemPanel({ item }: { item: Item; project: Project }) {
       <div className="insp-title">
         <span className="pos-badge">{item.pos}</span>
         <div>
-          <div className="insp-name">{item.name}</div>
+          <div className="insp-name" tabIndex={-1}>{item.name}</div>
           {entry && <div className="insp-sub">{t(entry.name)}</div>}
         </div>
       </div>
@@ -203,7 +204,7 @@ function ItemPanel({ item }: { item: Item; project: Project }) {
         <button type="button" className="btn" onClick={duplicateSelected}>
           <Copy size={15} strokeWidth={1.75} aria-hidden /> {t("inspector.duplicate")}
         </button>
-        <button type="button" className="btn danger" onClick={() => useStore.getState().removeSelected()}>
+        <button type="button" className="btn danger" onClick={removeSelectedItems}>
           <Trash2 size={15} strokeWidth={1.75} aria-hidden /> {t("inspector.delete")}
         </button>
       </div>
@@ -216,7 +217,7 @@ function MultiPanel({ count }: { count: number }) {
   return (
     <>
       <div className="insp-title">
-        <div className="insp-name">{t("inspector.multi", { n: count })}</div>
+        <div className="insp-name" tabIndex={-1}>{t("inspector.multi", { n: count })}</div>
       </div>
       <AlignTools count={count} />
       <div className="insp-actions">
@@ -226,7 +227,7 @@ function MultiPanel({ count }: { count: number }) {
         <button type="button" className="btn" onClick={duplicateSelected}>
           <Copy size={15} strokeWidth={1.75} aria-hidden /> {t("inspector.duplicate")}
         </button>
-        <button type="button" className="btn danger" onClick={() => useStore.getState().removeSelected()}>
+        <button type="button" className="btn danger" onClick={removeSelectedItems}>
           <Trash2 size={15} strokeWidth={1.75} aria-hidden /> {t("inspector.delete")}
         </button>
       </div>
@@ -236,13 +237,15 @@ function MultiPanel({ count }: { count: number }) {
 
 type T = (k: TKey, v?: Record<string, string | number>) => string;
 
+/** The compass side a wall stands on: opposite its inward normal. */
+function wallSide(n: Vec2): "north" | "east" | "south" | "west" {
+  return Math.abs(n.x) > Math.abs(n.y) ? (n.x > 0 ? "west" : "east") : n.y > 0 ? "north" : "south";
+}
+
 function wallLabel(t: T, project: Project, index: number): string {
   const w = walls(project.room)[index];
   if (!w) return String(index + 1);
-  // The compass side the wall stands on: opposite its inward normal.
-  const n = w.inward;
-  const side = Math.abs(n.x) > Math.abs(n.y) ? (n.x > 0 ? "west" : "east") : n.y > 0 ? "north" : "south";
-  return t("inspector.wallN", { n: index + 1, side: t(`facing.${side}` as const), length: Math.round(w.length) });
+  return t("inspector.wallN", { n: index + 1, side: t(`facing.${wallSide(w.inward)}` as const), length: Math.round(w.length) });
 }
 
 function partitionLabel(t: T, project: Project, id: string): string {
@@ -251,9 +254,29 @@ function partitionLabel(t: T, project: Project, id: string): string {
   return w ? t("inspector.partitionN", { n: i + 1, length: Math.round(partitionLength(w)) }) : "–";
 }
 
-/** The host of an opening as the inspector names it: its wall or its partition. */
+/** The host of an opening in a list, short so the row keeps the kind and the width: „Wand 2 (Ost)“. */
 function hostLabel(t: T, project: Project, o: Opening): string {
-  return o.partition ? partitionLabel(t, project, o.partition) : wallLabel(t, project, o.wall);
+  if (o.partition) {
+    const i = project.room.partitions.findIndex((w) => w.id === o.partition);
+    return i < 0 ? "–" : t("inspector.partitionShort", { n: i + 1 });
+  }
+  const w = walls(project.room)[o.wall];
+  return w ? t("inspector.wallShort", { n: o.wall + 1, side: t(`facing.${wallSide(w.inward)}` as const) }) : String(o.wall + 1);
+}
+
+/**
+ * After a command that changes the panel (deleting, a row, a finding): the keyboard focus goes to
+ * the heading of the panel now shown, so it stays in the inspector and Tab goes on into the panel.
+ * Not into its first field: there Ctrl+Z would undo the field's text and G would type a letter.
+ */
+function focusPanel() {
+  setTimeout(() => document.querySelector<HTMLElement>("aside.inspector :is(.insp-name, h3)")?.focus(), 0);
+}
+
+/** Deletes the selected items; the keyboard focus goes on to the panel that follows. */
+function removeSelectedItems() {
+  useStore.getState().removeSelected();
+  focusPanel();
 }
 
 const OPENING_KINDS: OpeningKind[] = ["door", "slidingDoor", "window", "passage", "hatch"];
@@ -287,6 +310,7 @@ function DeleteButton() {
     const st = useStore.getState();
     if (st.mode === "room") removeRoomSelection();
     else st.removeSelected();
+    focusPanel();
   };
   return (
     <div className="insp-actions">
@@ -318,7 +342,7 @@ function OpeningPanel({ opening, project }: { opening: Opening; project: Project
     <>
       <div className="insp-title">
         <DoorOpen size={18} strokeWidth={1.75} aria-hidden />
-        <div className="insp-name">{t(`opening.${opening.kind}` as const)}</div>
+        <div className="insp-name" tabIndex={-1}>{t(`opening.${opening.kind}` as const)}</div>
       </div>
       <Section title={t("inspector.opening")}>
         <div className="grid">
@@ -327,7 +351,10 @@ function OpeningPanel({ opening, project }: { opening: Opening; project: Project
           <NumberField label={t("inspector.offset")} unit="mm" value={opening.offset} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ offset: v })} />
           <NumberField label={t("inspector.width")} unit="mm" value={opening.width} min={100} max={MAX_LENGTH} step={10} onChange={(v) => set({ width: v })} />
           <NumberField label={t("inspector.height")} unit="mm" value={opening.height} min={100} max={MAX_LENGTH} step={10} onChange={(v) => set({ height: v })} />
-          <NumberField label={t("inspector.sill")} unit="mm" value={opening.sill} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ sill: v })} />
+          {/* Doors and passages stand on the floor; a sill only shows where it means something or was set. */}
+          {(OPENING_DEFAULTS[opening.kind].sill > 0 || opening.sill !== 0) && (
+            <NumberField label={t("inspector.sill")} unit="mm" value={opening.sill} min={0} max={MAX_LENGTH} step={10} onChange={(v) => set({ sill: v })} />
+          )}
         </div>
         {opening.kind === "hatch" && <p className="hint">{t("inspector.hatchHint")}</p>}
       </Section>
@@ -408,7 +435,7 @@ function WallPanel({ index, project }: { index: number; project: Project }) {
   return (
     <>
       <div className="insp-title">
-        <div className="insp-name">{wallLabel(t, project, index)}</div>
+        <div className="insp-name" tabIndex={-1}>{wallLabel(t, project, index)}</div>
       </div>
       <Section title={t("inspector.wall")}>
         <div className="grid">
@@ -420,7 +447,7 @@ function WallPanel({ index, project }: { index: number; project: Project }) {
       </Section>
       <Section title={t("inspector.addOpening")}>
         <AddOpeningButtons host={{ wall: index }} />
-        <OpeningList project={project} openings={inWall} />
+        <OpeningList project={project} openings={inWall} withHost={false} />
       </Section>
     </>
   );
@@ -435,7 +462,7 @@ function PartitionPanel({ partition, project }: { partition: Partition; project:
   return (
     <>
       <div className="insp-title">
-        <div className="insp-name">{partitionLabel(t, project, partition.id)}</div>
+        <div className="insp-name" tabIndex={-1}>{partitionLabel(t, project, partition.id)}</div>
       </div>
       <Section title={t("inspector.partition")}>
         <div className="grid">
@@ -448,7 +475,7 @@ function PartitionPanel({ partition, project }: { partition: Partition; project:
       </Section>
       <Section title={t("inspector.addOpening")}>
         <AddOpeningButtons host={{ partition: partition.id }} />
-        <OpeningList project={project} openings={inside} />
+        <OpeningList project={project} openings={inside} withHost={false} />
       </Section>
       <DeleteButton />
     </>
@@ -468,7 +495,7 @@ function CornerPanel({ index, project }: { index: number; project: Project }) {
   return (
     <>
       <div className="insp-title">
-        <div className="insp-name">{t("inspector.cornerN", { n: index + 1 })}</div>
+        <div className="insp-name" tabIndex={-1}>{t("inspector.cornerN", { n: index + 1 })}</div>
       </div>
       <Section title={t("inspector.position")}>
         <div className="grid">
@@ -486,7 +513,7 @@ function RoomSelectionPanel({ count }: { count: number }) {
   return (
     <>
       <div className="insp-title">
-        <div className="insp-name">{t("inspector.roomMulti", { n: count })}</div>
+        <div className="insp-name" tabIndex={-1}>{t("inspector.roomMulti", { n: count })}</div>
       </div>
       <p className="hint">{t("inspector.roomMultiHint")}</p>
       <DeleteButton />
@@ -494,21 +521,31 @@ function RoomSelectionPanel({ count }: { count: number }) {
   );
 }
 
-function OpeningList({ project, openings }: { project: Project; openings: readonly Opening[] }) {
+/**
+ * The openings as rows: the kind first and never cut, then the host (where the list spans several)
+ * and the width. Activating a row opens the opening's panel and moves the focus into it.
+ */
+function OpeningList({ project, openings, withHost }: { project: Project; openings: readonly Opening[]; withHost: boolean }) {
   const t = useT();
   if (openings.length === 0) return null;
+  const open = (id: string) => {
+    useStore.getState().select({ corners: [], partitions: [], opening: id });
+    focusPanel();
+  };
   return (
     <ul className="list">
-      {openings.map((o) => (
-        <li key={o.id}>
-          <button type="button" className="list-row" onClick={() => useStore.getState().select({ corners: [], partitions: [], opening: o.id })}>
-            <span>{t(`opening.${o.kind}` as const)}</span>
-            <span className="muted">
-              {hostLabel(t, project, o)} · {o.width}
-            </span>
-          </button>
-        </li>
-      ))}
+      {openings.map((o) => {
+        const kind = t(`opening.${o.kind}` as const);
+        const detail = `${withHost ? `${hostLabel(t, project, o)} · ` : ""}${num(o.width)} mm`;
+        return (
+          <li key={o.id}>
+            <button type="button" className="list-row opening-row" title={`${kind}: ${detail}`} onClick={() => open(o.id)}>
+              <span>{kind}</span>
+              <span className="muted">{detail}</span>
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -581,7 +618,7 @@ function ProjectPanel({ project }: { project: Project }) {
       </Section>
       <Section title={t("inspector.openings")}>
         <AddOpeningButtons host={{ wall: 0 }} />
-        {project.room.openings.length === 0 ? <p className="hint">{t("inspector.noOpenings")}</p> : <OpeningList project={project} openings={project.room.openings} />}
+        {project.room.openings.length === 0 ? <p className="hint">{t("inspector.noOpenings")}</p> : <OpeningList project={project} openings={project.room.openings} withHost />}
       </Section>
       <Section title={t("inspector.totals")}>
         <div className="grid">
@@ -633,7 +670,14 @@ function ProjectPanel({ project }: { project: Project }) {
           <ul className="list">
             {issues.map((i, n) => (
               <li key={n}>
-                <button type="button" className="list-row notice warn" onClick={() => st.select({ items: i.itemIds })}>
+                <button
+                  type="button"
+                  className="list-row notice warn"
+                  onClick={() => {
+                    st.select({ items: i.itemIds });
+                    focusPanel();
+                  }}
+                >
                   <AlertTriangle size={15} strokeWidth={1.75} aria-hidden />
                   <span>{t(i.key, i.vars)}</span>
                 </button>

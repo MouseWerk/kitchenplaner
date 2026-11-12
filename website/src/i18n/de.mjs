@@ -14,7 +14,6 @@ export const de = {
     switchTo: 'English',
     switchShort: 'EN',
     menu: 'Menü',
-    switchLabel: 'Diese Seite auf Englisch',
   },
   footer: {
     label: 'Fußzeile',
@@ -32,7 +31,7 @@ export const de = {
   meta: {
     ogAlt: 'Bildschirmfoto von Kitchenplaner mit der Beispielküche „Restaurant Lindenhof“',
     home: {
-      title: 'Kitchenplaner – Profiküchen planen in 2D und 3D',
+      title: 'Kitchenplaner – Gastro- und Profiküchen planen in 2D und 3D',
       description: 'Kostenlose Desktop-App für Gastro- und Großküchen: Grundriss, vier Wandansichten und 3D, Gerätekatalog mit Anschlusswerten, Export als DXF, SVG und CSV.',
     },
     example: {
@@ -44,16 +43,16 @@ export const de = {
       description: 'Kitchenplaner kostenlos für Windows 10 und 11, macOS 11 oder neuer und Linux herunterladen, mit Hinweisen zu SmartScreen, Gatekeeper und den Prüfsummen.',
     },
     changelog: {
-      title: 'Änderungen in Kitchenplaner – alle Versionen',
+      title: 'Änderungen in Kitchenplaner – Neuerungen aller Versionen',
       description: 'Was sich in jeder Version von Kitchenplaner geändert hat: neue Funktionen und behobene Fehler, aus den Versionshinweisen der Releases auf GitHub.',
     },
     imprint: {
-      title: 'Impressum – Kitchenplaner',
-      description: 'Impressum der Website kitchenplaner.mousewerk.de: wer die Website und die App Kitchenplaner anbietet und wie du den Anbieter erreichst.',
+      title: 'Impressum – Kitchenplaner, die App für Gastroküchen',
+      description: 'Impressum von kitchenplaner.mousewerk.de: wer Website und App Kitchenplaner anbietet, wie du den Anbieter erreichst und wer für den Inhalt verantwortlich ist.',
     },
     privacy: {
-      title: 'Datenschutz – Kitchenplaner',
-      description: 'Datenschutzerklärung der Website kitchenplaner.mousewerk.de: keine Cookies, kein Tracking, keine externen Schriften; was beim Aufruf verarbeitet wird.',
+      title: 'Datenschutz – Kitchenplaner, die App für Gastroküchen',
+      description: 'Datenschutzerklärung von kitchenplaner.mousewerk.de: keine Cookies, kein Tracking, keine fremden Schriften; was beim Aufruf und bei der Update-Suche passiert.',
     },
     notFound: {
       title: 'Seite nicht gefunden – Kitchenplaner',
@@ -109,8 +108,10 @@ export const de = {
           caption: 'Die ganze Küche in 3D aus Südost.',
         },
         {
-          title: 'Katalog mit 359 Geräten',
-          text: 'Kochen, Kühlen, Spülen, Tische und Vorbereitung, Ausgabe, Lagern, Lüftung und Bauteile wie Stützen und Bodenabläufe. Viele Geräte gibt es in mehreren Breiten und als Elektro- oder Gasgerät, jedes mit 3D-Vorschau und Anschlusswerten.',
+          // {units}: the catalog of the latest release (src/data/catalog.mjs); titleUnknown when the build could not read it.
+          title: 'Katalog mit {units} Geräten',
+          titleUnknown: 'Gerätekatalog',
+          text: 'In neun Gruppen: Kochen, Kühlen, Spülen & Hygiene, Arbeitstische, Vorbereitung, Ausgabe, Lagern, Lüftung und Bauteile wie Stützen und Bodenabläufe. Viele Geräte gibt es in mehreren Breiten und als Elektro- oder Gasgerät, jedes mit 3D-Vorschau und Anschlusswerten.',
           alt: 'Der Katalog mit 3D-Vorschau und Anschlusswerten, gesucht wird nach „kombi“',
           caption: 'Der Katalog: Suche nach „kombi“, daneben die Vorschau mit Anschlusswerten.',
         },
@@ -213,7 +214,6 @@ export const de = {
       title: 'macOS',
       req: 'macOS 11 oder neuer, Apple Silicon und Intel',
       primary: 'Disk-Image für macOS',
-      secondary: 'App als Archiv',
       steps: [
         { text: 'Öffne das Disk-Image und ziehe Kitchenplaner in den Ordner „Programme“.' },
         { text: 'Die App ist nicht notarisiert, macOS blockiert deshalb den ersten Start. Ab macOS 15 öffnest du danach Systemeinstellungen → Datenschutz & Sicherheit und klickst bei Kitchenplaner auf „Dennoch öffnen“. Unter älteren Versionen klickst du die App im Finder mit der rechten Maustaste an, wählst „Öffnen“ und bestätigst noch einmal mit „Öffnen“.' },
@@ -228,6 +228,7 @@ export const de = {
       steps: [
         { text: 'Debian und Ubuntu: Installiere das .deb-Paket im Download-Ordner mit', cmd: 'sudo apt install ./{deb}' },
         { text: 'Andere Distributionen: Mache das AppImage ausführbar und starte es. Es braucht FUSE 2, unter Ubuntu das Paket libfuse2 oder libfuse2t64.', cmd: 'chmod +x {appimage}' },
+        { text: 'Das AppImage aktualisiert sich selbst. Eine Installation aus dem .deb-Paket kann das nicht: Sie meldet eine neue Version, die du dann hier herunterlädst und wieder mit apt installierst.' },
       ],
     },
     checksums: {
@@ -243,7 +244,7 @@ export const de = {
     },
     updates: {
       title: 'Updates',
-      text: 'Kitchenplaner sucht selbst nach neuen Versionen und zeigt einen Hinweis mit „Jetzt aktualisieren“ und „Später“; ungespeicherte Änderungen sichert es vorher. Abschalten kannst du das im Menü „Darstellung“ unter „Automatisch nach Updates suchen“.',
+      text: 'Kitchenplaner sucht selbst nach neuen Versionen und zeigt einen Hinweis mit „Jetzt aktualisieren“ und „Später“; ungespeicherte Änderungen sichert es vorher. Abschalten kannst du das im Menü „Darstellung“ unter „Automatisch nach Updates suchen“. Unter Linux gilt das für das AppImage; eine Installation aus dem .deb-Paket meldet neue Versionen nur.',
       since: '0.2.0',
     },
     older: 'Ältere Versionen und alle Dateien',
@@ -254,7 +255,6 @@ export const de = {
     lead: 'Alle Versionen, die neueste zuerst. Die Versionshinweise sind auf Englisch geschrieben; Begriffe der Oberfläche stehen darin auf Deutsch, so wie du sie in der App siehst.',
     version: 'Version {v}',
     released: 'Veröffentlicht am {date}',
-    upcoming: 'In Vorbereitung',
     onGithub: 'Release auf GitHub',
     sections: { Improved: 'Verbessert', Fixed: 'Behoben', Added: 'Neu', Changed: 'Geändert', Removed: 'Entfernt' },
   },
@@ -295,5 +295,6 @@ export const de = {
   notFound: {
     title: 'Seite nicht gefunden',
     text: 'Diese Seite gibt es nicht (mehr). Vielleicht hilft dir eine dieser Seiten weiter:',
+    home: 'Startseite',
   },
 };

@@ -1,9 +1,11 @@
 //! Updates of the installed app (tauri-plugin-updater). The UI asks `update_check` at start and
 //! every few hours; when the feed (`plugins.updater` in tauri.conf.json, the release's
-//! `latest.json`) names a newer version, `update_install` downloads it, checks its signature
-//! against the public key of the config, installs it and starts the new version. Windows: the
-//! NSIS setup runs in passive mode (a progress bar, no questions) and starts the app again
-//! itself; macOS replaces the .app, Linux the AppImage or, for a .deb install, the package.
+//! `latest.json`) names a newer version, `update_download` downloads it and checks its signature
+//! against the public key of the config, and `update_install` installs it and starts the new
+//! version. Two steps, so the UI can deal with changes made while the download ran before the
+//! restart. Windows: the NSIS setup runs in passive mode (a progress bar, no questions) and starts
+//! the app again itself; macOS replaces the .app, Linux the AppImage or, for a .deb install, the
+//! package.
 //!
 //! Debug builds (development, end-to-end tests) never check: a release would replace them.
 
@@ -23,9 +25,12 @@ pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R, tauri_plugin_update
     tauri_plugin_updater::Builder::new().build()
 }
 
-/// The update found by the last check, installed by `update_install`.
+/// The update found by the last check, and once `update_download` has run, its verified file.
 #[derive(Default)]
-pub struct Pending(Mutex<Option<Update>>);
+pub struct Pending {
+    found: Mutex<Option<Update>>,
+    downloaded: Mutex<Option<(Update, Vec<u8>)>>,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,22 +84,18 @@ pub async fn update_check(app: AppHandle, pending: State<'_, Pending>) -> Result
         version: u.version.clone(),
         manual: !installs_itself(u.download_url.as_str(), tauri::utils::platform::bundle_type()),
     });
-    *pending.0.lock().map_err(failed)? = update;
+    // A file downloaded for an earlier answer must not be installed in place of this one.
+    *pending.downloaded.lock().map_err(failed)? = None;
+    *pending.found.lock().map_err(failed)? = update;
     Ok(info)
 }
 
-/// Downloads and installs the update of the last check, then restarts. The UI has dealt with
-/// unsaved changes before: the restart does not ask again.
+/// Downloads the update of the last check and verifies its signature; `update_install` installs it.
 #[tauri::command]
-pub async fn update_install(
-    app: AppHandle,
-    pending: State<'_, Pending>,
-    exit: State<'_, ExitConfirmed>,
-    on_progress: Channel<Progress>,
-) -> Result<(), CmdError> {
-    let update = pending.0.lock().map_err(failed)?.take().ok_or_else(|| failed("no update to install"))?;
+pub async fn update_download(pending: State<'_, Pending>, on_progress: Channel<Progress>) -> Result<(), CmdError> {
+    let update = pending.found.lock().map_err(failed)?.take().ok_or_else(|| failed("no update to download"))?;
     let mut downloaded = 0u64;
-    let bytes = match update
+    let result = update
         .download(
             |chunk, total| {
                 downloaded += chunk as u64;
@@ -102,21 +103,40 @@ pub async fn update_install(
             },
             || {},
         )
-        .await
-    {
-        Ok(bytes) => bytes,
+        .await;
+    match result {
+        Ok(bytes) => {
+            *pending.downloaded.lock().map_err(failed)? = Some((update, bytes));
+            Ok(())
+        }
         Err(e) => {
             // A failed download may be tried again from the notice.
-            if let Ok(mut p) = pending.0.lock() {
+            if let Ok(mut p) = pending.found.lock() {
                 *p = Some(update);
             }
-            return Err(failed(e));
+            Err(failed(e))
         }
-    };
+    }
+}
+
+/// Installs the downloaded update, then restarts. The UI has dealt with unsaved changes before:
+/// the restart does not ask again.
+#[tauri::command]
+pub async fn update_install(
+    app: AppHandle,
+    pending: State<'_, Pending>,
+    exit: State<'_, ExitConfirmed>,
+) -> Result<(), CmdError> {
+    let (update, bytes) =
+        pending.downloaded.lock().map_err(failed)?.take().ok_or_else(|| failed("no update downloaded"))?;
     // Windows ends the process inside `install` (the setup replaces the running program).
     exit.0.store(true, Ordering::SeqCst);
-    if let Err(e) = update.install(bytes) {
+    if let Err(e) = update.install(&bytes) {
         exit.0.store(false, Ordering::SeqCst);
+        // Trying again from the notice downloads it again.
+        if let Ok(mut p) = pending.found.lock() {
+            *p = Some(update);
+        }
         return Err(failed(e));
     }
     app.restart()

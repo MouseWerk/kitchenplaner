@@ -75,4 +75,64 @@ describe("Menu", () => {
     expect(host.querySelector("[role=menu]")).toBeNull();
     expect(document.activeElement).toBe(button);
   });
+
+  it("opens a menu of commands, switches and choices on its first entry", () => {
+    const entries = [
+      { label: "Dimensions", checked: true, onSelect: () => {} },
+      { label: "Grid 10", checked: false, radio: true, onSelect: () => {} },
+      { label: "Grid 50", checked: true, radio: true, onSelect: () => {} },
+    ];
+    act(() => root.render(createElement(Menu, { label: "Display", title: "Display", entries })));
+    act(() => host.querySelector<HTMLButtonElement>("button")!.click());
+    const items = [...host.querySelectorAll<HTMLButtonElement>("[role=menu] button")];
+    expect(items.map((b) => b.getAttribute("role"))).toEqual(["menuitemcheckbox", "menuitemradio", "menuitemradio"]);
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it("moves the focus into the popup only once it is placed (never while it is hidden)", () => {
+    // happy-dom focuses hidden elements, browsers do not: record the popup's visibility at
+    // every focus call instead.
+    const focus = HTMLElement.prototype.focus;
+    const seen: string[] = [];
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
+      const menu = this.closest<HTMLElement>("[role=menu]");
+      if (menu) seen.push(menu.style.visibility);
+      focus.call(this, options);
+    };
+    try {
+      act(() => root.render(createElement(Menu, { label: "View", title: "View", entries: [{ label: "One", onSelect: () => {} }, { label: "Two", onSelect: () => {} }] })));
+      act(() => host.querySelector<HTMLButtonElement>("button")!.click());
+      expect(seen).toEqual([""]);
+      expect(document.activeElement).toBe(host.querySelector("[role=menuitem]"));
+    } finally {
+      HTMLElement.prototype.focus = focus;
+    }
+  });
+
+  it("names an icon-only button and lays the popup out fixed before it is placed", () => {
+    act(() => root.render(createElement(Menu, { label: createElement("svg"), ariaLabel: "Export", title: "Export", entries: [{ label: "One", onSelect: () => {} }] })));
+    const button = host.querySelector<HTMLButtonElement>("button")!;
+    expect(button.getAttribute("aria-label")).toBe("Export");
+    act(() => button.click());
+    // Never measured inside the narrow anchor: that would cut the labels to the button's width.
+    expect(host.querySelector<HTMLElement>("[role=menu]")!.style.position).toBe("fixed");
+  });
+
+  it("gives a cut label its full text as a tooltip", () => {
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get() { return this.textContent.length > 10 ? 300 : 50; } });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get() { return 200; } });
+    try {
+      act(() => root.render(createElement(Menu, { label: "View", title: "View", entries: [{ label: "Short", onSelect: () => {} }, { label: "A label much too long", onSelect: () => {} }] })));
+      act(() => host.querySelector<HTMLButtonElement>("button")!.click());
+      const labels = [...host.querySelectorAll<HTMLElement>(".menu-label")];
+      expect(labels.map((l) => l.getAttribute("title"))).toEqual([null, "A label much too long"]);
+    } finally {
+      if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scroll);
+      else delete (HTMLElement.prototype as { scrollWidth?: number }).scrollWidth;
+      if (client) Object.defineProperty(HTMLElement.prototype, "clientWidth", client);
+      else delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+    }
+  });
 });

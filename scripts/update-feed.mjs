@@ -84,9 +84,22 @@ export function verifySignature(data, signature, pub) {
 }
 
 /**
+ * The version a signature was made for: the `version:` field of its trusted comment (tab
+ * separated `key:value` pairs, as `tauri build` writes them); null when it has none. Only
+ * meaningful once `verifySignature` accepted the signature, which covers the trusted comment.
+ */
+export function signedVersion(signature) {
+  const lines = Buffer.from(String(signature).trim(), "base64").toString("utf8").split("\n");
+  const trusted = (lines[2] ?? "").replace(/^trusted comment: /, "");
+  const field = trusted.split("\t").find((f) => f.startsWith("version:"));
+  return field ? field.slice("version:".length) : null;
+}
+
+/**
  * Problems of the feed in `dir` (empty: good): its version, every required platform present,
  * every URL a file of this release under `base` that exists in `dir`, every signature valid for
- * the public key of `tauri.conf.json`.
+ * the public key of `tauri.conf.json` and made for `version`: the apps require that
+ * (`requireSignedVersion`), so they would refuse an update signed without it.
  */
 export function verifyFeed(dir, confFile, version, base) {
   const problems = [];
@@ -119,6 +132,7 @@ export function verifyFeed(dir, confFile, version, base) {
     }
     const bad = verifySignature(fs.readFileSync(file), String(entry.signature ?? ""), pub);
     if (bad) problems.push(`${platform}: ${name}: ${bad}`);
+    else if (signedVersion(entry.signature) !== version) problems.push(`${platform}: ${name}: signed for version ${signedVersion(entry.signature) ?? "(none)"}, not ${version}`);
   }
   return problems;
 }

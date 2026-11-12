@@ -44,9 +44,12 @@ export function ContextMenu(props: { at: { x: number; y: number }; entries: Cont
     };
   }, []);
 
+  // Focus only once the menu is placed: a hidden element (visibility: hidden while it is measured)
+  // cannot take the focus, and the keys would stay with the plan.
+  const placed = place.visibility !== "hidden";
   useEffect(() => {
-    list.current?.querySelector<HTMLButtonElement>("[role=menuitem]:not(:disabled)")?.focus();
-  }, [page]);
+    if (placed) list.current?.querySelector<HTMLButtonElement>("[role=menuitem]:not(:disabled)")?.focus();
+  }, [page, placed]);
 
   const onKey = (e: React.KeyboardEvent) => {
     const items = [...(list.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]:not(:disabled)") ?? [])];

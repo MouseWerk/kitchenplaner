@@ -1,5 +1,7 @@
 // Form controls of the inspector. Number and text fields apply on Enter or when they lose focus
-// (every change is one undo step); Escape restores the shown value.
+// (every change is one undo step); Escape restores the shown value. Enter keeps the focus in the
+// field, so the keyboard user goes on from there. Keys that confirm a composition (an input
+// method's Enter) are the composition's, not the field's.
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { currentLang, formatDate, num, parseDate, useT, type Lang } from "../lib/i18n";
@@ -8,7 +10,10 @@ export function Field(props: { label: string; children: (id: string) => ReactNod
   const id = useId();
   return (
     <div className={props.wide ? "field wide" : "field"}>
-      <label htmlFor={id}>{props.label}</label>
+      {/* A narrow inspector cuts long labels; the tooltip keeps the whole name. */}
+      <label htmlFor={id} title={props.label}>
+        {props.label}
+      </label>
       {props.children(id)}
     </div>
   );
@@ -24,7 +29,8 @@ const grouped = (s: string, sep: "." | ",") => (sep === "." ? /^-?\d{1,3}(\.\d{3
  * grouping ("0.5" in German, "0,5" in English) is the decimal point.
  */
 export function parseNumber(text: string, lang: Lang = currentLang()): number | null {
-  let s = text.trim().replace(/\s|mm$/gi, "");
+  // The typographic minus (U+2212) is what word processors and macOS often insert for "-".
+  let s = text.trim().replace(/\s|mm$/gi, "").replace(/−/g, "-");
   if (!s) return null;
   const [dec, group]: [string, "." | ","] = lang === "de" ? [",", "."] : [".", ","];
   const comma = s.lastIndexOf(",");
@@ -41,9 +47,14 @@ export function parseNumber(text: string, lang: Lang = currentLang()): number | 
     if (s.indexOf(sep) !== s.lastIndexOf(sep)) return null;
     s = s.replace(sep, ".");
   }
+  // Plain decimals only: `Number` would also read "0x10", "1e3" or "Infinity".
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s)) return null;
   const v = Number(s);
   return Number.isFinite(v) ? v : null;
 }
+
+/** Whether the key event belongs to an input method's composition (Enter picks a candidate there). */
+const composing = (e: React.KeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
 export function NumberField(props: {
   label: string;
@@ -57,14 +68,19 @@ export function NumberField(props: {
   disabled?: boolean;
 }) {
   const { value, digits = 0 } = props;
+  // Re-renders on a language switch: the shown text must follow it, or leaving the field would
+  // read "3.200" (German) by English rules as 3.2.
+  useT();
+  const lang = currentLang();
   const show = (v: number) => num(v, digits);
   const [text, setText] = useState(show(value));
+  // The text is the user's (typed since focus or since the last Enter), not the shown value.
   const [editing, setEditing] = useState(false);
   // Escape blurs the field, and blur commits the typed text unless this is set.
   const cancelled = useRef(false);
   useEffect(() => {
     if (!editing) setText(show(value));
-  }, [value, editing, digits]);
+  }, [value, editing, digits, lang]);
 
   const commit = (raw: string) => {
     // The untouched shown text is rounded to `digits`; reading it back must not change the value.
@@ -100,7 +116,10 @@ export function NumberField(props: {
               setEditing(true);
               e.currentTarget.select();
             }}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setEditing(true);
+              setText(e.target.value);
+            }}
             onBlur={(e) => {
               setEditing(false);
               if (cancelled.current) {
@@ -109,8 +128,12 @@ export function NumberField(props: {
               } else commit(e.target.value);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              else if (e.key === "Escape") {
+              if (composing(e)) return;
+              if (e.key === "Enter") {
+                commit(e.currentTarget.value);
+                // The field shows the value again as the store holds it (clamped, rounded).
+                setEditing(false);
+              } else if (e.key === "Escape") {
                 cancelled.current = true;
                 (e.target as HTMLInputElement).blur();
                 e.stopPropagation();
@@ -148,7 +171,8 @@ export function TextField(props: { label: string; value: string; onChange: (v: s
             onChange={(e) => setText(e.target.value)}
             onBlur={commit}
             onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (composing(e)) return;
+              if (e.key === "Enter") commit();
               else if (e.key === "Escape") {
                 setText(props.value);
                 e.stopPropagation();
@@ -201,7 +225,10 @@ export function DateField(props: { label: string; value: string; onChange: (v: s
             cancelled.current = false;
             setEditing(true);
           }}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setEditing(true);
+            setText(e.target.value);
+          }}
           onBlur={(e) => {
             setEditing(false);
             if (cancelled.current) {
@@ -210,8 +237,11 @@ export function DateField(props: { label: string; value: string; onChange: (v: s
             } else commit(e.target.value);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            else if (e.key === "Escape") {
+            if (composing(e)) return;
+            if (e.key === "Enter") {
+              commit(e.currentTarget.value);
+              setEditing(false);
+            } else if (e.key === "Escape") {
               cancelled.current = true;
               (e.target as HTMLInputElement).blur();
               e.stopPropagation();

@@ -64,7 +64,7 @@ try {
   await openExample();
 
   // 1: everything at once, nothing selected: the inspector shows the project with its totals.
-  await layout("Alle Ansichten");
+  await layout("Übersicht");
   await facing(0, "Nord");
   await facing(1, "Ost");
   await ready3d();
@@ -134,7 +134,7 @@ try {
   if (want(9)) await shotOf("section[aria-label='Ansicht Nord']", "09-ansicht-nord");
 
   // 10: the catalog searching „kombi“, with the large preview of the 20 GN combi steamer.
-  await layout("Alle Ansichten");
+  await layout("Übersicht");
   await ready3d();
   await catalogSearch("kombi");
   // The pointer out of the way first: moving it over the rows later would switch the preview.
@@ -165,7 +165,7 @@ try {
   await app.click("Einrichten", "header [role=group][aria-label='Modus']");
 
   // 13: one item: the 20 GN combi steamer with sizes, energy variants and connection values.
-  await layout("Alle Ansichten");
+  await layout("Übersicht");
   await ready3d();
   await selectItem("ex-31");
   await settle();
@@ -174,7 +174,7 @@ try {
 
   // 14 and 15: the light theme.
   await theme("Helles Design");
-  await layout("Alle Ansichten");
+  await layout("Übersicht");
   await ready3d();
   await zoom3d(2);
   await settle();
@@ -206,7 +206,7 @@ try {
   if (want(16)) {
     await layout("Ansichten");
     await settle();
-    await app.click("Wand (1,5 m)", "section[aria-label='Ansicht Nord'] .pane-head");
+    await app.click("1.500 mm vor der Wand", "section[aria-label='Ansicht Nord'] .pane-head");
     await app.waitFor("[role=menu]");
     await shot("16-ansicht-schnitttiefe");
     await app.keys(Key.Escape);
@@ -237,8 +237,13 @@ async function theme(entry) {
 }
 
 async function layout(name) {
-  await app.click(name, "header [role=group][aria-label='Ansicht wählen']");
-  await app.waitUntil(() => app.exec((n) => document.querySelector("header [role=group][aria-label='Ansicht wählen'] [aria-pressed=true]")?.innerText.trim() === n, name), `layout ${name} not shown`);
+  await app.click(name, "header [role=group][aria-label='Aufteilung wählen']");
+  // Named by aria-label when the button shows only an icon (narrow window), its innerText empty.
+  const current = (n) => {
+    const b = document.querySelector("header [role=group][aria-label='Aufteilung wählen'] [aria-pressed=true]");
+    return !!b && (b.getAttribute("aria-label") || b.innerText).trim() === n;
+  };
+  await app.waitUntil(() => app.exec(current, name), `layout ${name} not shown`);
 }
 
 /** Sets the facing of the `index`-th elevation pane of the split layout. */
@@ -428,13 +433,15 @@ async function clearSearch() {
 
 /**
  * Opens the large preview of catalog entry `name` from the keyboard (Tab from the search field to
- * its row), so no pointer hovers it: a hovered row would also show its native tooltip.
+ * the rows, the arrows to its row), so no pointer hovers it: a hovered row would also show its
+ * native tooltip.
  */
 async function catalogPreview(name) {
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 12 && !(await app.exec(() => !!document.activeElement?.matches(".cat-row"))); i++) await app.keys(Key.Tab);
+  for (let i = 0; i < 40; i++) {
     const at = await app.exec(() => document.activeElement?.innerText ?? "");
     if (at.includes(name)) break;
-    await app.keys(Key.Tab);
+    await app.keys(Key.ArrowDown);
   }
   await app.waitUntil(() => app.exec((n) => (document.activeElement?.innerText ?? "").includes(n), name), `the row „${name}“ did not take the focus`);
   await app.waitUntil(() => app.exec(() => !!document.querySelector(".cat-preview img")?.complete && document.querySelector(".cat-preview img").naturalWidth > 0), "the catalog preview did not open", 20000);

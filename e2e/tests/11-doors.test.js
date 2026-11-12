@@ -3,12 +3,12 @@
 
 import assert from "node:assert/strict";
 import { Key } from "../lib/harness.js";
-import { appTest, INSPECTOR, panes, pressed, pressOnViews } from "../lib/kitchen.js";
+import { appTest, INSPECTOR, panes, pressed, pressOnPlan, pressOnViews } from "../lib/kitchen.js";
 
 appTest("H and Shift+H flip the selected door, the inspector follows, the file keeps it", async (app) => {
   await pressOnViews(app, "1");
   await app.waitUntil(async () => JSON.stringify(await panes(app)) === '["Grundriss"]', "the plan layout did not open");
-  await pressOnViews(app, Key.Tab);
+  await pressOnPlan(app, Key.Tab);
   await app.waitUntil(async () => (await pressed(app, "Modus")) === "Raum", "Tab did not switch to Raum");
 
   // The new project's door, from the inspector's list of openings.

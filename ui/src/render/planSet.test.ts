@@ -105,7 +105,7 @@ describe("plan set check", () => {
 
   it("counts every sheet: plan, elevations, list pages and the 3D page", () => {
     const c = checkPlanSet(example(), opts(), ctx, true);
-    expect(c.sheets.map((s) => s.title)).toEqual(["Grundriss", ...["Nord", "Ost", "Süd", "West"].map((f) => `Ansicht ${f} – Schnitttiefe Wand (1,5 m)`)]);
+    expect(c.sheets.map((s) => s.title)).toEqual(["Grundriss", ...["Nord", "Ost", "Süd", "West"].map((f) => `Ansicht ${f} – Schnitttiefe 1.500 mm vor der Wand`)]);
     expect(c.listPages).toBeGreaterThanOrEqual(1);
     expect(c.total).toBe(5 + c.listPages + 1);
     expect(checkPlanSet(example(), opts({ plan: false, elevations: [], list: false }), ctx).total).toBe(0);
@@ -145,7 +145,7 @@ describe("plan set PDF", () => {
     const titles = pdf.pages.map((p) => p.texts);
     expect(titles[0]).toContain("Grundriss");
     expect(titles[0]).toContain(`1:${check.sheets[0].scale}`);
-    expect(titles[1]).toContain("Ansicht Nord – Schnitttiefe Wand (1,5 m)");
+    expect(titles[1]).toContain("Ansicht Nord – Schnitttiefe 1.500 mm vor der Wand");
     expect(titles[5]).toContain("Geräteliste");
     expect(titles[5]).toContain("o. M.");
     // The list carries every item by position and name, and the totals.

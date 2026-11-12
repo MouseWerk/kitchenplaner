@@ -4,7 +4,8 @@
 // - a page loads anything from another origin, has an inline script (JSON-LD excepted), an inline
 //   style or a style attribute, or lacks the Content-Security-Policy (script files of this site are
 //   fine: script-src 'self');
-// - a title (15 to 60 characters) or description (110 to 160) is missing or used twice;
+// - a title (50 to 60 characters) or description (140 to 160) is missing or used twice (web/websites.md;
+//   pages kept out of search engines, like the 404 page, only need to stay below the maximum);
 // - a page has not exactly one h1, skips a heading level, or lacks lang;
 // - an <img> lacks alt, width, height or loading;
 // - an indexable page lacks its canonical or reciprocal hreflang (de, en, x-default), or the
@@ -27,6 +28,9 @@ const ORIGIN = new URL(SITE_URL).origin;
  * eager images only (what the first view needs), "full" every image after scrolling to the end.
  */
 const BUDGET = { first: 350 * 1024, full: 2600 * 1024 };
+/** Lengths of titles and descriptions of indexable pages (web/websites.md, section 5). */
+const TITLE = [50, 60];
+const DESCRIPTION = [140, 160];
 const VIEWPORTS = [
   { name: 'phone 360 @2x', width: 360, dpr: 2 },
   { name: 'phone 430 @3x', width: 430, dpr: 3 },
@@ -191,8 +195,10 @@ for (const file of pages) {
   const lang = html.match(/<html[^>]*\blang="([^"]+)"/)?.[1];
   if (!lang) fail(path, 'no lang on <html>');
   else if (lang !== (path.startsWith('/en/') ? 'en' : 'de')) fail(path, `lang="${lang}" does not match the path`);
-  if (title.length < 15 || title.length > 60) fail(path, `title has ${title.length} characters (15 to 60): ${title}`);
-  if (desc.length < 110 || desc.length > 160) fail(path, `description has ${desc.length} characters (110 to 160): ${desc}`);
+  const indexed = !/<meta name="robots" content="noindex"/.test(head);
+  const [tMin, dMin] = indexed ? [TITLE[0], DESCRIPTION[0]] : [1, 1];
+  if (title.length < tMin || title.length > TITLE[1]) fail(path, `title has ${title.length} characters (${tMin} to ${TITLE[1]}): ${title}`);
+  if (desc.length < dMin || desc.length > DESCRIPTION[1]) fail(path, `description has ${desc.length} characters (${dMin} to ${DESCRIPTION[1]}): ${desc}`);
   if (titles.has(title)) fail(path, `title also on ${titles.get(title)}`);
   if (descs.has(desc)) fail(path, `description also on ${descs.get(desc)}`);
   titles.set(title, path);

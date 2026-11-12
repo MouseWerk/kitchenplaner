@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { drawingToSvg, sheetDrawing, sheetSvg } from "./svg";
+import { drawingToSvg, sheetDrawing, sheetSvg, xmlEscape } from "./svg";
+import { textWidth } from "./pdf";
 import type { Drawing } from "./drawing";
 import { planDrawing } from "../model/plan";
 import { elevationDrawing } from "../model/elevation";
@@ -99,5 +100,33 @@ describe("sheetDrawing", () => {
     const p = testProject([testItem("a", "table", 1600, 350)]);
     const sheet = sheetDrawing(elevationDrawing(p, "north", { showDims: true }), p.info, "Ansicht Nord", "de");
     expect(sheet.paperScale).toBe(25);
+  });
+});
+
+describe("sheet texts", () => {
+  it("drops characters XML cannot carry, so a pasted control character keeps the SVG readable", () => {
+    expect(xmlEscape("Krone\u0007 <A&B>\t\"x\"\uD800\uFFFF \u{1F600}\r\n")).toBe("Krone &lt;A&amp;B&gt;\t&quot;x&quot; \u{1F600}\r\n");
+    const p = testProject();
+    p.info = { ...p.info, client: "Gasthaus\u0007 Krone\u001b", name: "Küche\uDC00" };
+    const svg = sheetSvg(planDrawing(p, { showNames: false, showDims: true }), p.info, "Grundriss", "de");
+    expect(svg).not.toMatch(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDFFF]/u);
+    expect(svg).toContain(">Gasthaus Krone</text>");
+    expect(svg).toContain(">Küche</text>");
+  });
+
+  it("cuts long texts to their title block cell with an ellipsis", () => {
+    const p = testProject();
+    const name = "Großküche Kantine Nord, Umbau Spülküche und Ausgabe mit neuer Lüftungsdecke, Bauabschnitt 2, Ausführungsplanung";
+    p.info = { ...p.info, name, client: "Studierendenwerk Musterstadt, Anstalt des öffentlichen Rechts, Abteilung Hochschulgastronomie", drawingNo: "KP-2026-0815-A-Grundriss-Erdgeschoss-Teil-3" };
+    const texts = sheetDrawing(planDrawing(p, { showNames: false, showDims: true }), p.info, "Grundriss", "de").drawing.shapes.filter((s) => s.t === "text");
+    const value = (start: string) => texts.find((s) => s.text.startsWith(start));
+    // Cell widths minus 1.5 mm padding on each side: project 120 mm, plan number 40, client 90.
+    for (const [start, cell] of [["Großküche", 120], ["Studierendenwerk", 90], ["KP-2026", 40]] as const) {
+      const s = value(start);
+      expect(s?.text.endsWith("…"), start).toBe(true);
+      expect(textWidth(s?.text ?? "", s?.size ?? 0), start).toBeLessThanOrEqual(cell - 3);
+    }
+    // A text that fits stays as it is.
+    expect(value("Grundriss")?.text).toBe("Grundriss");
   });
 });

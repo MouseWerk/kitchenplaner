@@ -3,7 +3,11 @@ import { appTest, INSPECTOR, place, setField } from "../lib/kitchen.js";
 import { Key } from "../lib/harness.js";
 
 /** The standard width chips of the selected item: the pressed one is its width. */
-const pressedWidth = (app) => app.exec((sel) => document.querySelector(`${sel} [role=group][aria-label='Standardbreiten'] [aria-pressed=true]`)?.innerText.trim() ?? null, INSPECTOR);
+const pressedWidth = (app) =>
+  app.exec((sel) => {
+    const b = document.querySelector(`${sel} [role=group][aria-label='Standardbreiten'] [aria-pressed=true]`);
+    return b ? (b.getAttribute("aria-label") || b.innerText).trim() : null;
+  }, INSPECTOR);
 
 appTest("a width typed with German digit grouping („1.600“) sets 1600 mm", async (app) => {
   await place(app, "Arbeitstisch an der Wand");

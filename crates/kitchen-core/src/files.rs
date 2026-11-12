@@ -115,10 +115,26 @@ pub fn write_atomic(path: impl AsRef<Path>, bytes: &[u8]) -> Result<(), FileErro
     });
     if let Err(e) = result {
         let _ = fs::remove_file(&tmp_path);
+        if held_open_elsewhere(&e, path) {
+            return Err(FileError::InUse { path: path.display().to_string(), source: e });
+        }
         return Err(FileError::io("Speichern von", path, e));
     }
     sync_dir(dir);
     Ok(())
+}
+
+/// Did replacing `target` fail because another program has it open? Windows cannot rename over a
+/// file opened without delete sharing (Excel does that with a CSV) and reports "access denied"
+/// (5) or a sharing violation (32). Access denied also means missing rights, so it only counts
+/// when the target is an existing, writable file: the folder took the temp file, and read-only
+/// targets were refused before. Unix replaces open files, so this never applies there.
+fn held_open_elsewhere(e: &io::Error, target: &Path) -> bool {
+    const ERROR_ACCESS_DENIED: i32 = 5;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+    cfg!(windows)
+        && matches!(e.raw_os_error(), Some(ERROR_ACCESS_DENIED | ERROR_SHARING_VIOLATION))
+        && fs::metadata(target).is_ok_and(|m| m.is_file() && !m.permissions().readonly())
 }
 
 /// Creates a new, unique temp file next to `target`. The name starts with a dot and ends in
@@ -331,6 +347,28 @@ mod tests {
 
         // Windows cannot delete a read-only file when the temp dir is cleaned up.
         set_readonly(&path, false);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn target_open_in_another_program_is_reported_as_in_use() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Geräteliste.csv");
+        fs::write(&path, "alt").unwrap();
+        // Read and write sharing but no delete sharing, as Excel holds an open CSV.
+        const FILE_SHARE_READ_WRITE: u32 = 0x1 | 0x2;
+        let held = OpenOptions::new().read(true).share_mode(FILE_SHARE_READ_WRITE).open(&path).unwrap();
+
+        let err = write_atomic(&path, b"neu").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InUse, "{err}");
+        assert_eq!(err.file_name(), "Geräteliste.csv");
+        assert!(temp_entries(dir.path()).is_empty());
+        drop(held);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "alt");
+        // Closed in the other program, the same write goes through.
+        write_atomic(&path, b"neu").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "neu");
     }
 
     #[test]

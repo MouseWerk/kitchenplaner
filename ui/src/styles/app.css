@@ -60,6 +60,8 @@
   min-width: var(--sp-2);
 }
 
+/* The bar gives way in steps (components/toolbarFit.ts) so the title keeps its room; below the
+   last step the name and the unsaved label shrink inside it and never run under the buttons. */
 .toolbar-title {
   flex: 1 1 auto;
   display: flex;
@@ -68,10 +70,13 @@
   gap: var(--sp-2);
   min-width: 0;
   padding: 0 var(--sp-3);
+  overflow: hidden;
   color: var(--text);
+  container-type: inline-size;
 }
 
 .doc-name {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -81,7 +86,11 @@
 
 /* Unsaved changes: small muted text after the name. */
 .doc-dirty {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
@@ -93,6 +102,32 @@
   height: 6px;
   border-radius: 50%;
   background: var(--text-faint);
+}
+
+.doc-dirty .dirty-dot {
+  display: none;
+}
+
+/* A tight title keeps the name and shows unsaved changes as the dot (the label stays for screen
+   readers and as the tooltip). */
+@container (max-width: 260px) {
+  .doc-dirty {
+    flex: none;
+    align-self: center;
+  }
+
+  .doc-dirty .dirty-dot {
+    display: block;
+  }
+
+  .doc-dirty-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }
 
 .tb-btn {
@@ -128,6 +163,7 @@
 .tb-btn[aria-pressed="true"] {
   background: var(--bg-current);
   color: var(--text);
+  font-weight: var(--fw-semibold);
 }
 
 .tb-btn:hover svg,
@@ -205,6 +241,12 @@
   background: var(--bg-current);
   color: var(--text);
   font-weight: var(--fw-semibold);
+}
+
+/* Icon only (a narrow window names the button by its aria-label): no text to set in bold, so the
+   stronger pressed tint carries the state. */
+.seg > [aria-pressed="true"][aria-label] {
+  background: var(--bg-pressed);
 }
 
 .seg > button:focus-visible {
@@ -300,6 +342,10 @@
   color: var(--text-faint);
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
+}
+
+.menu-item:focus-visible .menu-hint {
+  color: var(--text-muted);
 }
 
 .menu-item:disabled .menu-hint {
@@ -527,7 +573,7 @@
   height: var(--ctl-md);
   padding: 0 var(--sp-2);
   background: var(--bg-input);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-input);
   border-radius: var(--r-sm);
   color: var(--text-faint);
   transition: border-color var(--dur-fast) var(--ease-out);
@@ -824,7 +870,7 @@
   height: var(--ctl-sm);
   min-width: 0;
   background: var(--bg-input);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-input);
   border-radius: var(--r-sm);
   transition: border-color var(--dur-fast) var(--ease-out);
 }
@@ -1024,9 +1070,10 @@
   background: var(--bg-active);
 }
 
+/* Icon-only: no text to set in bold, so the stronger pressed tint carries the state. */
 .icon-btn.is-current,
 .icon-btn[aria-pressed="true"] {
-  background: var(--bg-current);
+  background: var(--bg-pressed);
   color: var(--text);
 }
 
@@ -1069,10 +1116,21 @@
   white-space: nowrap;
 }
 
+/* An opening row keeps its kind whole; the host and width give way (the row's title has them). */
+.list-row.opening-row > span:first-child {
+  flex: none;
+}
+
+.list-row.opening-row > .muted {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .list-row.is-selected,
 .list-row[aria-current="true"] {
   background: var(--bg-selected);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-semibold);
 }
 
 .notice {
@@ -1172,8 +1230,8 @@
   gap: 6px;
 }
 
-/* A long cell (the room editing hint) gives way first. */
-.status-cell {
+/* Only the long hint (or the running operator) gives way; the short values stay whole. */
+.status-cell.hint {
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
@@ -1186,7 +1244,6 @@
 
 /* The cursor position: fixed width so the cells after it stay put. */
 .status-cell.mono {
-  flex-shrink: 0;
   min-width: 16ch;
   white-space: pre;
   font-size: var(--fs-xs);
@@ -1431,5 +1488,55 @@ label.recovery-entry:hover {
   .overlay,
   .dialog {
     animation: none;
+  }
+}
+
+/* ---- Windows contrast themes: the system drops every tint, so selected, current, pressed and
+   focused menu entries take the system's highlight colors (styles.test.ts checks every state). */
+
+@media (forced-colors: active) {
+  .tb-btn.is-current,
+  .tb-btn[aria-pressed="true"],
+  .seg > .is-current,
+  .seg > [aria-pressed="true"],
+  .seg > [aria-pressed="true"][aria-label],
+  .seg > [aria-selected="true"],
+  .seg > [aria-checked="true"],
+  .menu-item:focus-visible,
+  .chip.is-current,
+  .chip[aria-pressed="true"],
+  .icon-btn.is-current,
+  .icon-btn[aria-pressed="true"],
+  .list-row.is-selected,
+  .list-row[aria-current="true"],
+  .recovery-entry.is-current {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* Icons, counts and hints inside keep their own muted colors otherwise. */
+  .tb-btn.is-current *,
+  .tb-btn[aria-pressed="true"] *,
+  .seg > .is-current *,
+  .seg > [aria-pressed="true"] *,
+  .seg > [aria-pressed="true"][aria-label] *,
+  .seg > [aria-selected="true"] *,
+  .seg > [aria-checked="true"] *,
+  .menu-item:focus-visible *,
+  .chip.is-current *,
+  .chip[aria-pressed="true"] *,
+  .icon-btn.is-current *,
+  .icon-btn[aria-pressed="true"] *,
+  .list-row.is-selected *,
+  .list-row[aria-current="true"] *,
+  .recovery-entry.is-current * {
+    color: inherit !important;
+  }
+
+  .draw-selected,
+  .draw-opening-hit.is-selected {
+    forced-color-adjust: none;
+    fill: Highlight;
   }
 }

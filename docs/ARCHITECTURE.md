@@ -117,10 +117,11 @@ materials (`three/shared.ts`); the model's plan, elevations and plan check use t
   | `autosave_discard` | `id: string` | nothing |
   | `update_enabled` | none | `boolean`: this build looks for updates (release builds only) |
   | `update_check` | none | `{ version, manual } \| null`: a newer version, or none |
-  | `update_install` | `onProgress: Channel` (bytes downloaded, total) | nothing; restarts into the new version |
+  | `update_download` | `onProgress: Channel` (bytes downloaded, total) | nothing; downloads the found update and checks its signature |
+  | `update_install` | none | nothing; installs the downloaded update and restarts into the new version |
 
   Errors are `{ kind, path, detail }` with `kind` one of tooLarge, notUtf8, notProject, readOnly,
-  notFound, permissionDenied, badExtension, badPath, io; `path` is the file name only and
+  inUse, notFound, permissionDenied, badExtension, badPath, io; `path` is the file name only and
   `detail` the OS error text (only for `io`). The UI shows its own translated text per `kind`
   (`ui/src/lib/errors.ts`). Paths must be absolute and carry an allowed extension.
   On macOS a `.kplan` opened while the app runs arrives as the event `open-file` (payload: the

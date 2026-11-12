@@ -16,9 +16,10 @@
   stroke-width: 1.5px;
 }
 
-/* The toolbar's tool buttons that stay on (the ruler): a quiet tint while on. */
+/* The toolbar's tool buttons that stay on (the ruler): icon only, so the pressed tint (3:1)
+   carries the state. */
 .tb-icon[aria-pressed="true"] {
-  background: var(--bg-current);
+  background: var(--bg-pressed);
   color: var(--text);
 }
 
@@ -166,5 +167,19 @@
 @media (prefers-reduced-motion: reduce) {
   .intro-scrim {
     animation: none;
+  }
+}
+
+/* Windows contrast themes: the system drops the tint (styles.test.ts checks every state). */
+@media (forced-colors: active) {
+  .tb-icon[aria-pressed="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* Icons, counts and hints inside keep their own muted colors otherwise. */
+  .tb-icon[aria-pressed="true"] * {
+    color: inherit !important;
   }
 }

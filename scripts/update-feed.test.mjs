@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { makeFeed, platformFiles, readPublicKey, verifyFeed, verifySignature } from "./update-feed.mjs";
+import { makeFeed, platformFiles, readPublicKey, signedVersion, verifyFeed, verifySignature } from "./update-feed.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCRIPT = path.join(ROOT, "scripts", "update-feed.mjs");
@@ -22,10 +22,11 @@ function keyPair() {
   const id = crypto.randomBytes(8);
   const pk = publicKey.export({ format: "der", type: "spki" }).subarray(12);
   const pubText = `untrusted comment: minisign public key\n${Buffer.concat([Buffer.from("Ed"), id, pk]).toString("base64")}\n`;
-  const sign = (data, name = "file") => {
+  /** `version`: the one the trusted comment names, as `tauri build` writes it; null for none. */
+  const sign = (data, name = "file", version = VERSION) => {
     const hash = crypto.createHash("blake2b512").update(data).digest();
     const sig = crypto.sign(null, hash, privateKey);
-    const trusted = `timestamp:1792000000\tfile:${name}`;
+    const trusted = `timestamp:1792000000\tfile:${name}${version === null ? "" : `\tversion:${version}`}`;
     const global = crypto.sign(null, Buffer.concat([sig, Buffer.from(trusted)]), privateKey);
     const text = `untrusted comment: signature from tauri secret key\n${Buffer.concat([Buffer.from("ED"), id, sig]).toString("base64")}\ntrusted comment: ${trusted}\n${global.toString("base64")}\n`;
     return Buffer.from(text).toString("base64");
@@ -119,11 +120,31 @@ test("verification catches a changed file, another key, a missing file and a wro
   assert.throws(() => execFileSync(process.execPath, [SCRIPT, "verify", dir, conf, VERSION, BASE], { stdio: "pipe" }));
 });
 
+test("verification catches a file signed for another version or for none", () => {
+  // The apps require the signed version (requireSignedVersion): such a feed would never install.
+  const keys = keyPair();
+  const { dir, conf } = release(keys);
+  const exe = `Kitchenplaner_${VERSION}_x64-setup.exe`;
+  const data = fs.readFileSync(path.join(dir, exe));
+  assert.equal(signedVersion(keys.sign(data, exe)), VERSION);
+  for (const [version, message] of [
+    ["0.2.0", /windows-x86_64: .*signed for version 0\.2\.0, not 0\.2\.1/],
+    [null, /windows-x86_64: .*signed for version \(none\), not 0\.2\.1/],
+  ]) {
+    fs.writeFileSync(path.join(dir, `${exe}.sig`), keys.sign(data, exe, version));
+    writeFeed(dir, makeFeed(dir, VERSION, BASE, ""));
+    assert.match(verifyFeed(dir, conf, VERSION, BASE).join("\n"), message);
+  }
+});
+
 test("the app's updater config: this repository's feed, passive Windows install, the release key", () => {
   const conf = JSON.parse(fs.readFileSync(CONF, "utf8"));
   const updater = conf.plugins.updater;
   assert.deepEqual(updater.endpoints, ["https://github.com/MouseWerk/kitchenplaner/releases/latest/download/latest.json"]);
   assert.equal(updater.windows.installMode, "passive");
+  // An update must be signed for the version the feed announces: an older, validly signed file
+  // offered as a newer version would otherwise install (a downgrade).
+  assert.equal(updater.requireSignedVersion, true);
   // Off in the config: CI and local builds have no private key; the release switches it on.
   assert.equal(conf.bundle.createUpdaterArtifacts, false);
   const pub = readPublicKey(updater.pubkey);

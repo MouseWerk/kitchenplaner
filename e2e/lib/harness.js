@@ -279,10 +279,14 @@ export async function launch({ width = 1440, height = 900, reuse = null } = {}) 
     async consoleWarnings() {
       return browser.execute(() => window.__E2E_WARNINGS__ ?? null);
     },
-    /** Waits for a toast whose text matches `pattern`. */
+    /**
+     * Waits for a shown toast (notices and errors alike) whose text matches `pattern`. Not the live
+     * regions: they keep a message for seconds after its toast is gone, so an older message of the
+     * same text would match.
+     */
     async waitToast(pattern) {
       await app.waitUntil(
-        async () => pattern.test(await browser.execute(() => [...document.querySelectorAll("[role=status]")].map((e) => e.innerText).join("\n"))),
+        async () => pattern.test(await browser.execute(() => [...document.querySelectorAll(".toasts .toast")].map((e) => e.innerText).join("\n"))),
         `no message matching ${pattern}`,
       );
     },

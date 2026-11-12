@@ -236,3 +236,160 @@ describe("motion", () => {
     expect(code("base.css")).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\{[^}]*animation-duration[^}]*transition-duration/);
   });
 });
+
+// Contrast from the tokens, for every theme (design/principles.md): text AA (4.5:1) on every
+// surface and every state tint it can sit on; non-text that carries meaning (input borders, the
+// focus ring, pressed icon toggles, status icons) at least 3:1 against what is around it.
+describe("contrast", () => {
+  const css = code("tokens.css");
+  const vars = (body: string) => new Map([...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].replace(/\s+/g, " ").trim()]));
+  const dark = vars(css.match(/:root,\s*:root\[data-theme="dark"\]\s*\{([^{}]*)\}/)![1]);
+  const light = vars(css.match(/:root\[data-theme="light"\]\s*\{([^{}]*)\}/)![1]);
+  const more = (re: RegExp) => vars(css.match(re)![1]);
+  const darkMore = more(/@media \(prefers-contrast: more\)\s*\{\s*:root,\s*:root\[data-theme="dark"\]\s*\{([^{}]*)\}/);
+  const lightMoreSystem = more(/@media \(prefers-contrast: more\) and \(prefers-color-scheme: light\)\s*\{\s*:root:not\(\[data-theme="dark"\]\)\s*\{([^{}]*)\}/);
+  const lightMore = more(/@media \(prefers-contrast: more\)\s*\{\s*:root\[data-theme="light"\]\s*\{([^{}]*)\}/);
+  const themes: [string, Map<string, string>][] = [
+    ["dark", dark],
+    ["light", light],
+    ["dark, more contrast", new Map([...dark, ...darkMore])],
+    ["light, more contrast", new Map([...light, ...lightMore])],
+  ];
+
+  it("more contrast: both light blocks are identical and every theme changes the same tokens", () => {
+    expect(Object.fromEntries(lightMoreSystem)).toEqual(Object.fromEntries(lightMore));
+    expect([...lightMore.keys()].sort()).toEqual([...darkMore.keys()].sort());
+    for (const k of darkMore.keys()) expect(dark.has(k), k).toBe(true);
+  });
+
+  type RGBA = [number, number, number, number];
+  const parse = (theme: Map<string, string>, token: string): RGBA => {
+    const v = theme.get(token);
+    expect(v, token).toBeTruthy();
+    const hex = /^#([0-9a-f]{6})$/i.exec(v!);
+    if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)).concat(1) as RGBA;
+    const rgb = /^rgb\((\d+) (\d+) (\d+)(?: \/ ([\d.]+))?\)$/.exec(v!);
+    expect(rgb, `${token}: ${v} is not #rrggbb or rgb(r g b / a)`).toBeTruthy();
+    return [Number(rgb![1]), Number(rgb![2]), Number(rgb![3]), rgb![4] === undefined ? 1 : Number(rgb![4])];
+  };
+  /** `top` painted over the opaque `base`. */
+  const over = (top: RGBA, base: RGBA): RGBA => [0, 1, 2].map((i) => top[i] * top[3] + base[i] * (1 - top[3])).concat(1) as RGBA;
+  const lum = (c: RGBA) => {
+    const [r, g, b] = c.slice(0, 3).map((x) => (x / 255 <= 0.03928 ? x / 255 / 12.92 : ((x / 255 + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a: RGBA, b: RGBA) => {
+    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  const SURFACES = ["--bg-app", "--bg-sidebar", "--bg-canvas", "--bg-raised", "--bg-overlay", "--bg-input"];
+  /** The surfaces, and the given tints over the panel surfaces (what a row or button sits on). */
+  const backgrounds = (theme: Map<string, string>, tints: string[]) => {
+    const out: [string, RGBA][] = SURFACES.map((s) => [s, parse(theme, s)]);
+    for (const tint of tints) {
+      for (const s of ["--bg-sidebar", "--bg-raised", "--bg-overlay"]) out.push([`${tint} on ${s}`, over(parse(theme, tint), parse(theme, s))]);
+    }
+    return out;
+  };
+
+  const check = (theme: Map<string, string>, fg: string, bgs: [string, RGBA][], min: number, fail: string[]) => {
+    for (const [name, bg] of bgs) {
+      const r = ratio(over(parse(theme, fg), bg), bg);
+      if (r < min) fail.push(`${fg} on ${name}: ${r.toFixed(2)} < ${min}`);
+    }
+  };
+
+  for (const [name, theme] of themes) {
+    it(`${name}: text reaches 4.5:1 on every surface and state tint`, () => {
+      const fail: string[] = [];
+      for (const fg of ["--text", "--text-muted"]) check(theme, fg, backgrounds(theme, ["--bg-hover", "--bg-active", "--bg-selected", "--bg-current"]), 4.5, fail);
+      // Faint text (eyebrows, counts, units, menu hints) sits on surfaces and hovered rows; on a
+      // focused, selected or current row it turns muted.
+      check(theme, "--text-faint", backgrounds(theme, ["--bg-hover"]), 4.5, fail);
+      // Status colors are small text too (warnings, the delete entry, the status bar).
+      for (const fg of ["--success", "--warning", "--danger"]) check(theme, fg, SURFACES.map((s) => [s, parse(theme, s)]), 4.5, fail);
+      check(theme, "--warning", [["--warning-soft on --bg-sidebar", over(parse(theme, "--warning-soft"), parse(theme, "--bg-sidebar"))]], 4.5, fail);
+      check(theme, "--danger", [["--danger-soft on --bg-raised", over(parse(theme, "--danger-soft"), parse(theme, "--bg-raised"))]], 4.5, fail);
+      // Primary buttons.
+      check(theme, "--on-accent", [["--accent-strong", parse(theme, "--accent-strong")]], 4.5, fail);
+      // Asked for more contrast: main and muted text reach AAA (7:1) on the surfaces.
+      if (name.includes("more")) for (const fg of ["--text", "--text-muted"]) check(theme, fg, SURFACES.map((s) => [s, parse(theme, s)]), 7, fail);
+      expect(fail).toEqual([]);
+    });
+
+    it(`${name}: input borders, the focus ring and pressed toggles reach 3:1`, () => {
+      const fail: string[] = [];
+      const surfaces = SURFACES.map((s) => [s, parse(theme, s)] as [string, RGBA]);
+      check(theme, "--border-input", surfaces, 3, fail);
+      check(theme, "--border-focus", surfaces, 3, fail);
+      // Icon-only toggles have no text to set in bold: their tint itself is the state.
+      check(theme, "--bg-pressed", [["--bg-sidebar", parse(theme, "--bg-sidebar")], ["--bg-raised", parse(theme, "--bg-raised")]], 3, fail);
+      const pressed = (s: string): [string, RGBA][] => [[`--bg-pressed on ${s}`, over(parse(theme, "--bg-pressed"), parse(theme, s))]];
+      check(theme, "--text", [...pressed("--bg-sidebar"), ...pressed("--bg-raised")], 3, fail);
+      for (const fg of ["--success", "--warning", "--danger", "--accent"]) check(theme, fg, surfaces, 3, fail);
+      expect(fail).toEqual([]);
+    });
+  }
+});
+
+// A state shown only by a tint vanishes twice: for anyone who cannot tell two dark grays apart
+// (WCAG 1.4.11), and in Windows contrast themes, which drop every author background.
+describe("states beyond the tint", () => {
+  const STATEFUL = /\.(is-current|is-selected|draw-selected)\b|\[aria-(pressed|current|selected|checked)="true"\]|:focus-visible/;
+  const TINT = /var\(--(bg-current|bg-selected|bg-active|bg-pressed|draw-selected-fill)\)/;
+  /** Rules that show a state by a tint: [selector part, its declarations]. */
+  const tinted = (name: string) =>
+    rules(name).flatMap(({ selector, decls }) =>
+      decls.some(([p, v]) => /^(background(-color)?|fill)$/.test(p) && TINT.test(v))
+        ? selector
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => STATEFUL.test(s))
+            .map((s) => [s, decls] as const)
+        : [],
+    );
+  /** The selectors inside the sheet's `@media (forced-colors: active)` blocks. */
+  const forced = (name: string) => {
+    const css = code(name);
+    const out = new Set<string>();
+    for (const m of css.matchAll(/@media \(forced-colors: active\)\s*\{/g)) {
+      const start = m.index! + m[0].length;
+      let depth = 1;
+      let i = start;
+      for (; i < css.length && depth > 0; i++) depth += css[i] === "{" ? 1 : css[i] === "}" ? -1 : 0;
+      for (const r of css.slice(start, i - 1).matchAll(/([^{}]+)\{[^{}]*\}/g)) for (const s of r[1].split(",")) out.add(s.replace(/\s+/g, " ").trim());
+    }
+    return out;
+  };
+  // Text items carry the state in their weight; this one carries it in its own radio button.
+  const OWN_MARK: [RegExp, string][] = [[/^\.recovery-entry\.is-current$/, "the entry's radio button is checked"]];
+
+  it("finds the tinted states", () => {
+    expect(tinted("app.css").map(([s]) => s)).toEqual(expect.arrayContaining([".list-row.is-selected", '.seg > [aria-pressed="true"]', ".menu-item:focus-visible", ".draw-selected"]));
+    expect(forced("app.css").has(".list-row.is-selected")).toBe(true);
+  });
+
+  it("a toolbar segment showing only its icon marks the current one with the pressed tint", () => {
+    // In a narrow window the layout, mode and tool buttons lose their text and are named by
+    // aria-label: the semibold weight has nothing to show on.
+    const rule = tinted("app.css").find(([s]) => s === '.seg > [aria-pressed="true"][aria-label]');
+    expect(rule?.[1]).toContainEqual(["background", "var(--bg-pressed)"]);
+  });
+
+  for (const name of others) {
+    it(`${name}: every tinted state has a highlight in Windows contrast themes`, () => {
+      const cover = forced(name);
+      const missing = tinted(name).map(([s]) => s).filter((s) => !cover.has(s));
+      expect(missing, "add it to the sheet's @media (forced-colors: active) block").toEqual([]);
+    });
+
+    it(`${name}: a tinted state also changes the text weight, or is an icon toggle with the pressed tint`, () => {
+      const bad = tinted(name)
+        .filter(([s]) => !/:focus-visible|draw-selected|\.(room|draw)-/.test(s) && !OWN_MARK.some(([re]) => re.test(s)))
+        .filter(([, decls]) => !decls.some(([p]) => p === "font-weight") && !decls.some(([p, v]) => /^background/.test(p) && /--bg-pressed/.test(v)))
+        .map(([s]) => s);
+      expect(bad, "set font-weight: var(--fw-semibold), or use --bg-pressed for an icon-only toggle").toEqual([]);
+    });
+  }
+});

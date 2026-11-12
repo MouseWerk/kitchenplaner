@@ -5,7 +5,7 @@ import { exampleKitchen } from "../examples/exampleKitchen";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS, SHEET_SCALES } from "../render/svg";
 import { area, bounds, footprint, pointInPolygon } from "./geometry";
 import { testItem, testProject } from "./testProject";
-import type { Opening, Partition } from "./types";
+import type { Opening, Partition, Project } from "./types";
 import { expandDim, type ArcShape, type DimShape, type PolyShape, type Shape, type TextShape } from "../render/drawing";
 
 const ALL = { showNames: true, showDims: true };
@@ -404,5 +404,70 @@ describe("planDrawing names", () => {
     // A drain is a few centimetres wide: at 1:200 its name has no room inside or beside it.
     expect(names(planDrawing(p, { ...ALL, paperScale: 200 }).shapes, 200).some((n) => n.id === "d")).toBe(false);
     expect(texts(planDrawing(p, { ...NONE, paperScale: 50 }).shapes).filter((s) => !s.circled)).toHaveLength(0);
+  });
+});
+
+describe("planDrawing labels stay where they were", () => {
+  // The placement of numbers and names looks only at labels nearby (a grid); these pin its result
+  // to the one of checking every label against every other, for the example kitchen at every
+  // scale and for a crowded plan where numbers go out on the far rings.
+  /** Numbers, names and leaders of a plan, rounded to a micrometre, hashed (FNV-1a). */
+  const fingerprint = (p: Project, ps: number) => {
+    const parts = planDrawing(p, { showNames: true, showDims: false, paperScale: ps })
+      .shapes.filter((s) => (s.t === "text" && s.itemId) || (s.t === "poly" && s.pen === "detail"))
+      .map((s) => {
+        const r = (v: number) => Math.round(v * 1000) / 1000;
+        if (s.t === "text") return `${s.itemId} ${s.circled ? "#" : ""}${s.text} ${r(s.p.x)} ${r(s.p.y)}`;
+        if (s.t === "poly") return `${s.itemId} > ${s.pts.map((q) => `${r(q.x)} ${r(q.y)}`).join(" ")}`;
+        return "";
+      });
+    let h = 0x811c9dc5;
+    for (const ch of parts.join("\n")) h = Math.imul(h ^ ch.codePointAt(0)!, 0x01000193) >>> 0;
+    return `${parts.length}:${h.toString(16)}`;
+  };
+
+  /** 108 tables in rows closer than they are wide, a hood over every fourth one, turned. */
+  const crowded = () => {
+    const items = [];
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 12; col++) {
+        const id = `t${row}-${col}`;
+        items.push(testItem(id, "table", 500 + col * 600, 450 + row * 600, (row * 30) % 360));
+        if ((row + col) % 4 === 0) items.push(testItem(`h${row}-${col}`, "hood-wall", 500 + col * 600, 450 + row * 600, 90));
+      }
+    }
+    return testProject(items);
+  };
+
+  /** The example kitchen with names that do not change with its texts: the catalog ids. */
+  const example = () => {
+    const p = exampleKitchen("de");
+    return { ...p, items: p.items.map((it) => ({ ...it, name: it.catalogId })) };
+  };
+
+  const scales = [40, ...SHEET_SCALES];
+  it("example kitchen", () => {
+    expect(Object.fromEntries(scales.map((ps) => [ps, fingerprint(example(), ps)]))).toEqual({
+      40: "302:cc7ac8da",
+      20: "303:cdfadaac",
+      25: "303:a14b5b6f",
+      50: "299:be0cbd61",
+      75: "285:c52df227",
+      100: "263:d493af60",
+      200: "263:87628fb8",
+      500: "299:77dc3795",
+    });
+  });
+  it("crowded plan", () => {
+    expect(Object.fromEntries(scales.map((ps) => [ps, fingerprint(crowded(), ps)]))).toEqual({
+      40: "378:ba75c7ab",
+      20: "378:33b49338",
+      25: "378:f927c068",
+      50: "378:ee7d0380",
+      75: "303:bef9ac32",
+      100: "266:ac6c9ab9",
+      200: "363:46912652",
+      500: "377:2b56fce4",
+    });
   });
 });

@@ -52,11 +52,14 @@ export interface AppState {
   project: Project;
   /** Counts `load` calls, so views can refit when a project is opened or created (even an identical one). */
   loadCount: number;
-  /** Counts `markSaved` calls, so a running operator can tell that its state reached a file. */
-  saveCount: number;
   /** Path of the file the project was opened from or saved to; null for a new project. */
   path: string | null;
-  /** True when the project changed since it was opened or saved. */
+  /**
+   * The project as it was last opened or saved (null: none matches a file, as for a restored
+   * backup). Projects are never changed in place, so `project === saved` means nothing to save.
+   */
+  saved: Project | null;
+  /** True when the project differs from `saved`: an undo back to it, or a change of nothing, is clean. */
   dirty: boolean;
   past: Project[];
   future: Project[];
@@ -81,7 +84,11 @@ export interface AppState {
   redo: () => void;
   /** Opens `project`; `dirty` marks it as not saved yet (a restored autosave). */
   load: (project: Project, path: string | null, opts?: { dirty?: boolean }) => void;
-  markSaved: (path: string) => void;
+  /**
+   * Notes that `project` (default: the current one) was written to `path`. Pass the project that
+   * was serialized: edits made while the file was written keep the project marked as changed.
+   */
+  markSaved: (path: string, project?: Project) => void;
   select: (sel: Partial<Selection>) => void;
   setLayout: (layout: Layout) => void;
   setFacing: (facing: Facing) => void;
@@ -105,11 +112,13 @@ let gestureOpen = false;
 /** A drag is in progress. */
 let gestureActive = false;
 
+const FIRST_PROJECT = newProject();
+
 export const useStore = create<AppState>((set, get) => ({
-  project: newProject(),
+  project: FIRST_PROJECT,
   loadCount: 0,
-  saveCount: 0,
   path: null,
+  saved: FIRST_PROJECT,
   dirty: false,
   past: [],
   future: [],
@@ -129,7 +138,7 @@ export const useStore = create<AppState>((set, get) => ({
     gestureOpen = false;
     set((s) => ({
       project: after,
-      dirty: true,
+      dirty: after !== s.saved,
       past: record ? [...s.past, before].slice(-HISTORY_LIMIT) : s.past,
       // Any change makes the redo steps stale, recorded or not.
       future: [],
@@ -153,28 +162,29 @@ export const useStore = create<AppState>((set, get) => ({
   undo() {
     // Mid-drag the next move would apply onto the restored project and skip recording it.
     if (gestureActive) return;
-    const { past, project, future } = get();
+    const { past, project, future, saved } = get();
     const prev = past[past.length - 1];
     if (!prev) return;
-    set({ project: prev, past: past.slice(0, -1), future: [project, ...future], dirty: true, selection: keepExisting(get().selection, prev) });
+    set({ project: prev, past: past.slice(0, -1), future: [project, ...future], dirty: prev !== saved, selection: keepExisting(get().selection, prev) });
   },
 
   redo() {
     if (gestureActive) return;
-    const { past, project, future } = get();
+    const { past, project, future, saved } = get();
     const next = future[0];
     if (!next) return;
-    set({ project: next, past: [...past, project], future: future.slice(1), dirty: true, selection: keepExisting(get().selection, next) });
+    set({ project: next, past: [...past, project], future: future.slice(1), dirty: next !== saved, selection: keepExisting(get().selection, next) });
   },
 
   load(project, path, opts) {
     gestureOpen = false;
     gestureActive = false;
-    set((s) => ({ project, path, dirty: opts?.dirty ?? false, past: [], future: [], selection: EMPTY_SELECTION, loadCount: s.loadCount + 1 }));
+    const dirty = opts?.dirty ?? false;
+    set((s) => ({ project, path, saved: dirty ? null : project, dirty, past: [], future: [], selection: EMPTY_SELECTION, loadCount: s.loadCount + 1 }));
   },
 
-  markSaved(path) {
-    set((s) => ({ path, dirty: false, saveCount: s.saveCount + 1 }));
+  markSaved(path, project = get().project) {
+    set((s) => ({ path, saved: project, dirty: s.project !== project }));
   },
 
   select(sel) {
@@ -214,7 +224,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   updateItems(ids, patch, opts) {
     const wanted = new Set(ids);
-    get().change((p) => ({ ...p, items: p.items.map((it) => (wanted.has(it.id) ? { ...it, ...patch(it) } : it)) }), opts);
+    // No item matched: the same project, so no undo step and nothing to save.
+    get().change((p) => (p.items.some((it) => wanted.has(it.id)) ? { ...p, items: p.items.map((it) => (wanted.has(it.id) ? { ...it, ...patch(it) } : it)) } : p), opts);
   },
 
   addItems(items) {
@@ -249,7 +260,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateOpening(id, patch, opts) {
-    get().change((p) => ({ ...p, room: { ...p.room, openings: p.room.openings.map((o) => (o.id === id ? { ...o, ...patch } : o)) } }), opts);
+    get().change((p) => (p.room.openings.some((o) => o.id === id) ? { ...p, room: { ...p.room, openings: p.room.openings.map((o) => (o.id === id ? { ...o, ...patch } : o)) } } : p), opts);
   },
 }));
 

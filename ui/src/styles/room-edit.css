@@ -132,3 +132,12 @@
   stroke-width: 1px;
   pointer-events: none;
 }
+
+/* Windows contrast themes: the system drops the tint (styles.test.ts checks every state). */
+@media (forced-colors: active) {
+  .room-tint.is-selected,
+  .room-dim-mark.is-selected {
+    forced-color-adjust: none;
+    fill: Highlight;
+  }
+}

@@ -10,7 +10,7 @@ const { de, en } = dicts;
     <h1>{de.notFound.title}</h1>
     <p class="lead">{de.notFound.text}</p>
     <ul class="buttons">
-      <li><a class="btn btn-primary" href={ROUTES.home.de}>Kitchenplaner</a></li>
+      <li><a class="btn btn-primary" href={ROUTES.home.de}>{de.notFound.home}</a></li>
       <li><a class="btn btn-secondary" href={ROUTES.download.de}>{de.nav.download}</a></li>
       <li><a class="btn btn-secondary" href={ROUTES.example.de}>{de.nav.example}</a></li>
     </ul>
@@ -19,7 +19,7 @@ const { de, en } = dicts;
     <h2>{en.notFound.title}</h2>
     <p class="lead">{en.notFound.text}</p>
     <ul class="buttons">
-      <li><a class="btn btn-secondary" href={ROUTES.home.en}>Kitchenplaner</a></li>
+      <li><a class="btn btn-secondary" href={ROUTES.home.en}>{en.notFound.home}</a></li>
       <li><a class="btn btn-secondary" href={ROUTES.download.en}>{en.nav.download}</a></li>
       <li><a class="btn btn-secondary" href={ROUTES.example.en}>{en.nav.example}</a></li>
     </ul>

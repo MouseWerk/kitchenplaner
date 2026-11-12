@@ -5,7 +5,7 @@ appTest("starts with an empty, unnamed project in the plan and no console errors
   await app.waitUntil(async () => (await app.browser.getTitle()) === "Unbenanntes Projekt – Kitchenplaner", `window title is „${await app.browser.getTitle()}“`);
   // All views at once: plan, 3D and two elevations.
   assert.deepEqual(await panes(app), ["Grundriss", "3D", "Ansicht Nord", "Ansicht Ost"]);
-  assert.equal(await pressed(app, "Ansicht wählen"), "Alle Ansichten");
+  assert.equal(await pressed(app, "Aufteilung wählen"), "Übersicht");
   assert.equal(await pressed(app, "Modus"), "Einrichten");
   assert.deepEqual(await app.planItems(), []);
   assert.match(await app.statusText(), /(^|\s)0 Geräte(\s|$)/);

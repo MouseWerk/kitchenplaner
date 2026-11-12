@@ -23,5 +23,20 @@ export const ROUTES = {
   privacy: { de: '/datenschutz/', en: '/en/privacy/' },
 };
 
+/**
+ * Section anchors that people link to, in the page's language (/#funktionen, /en/#features).
+ * Headings take the anchor plus "-h" as their id (aria-labelledby).
+ * @type {Record<'features' | 'audience' | 'checksums' | 'facts' | 'open' | 'gallery' | 'exports', { de: string, en: string }>}
+ */
+export const ANCHORS = {
+  features: { de: 'funktionen', en: 'features' },
+  audience: { de: 'fuer-wen', en: 'who-it-is-for' },
+  checksums: { de: 'pruefsummen', en: 'checksums' },
+  facts: { de: 'kennzahlen', en: 'key-figures' },
+  open: { de: 'oeffnen', en: 'open' },
+  gallery: { de: 'bilder', en: 'pictures' },
+  exports: { de: 'exporte', en: 'exports' },
+};
+
 /** @param {string} path */
 export const absolute = (path) => new URL(path, SITE_URL).href;

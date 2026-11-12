@@ -1,11 +1,12 @@
-// The question about unsaved changes. The native dialog cannot be driven by WebDriver; in the test
-// build it takes its answer from the test (ui/src/lib/platform.ts) and records the question, so
+// The question about unsaved changes. In the test build it takes its answer from the test
+// (ui/src/lib/unsaved.ts, platform.ts `e2eAnswer`) and records the question, so
 // these tests check what the app decides around it: when it asks, and what each answer does.
 
 import assert from "node:assert/strict";
 import { appTest, place, waitItemCount } from "../lib/kitchen.js";
 
-const QUESTION = "Das Projekt hat ungespeicherte Änderungen. Möchtest du sie verwerfen?";
+// The app's own dialog (Speichern / Nicht speichern / Abbrechen); the test's yes is „Nicht speichern“.
+const QUESTION = (name) => `Möchtest du die Änderungen an „${name}“ speichern? Ohne Speichern gehen sie verloren.`;
 
 appTest("a new project asks before unsaved changes are lost", async (app) => {
   await place(app, "Arbeitstisch an der Wand");
@@ -13,9 +14,9 @@ appTest("a new project asks before unsaved changes are lost", async (app) => {
   await app.nextAnswer(false);
   await app.click("Neues Projekt", "header");
   await app.waitUntil(async () => (await app.asked()).length === 1, "no question before discarding the changes");
-  assert.deepEqual(await app.asked(), [QUESTION]);
+  assert.deepEqual(await app.asked(), [QUESTION("Unbenanntes Projekt")]);
   await waitItemCount(app, 1);
-  // „Verwerfen“: an empty project.
+  // „Nicht speichern“: an empty project.
   await app.nextAnswer(true);
   await app.click("Neues Projekt", "header");
   await waitItemCount(app, 0);
@@ -41,7 +42,7 @@ appTest("closing the window with unsaved changes asks; cancel keeps it, discard 
   await app.nextAnswer(false);
   await close();
   await app.waitUntil(async () => (await app.asked()).length === 1, "closing did not ask about the unsaved changes");
-  assert.deepEqual(await app.asked(), [QUESTION]);
+  assert.deepEqual(await app.asked(), [QUESTION("Unbenanntes Projekt")]);
   // Still open and unchanged.
   await waitItemCount(app, 1);
   assert.ok((await app.browser.getTitle()).startsWith("* "));
@@ -59,7 +60,7 @@ appTest("closing the window with unsaved changes asks; cancel keeps it, discard 
         return true;
       }
     },
-    "the window stayed open after „Verwerfen“",
+    "the window stayed open after „Nicht speichern“",
     15000,
   );
 }, { appGone: true });

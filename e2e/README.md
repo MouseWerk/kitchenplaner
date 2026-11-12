@@ -82,7 +82,7 @@ three hooks, all off unless the variable is set and all compiled out of release 
   (`lib/kitchen.js`) starts a fresh app for the test, saves a screenshot on failure, and fails the
   test when the page logged a console error.
 - Find elements as a user does: German texts from `ui/src/locales/de.ts`, ARIA roles and labels
-  (`aside[aria-label='Katalog']`, `[role=group][aria-label='Ansicht wählen']`), the `data-item`
+  (`aside[aria-label='Katalog']`, `[role=group][aria-label='Aufteilung wählen']`), the `data-item`
   ids of the plan. Add a `data-testid` only where nothing visible identifies an element.
 - Wait for conditions (`app.waitUntil`, `app.waitToast`, `app.waitFile`), never for time.
 - Type text and digits with `app.type("1000")`: `app.keys([...])` holds every key down until the

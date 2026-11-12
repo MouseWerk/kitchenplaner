@@ -4,6 +4,10 @@
 // room editor (RoomEditLayer.tsx) lies above the drawing and takes all input; the plan only draws.
 // Above both lies the measure tool while it is on (MeasureLayer.tsx). A right click without
 // moving opens the context menu of the mode (planMenu.ts); a right drag pans.
+//
+// The plan is a tab stop of its own (`data-drawing`, lib/shortcuts.ts): with the focus on it Tab
+// switches the mode, N and Shift+N step through the units, and Shift+F10 or the menu key opens the
+// context menu at the selection.
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
@@ -22,9 +26,10 @@ import type { Item, Project, Vec2 } from "../model/types";
 import { drawingBounds, mm, type Drawing, type Shape } from "../render/drawing";
 import { useStore } from "../store/store";
 import { toScreen, toWorld, useViewport, type Viewport } from "../lib/viewport";
-import { num, useT } from "../lib/i18n";
+import { num, t as translate, useT } from "../lib/i18n";
 import { grabDelta, operatorKey, operatorLabel, rotateAngle, startGrab, startRotate, type ModalOp } from "../lib/modal";
 import { setModeKeyHandler } from "../lib/shortcuts";
+import { announce } from "../lib/announce";
 import {
   applyTransform,
   beginDuplicate,
@@ -57,7 +62,7 @@ const CORNER_R = 2.5;
 const READOUT_OFFSET = 16;
 
 type Drag =
-  | { kind: "pan"; start: Vec2; ox: number; oy: number; button: number }
+  | { kind: "pan"; start: Vec2; ox: number; oy: number; button: number; moved: boolean }
   | {
       kind: "items";
       start: Vec2;
@@ -343,7 +348,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     // Middle or right button, or Space held: pan.
     if (e.button === 1 || e.button === 2 || (e.button === 0 && space.current)) {
-      drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, ox: vp.ox, oy: vp.oy, button: e.button };
+      drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, ox: vp.ox, oy: vp.oy, button: e.button, moved: false };
       setPanning(true);
       return;
     }
@@ -392,6 +397,10 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     const far = Math.hypot(e.clientX - (d.kind === "pan" ? d.start.x : d.screen.x), e.clientY - (d.kind === "pan" ? d.start.y : d.screen.y)) >= DRAG_THRESHOLD;
     switch (d.kind) {
       case "pan":
+        // A right click shakes a little: only a real drag pans, and only that stops the plan
+        // from following the pane size (lib/viewport.ts).
+        if (!d.moved && !far) return;
+        d.moved = true;
         setVp({ ...vp, ox: d.ox + e.clientX - d.start.x, oy: d.oy + e.clientY - d.start.y });
         break;
       case "items": {
@@ -463,6 +472,31 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
     const others = st.project.items.filter((i) => placementOf(kindOf(i.catalogId)) === placement);
     const s = snapItem(draft, st.project.room, others, st.prefs.grid, true, wallSnapReach(entry.kind));
     st.addItems([{ ...draft, x: s.x, y: s.y, rotation: s.rotation }]);
+    announcePlaced(draft.id);
+  };
+
+  /** Shift+F10 or the menu key: the context menu at the selection, or in the middle of the plan. */
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (!(e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey))) return;
+    if (running.current || drag.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const st = useStore.getState();
+    const r = e.currentTarget.getBoundingClientRect();
+    const sel = roomEdit ? [] : st.project.items.filter((i) => st.selection.items.includes(i.id));
+    const inside = (p: Vec2) => p.x >= 0 && p.y >= 0 && p.x <= r.width && p.y <= r.height;
+    const centre = sel.length > 0 ? toScreen(vpRef.current, selectionCentre(sel)) : null;
+    const at = centre && inside(centre) ? centre : { x: r.width / 2, y: r.height / 2 };
+    const screen = { x: r.left + at.x, y: r.top + at.y };
+    setMenu({ at: screen, entries: roomEdit ? roomMenu(toWorld(vpRef.current, at), null) : arrangeMenu() });
+  };
+
+  // A click into the drawing gives it the keyboard focus, so Tab and the plan's keys work from
+  // there; the context menu keeps its own focus.
+  const takeFocus = (e: RPointerEvent<HTMLDivElement>) => {
+    if ((e.target as Element).closest("[role=menu]")) return;
+    if (document.activeElement !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
   };
 
   const transform = `translate(${vp.ox} ${vp.oy}) scale(${vp.k})`;
@@ -477,8 +511,13 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
       onDrop={onDrop}
       onContextMenu={(e) => e.preventDefault()}
       onPointerLeave={() => props.onCursor?.(null)}
+      onPointerDownCapture={takeFocus}
+      onKeyDown={onKeyDown}
       role="application"
       aria-label={t("view.plan")}
+      aria-description={t("plan.keys")}
+      tabIndex={0}
+      data-drawing=""
     >
       {size.w > 0 && (
         <svg
@@ -518,6 +557,12 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
       {menu && <ContextMenu at={menu.at} entries={menu.entries} label={t("contextMenu.title")} backLabel={t("contextMenu.back")} onClose={() => setMenu(null)} />}
     </div>
   );
+}
+
+/** Reads out the item just placed with its position number. */
+export function announcePlaced(id: string) {
+  const item = useStore.getState().project.items.find((i) => i.id === id);
+  if (item) announce(translate("announce.placed", { pos: String(item.pos), name: item.name }));
 }
 
 /** Selection corners, snapping guides, the selection frame and the operator line, in screen pixels. */

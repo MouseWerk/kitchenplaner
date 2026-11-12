@@ -180,9 +180,10 @@ function str(v: unknown, path: string, fallback?: string): string {
 
 /**
  * "size" and "distance" are lengths in mm: positive or at least 0, and at most MAX_LENGTH, so a
- * damaged file cannot open with a 10 km table.
+ * damaged file cannot open with a 10 km table. A "coordinate" (a position on the plan) lies within
+ * MAX_LENGTH of the origin either way, so it cannot break the views and exports either.
  */
-type NumRule = "any" | "positive" | "nonNegative" | "size" | "distance";
+type NumRule = "any" | "positive" | "nonNegative" | "size" | "distance" | "coordinate";
 
 function num(v: unknown, path: string, rule: NumRule, fallback?: number): number {
   if (v === undefined && fallback !== undefined) return fallback;
@@ -190,6 +191,7 @@ function num(v: unknown, path: string, rule: NumRule, fallback?: number): number
   if ((rule === "positive" || rule === "size") && !(v > 0)) invalid(path, v);
   if ((rule === "nonNegative" || rule === "distance") && !(v >= 0)) invalid(path, v);
   if ((rule === "size" || rule === "distance") && v > MAX_LENGTH) invalid(path, v);
+  if (rule === "coordinate" && Math.abs(v) > MAX_LENGTH) invalid(path, v);
   return v;
 }
 
@@ -261,7 +263,7 @@ function parseRoom(v: unknown): Room {
 
 function parsePoint(p: unknown, path: string): Vec2 {
   if (!isObject(p)) invalid(path, p);
-  return { x: num(p.x, `${path}.x`, "any"), y: num(p.y, `${path}.y`, "any") };
+  return { x: num(p.x, `${path}.x`, "coordinate"), y: num(p.y, `${path}.y`, "coordinate") };
 }
 
 function parsePartition(v: unknown, path: string): Partition {
@@ -317,8 +319,8 @@ function parseItem(v: unknown, path: string, listPos?: number): Item {
     pos: listPos ?? num(v.pos, `${path}.pos`, "any", 0),
     catalogId,
     name: str(v.name, `${path}.name`, entry ? t(entry.name) : catalogId),
-    x: num(v.x, `${path}.x`, "any"),
-    y: num(v.y, `${path}.y`, "any"),
+    x: num(v.x, `${path}.x`, "coordinate"),
+    y: num(v.y, `${path}.y`, "coordinate"),
     rotation: num(v.rotation, `${path}.rotation`, "any", 0),
     width: num(v.width, `${path}.width`, "size", entry?.width),
     depth: num(v.depth, `${path}.depth`, "size", entry?.depth),

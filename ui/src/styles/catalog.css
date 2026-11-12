@@ -118,3 +118,14 @@
   font-size: var(--fs-sm);
   color: var(--text-muted);
 }
+
+/* The search's clear button sits inside the field; the empty result offers the same below. */
+.search .search-clear {
+  width: var(--ctl-xs);
+  height: var(--ctl-xs);
+  margin-right: calc(-1 * var(--sp-1));
+}
+
+.sidebar .empty .btn {
+  margin-top: var(--sp-2);
+}

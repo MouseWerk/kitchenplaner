@@ -11,8 +11,10 @@ import { AutosaveStatus } from "./components/AutosaveStatus";
 import { RecoveryDialog } from "./components/RecoveryDialog";
 import { Intro } from "./components/Intro";
 import { UpdateNotice } from "./components/UpdateNotice";
-import { confirmDiscard, openPath } from "./lib/actions";
-import { discardOwnBackup } from "./lib/autosave";
+import { UnsavedDialog } from "./components/UnsavedDialog";
+import { LiveRegions } from "./components/LiveRegions";
+import { openPath } from "./lib/actions";
+import { setCursor, useCursor } from "./lib/cursor";
 import { num, useT } from "./lib/i18n";
 import { isTauri } from "./lib/platform";
 import { handleShortcut } from "./lib/shortcuts";
@@ -21,7 +23,7 @@ import { startUpdates } from "./lib/updates";
 import { checkProject } from "./model/checks";
 import { electricStatus } from "./model/equipment";
 import { ELEVATION_CUTS, WALL_CUT_DEPTH, type ElevationCut } from "./model/elevation";
-import { FACINGS, type Facing, type Vec2 } from "./model/types";
+import { FACINGS, type Facing } from "./model/types";
 import { useStore } from "./store/store";
 import { ElevationView } from "./views/ElevationView";
 import { PlanView } from "./views/PlanView";
@@ -34,7 +36,6 @@ export function App() {
   const layout = useStore((s) => s.layout);
   const facing = useStore((s) => s.facing);
   const [fitSignal, setFitSignal] = useState(0);
-  const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [secondFacing, setSecondFacing] = useState<Facing>("east");
   // The introduction waits until the question about backups is answered (or there are none).
   const [recoverySettled, setRecoverySettled] = useState(false);
@@ -107,10 +108,12 @@ export function App() {
       <CatalogPanel />
       <main className={`views layout-${layout}`}>{panes}</main>
       <Inspector />
-      <StatusBar cursor={cursor} />
+      <StatusBar />
       <Toasts />
+      <LiveRegions />
       <RecoveryDialog onSettled={() => setRecoverySettled(true)} />
       <Intro ready={recoverySettled} />
+      <UnsavedDialog />
     </div>
   );
 }
@@ -119,7 +122,9 @@ function Pane(props: { title: string; children: React.ReactNode; controls?: Reac
   return (
     <section className="pane" aria-label={props.title}>
       <div className="pane-head">
-        <h2 className="pane-title">{props.title}</h2>
+        <h2 className="pane-title" title={props.title}>
+          {props.title}
+        </h2>
         {props.controls}
       </div>
       <div className="pane-body">{props.children}</div>
@@ -148,7 +153,7 @@ function FacingSwitch(props: { value: Facing; onChange: (f: Facing) => void }) {
 function CutSelect() {
   const t = useT();
   const cut = useStore((s) => s.prefs.elevationCut);
-  const label = (c: ElevationCut) => t(`view.cut.${c}` as const, { m: num(WALL_CUT_DEPTH / 1000, 1) });
+  const label = (c: ElevationCut) => t(`view.cut.${c}` as const, { mm: num(WALL_CUT_DEPTH) });
   return (
     <Menu
       className="tb-btn pane-menu"
@@ -160,7 +165,13 @@ function CutSelect() {
   );
 }
 
-function StatusBar(props: { cursor: Vec2 | null }) {
+/** The cursor's place on the plan: its own component, so a pointer move re-renders only this. */
+function CursorCell() {
+  const cursor = useCursor();
+  return <span className="status-cell mono">{cursor ? `X ${Math.round(cursor.x)}  Y ${Math.round(cursor.y)}` : " "}</span>;
+}
+
+function StatusBar() {
   const t = useT();
   const project = useStore((s) => s.project);
   const grid = useStore((s) => s.prefs.grid);
@@ -169,10 +180,19 @@ function StatusBar(props: { cursor: Vec2 | null }) {
   const issues = useMemo(() => checkProject(project), [project]);
   return (
     <footer className="statusbar">
-      <span className="status-cell mono">{props.cursor ? `X ${Math.round(props.cursor.x)}  Y ${Math.round(props.cursor.y)}` : " "}</span>
+      <CursorCell />
       <span className="status-cell">{grid > 0 ? t("settings.grid", { mm: grid }) : t("settings.gridOff")}</span>
       <span className="status-cell mode">{t(mode === "room" ? "mode.room" : "mode.arrange")}</span>
-      {status ? <span className="status-cell mono">{status}</span> : <span className="status-cell">{t(mode === "room" ? "mode.roomHint" : "mode.arrangeHint")}</span>}
+      {/* The one cell that gives way when the bar is narrow; its title keeps the whole text. */}
+      {status ? (
+        <span className="status-cell mono hint" title={status}>
+          {status}
+        </span>
+      ) : (
+        <span className="status-cell hint" title={t(mode === "room" ? "mode.roomHint" : "mode.arrangeHint")}>
+          {t(mode === "room" ? "mode.roomHint" : "mode.arrangeHint")}
+        </span>
+      )}
       <span className="status-spacer" />
       <AutosaveStatus />
       <span className="status-cell">{t("status.items", { n: project.items.length })}</span>
@@ -190,7 +210,8 @@ function Toasts() {
   const t = useT();
   const toasts = useToasts();
   return (
-    <div className="toasts" role="status" aria-live="polite">
+    // Not a live region: lib/toast.ts reads each message out through LiveRegions, errors assertively.
+    <div className="toasts">
       <UpdateNotice />
       {toasts.map((x) => (
         <div key={x.id} className={x.tone === "danger" ? "toast danger" : "toast"}>
@@ -205,7 +226,10 @@ function Toasts() {
   );
 }
 
-/** Window title, the unsaved-changes question on close, and a project passed at start (file association). */
+/**
+ * Window title and a project passed at start (file association). The unsaved-changes question on
+ * close is set up outside the app (lib/closeGuard.ts), so it outlives a crash of the view.
+ */
 function useDesktopIntegration() {
   const name = useStore((s) => s.project.info.name);
   const dirty = useStore((s) => s.dirty);
@@ -217,49 +241,17 @@ function useDesktopIntegration() {
   }, [name, dirty]);
 
   useEffect(() => {
-    if (!isTauri()) {
-      const onBefore = (e: BeforeUnloadEvent) => {
-        if (useStore.getState().dirty) e.preventDefault();
-      };
-      window.addEventListener("beforeunload", onBefore);
-      return () => window.removeEventListener("beforeunload", onBefore);
-    }
+    if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     void (async () => {
-      const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      const win = getCurrentWindow();
-      const off = await win.onCloseRequested(async (event) => {
-        event.preventDefault();
-        // Closing without saving: the discarded changes must not come back as a backup.
-        if (await confirmDiscard()) await discardOwnBackup().then(() => win.destroy());
-      });
-      // Quitting the app (Cmd+Q on macOS) closes no window first, so the shell holds the exit and
-      // asks here; "confirm_exit" lets it go.
-      const { listen } = await import("@tauri-apps/api/event");
-      const offExit = await listen("exit-requested", async () => {
-        if (await confirmDiscard()) await discardOwnBackup().then(() => invoke("confirm_exit"));
-      });
-      if (cancelled) {
-        off();
-        offExit();
-      } else
-        unlisten = () => {
-          off();
-          offExit();
-        };
       const startup = await invoke<string | null>("startup_file").catch(() => null);
       if (startup && !cancelled) void openPath(startup);
       // macOS hands files opened while the app runs over as an event (the shell's "open-file").
+      const { listen } = await import("@tauri-apps/api/event");
       const offOpen = await listen<string>("open-file", (e) => void openPath(e.payload));
       if (cancelled) offOpen();
-      else {
-        const offClose = unlisten;
-        unlisten = () => {
-          offClose?.();
-          offOpen();
-        };
-      }
+      else unlisten = offOpen;
     })();
     return () => {
       cancelled = true;

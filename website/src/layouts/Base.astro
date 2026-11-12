@@ -13,7 +13,7 @@ import '../styles/tokens.css';
 import '../styles/site.css';
 import { dicts, type Lang } from '../i18n';
 import { website, organization, breadcrumbs, graph } from '../data/jsonld';
-import { ROUTES, SITE_NAME, REPO_URL, RELEASES_URL, ISSUES_URL, LICENSE_URL, absolute } from '../data/site.mjs';
+import { ANCHORS, ROUTES, SITE_NAME, REPO_URL, RELEASES_URL, ISSUES_URL, LICENSE_URL, absolute } from '../data/site.mjs';
 
 type PageKey = keyof typeof ROUTES;
 
@@ -59,11 +59,14 @@ const csp = [
   "font-src 'self'",
   "base-uri 'none'",
   "form-action 'none'",
+  // Nothing on the site fetches; 'self' lets tools that read robots.txt from inside the page
+  // (Lighthouse) do so instead of reporting it as unreachable.
+  "connect-src 'self'",
   'upgrade-insecure-requests',
 ].join('; ');
 
 const nav: { key: PageKey; label: string; href: string }[] = [
-  { key: 'home', label: t.nav.features, href: `${r('home')}#funktionen` },
+  { key: 'home', label: t.nav.features, href: `${r('home')}#${ANCHORS.features[lang]}` },
   { key: 'example', label: t.nav.example, href: r('example') },
   { key: 'download', label: t.nav.download, href: r('download') },
   { key: 'changelog', label: t.nav.changelog, href: r('changelog') },
@@ -124,13 +127,13 @@ const nav: { key: PageKey; label: string; href: string }[] = [
             ))}
             {page && (
               <li>
-                <a class="lang" href={r(page, other)} hreflang={other} lang={other} aria-label={t.nav.switchLabel}>{t.nav.switchTo}</a>
+                <a class="lang" href={r(page, other)} hreflang={other} lang={other}>{t.nav.switchTo}</a>
               </li>
             )}
           </ul>
         </nav>
         <div class="header-phone">
-          {page && <a class="lang-short" href={r(page, other)} hreflang={other} lang={other} aria-label={t.nav.switchLabel}>{t.nav.switchShort}</a>}
+          {page && <a class="lang-short" href={r(page, other)} hreflang={other} lang={other}>{t.nav.switchShort}</a>}
           <details class="menu">
             <summary>
               <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path class="bars" d="M3 6h14M3 10h14M3 14h14" /><path class="cross" d="M5 5l10 10M15 5L5 15" /></svg>

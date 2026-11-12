@@ -16,8 +16,9 @@ import { useStore } from "../store/store";
 import { cancelActiveOperator } from "./commands";
 import { errorText } from "./errors";
 import { currentLang, t } from "./i18n";
-import { addRecentFile, baseName, confirmDialog, openProjectFile, PDF_FILTER, PROJECT_FILTER, readProjectPath, safeFileName, saveBinary, saveText, type FileFilter } from "./platform";
+import { addRecentFile, baseName, openProjectFile, PDF_FILTER, PROJECT_FILTER, readProjectPath, safeFileName, saveBinary, saveText, type FileFilter } from "./platform";
 import { toast } from "./toast";
+import { askUnsaved } from "./unsaved";
 
 const SVG: FileFilter = { name: "SVG", extensions: ["svg"] };
 const DXF: FileFilter = { name: "DXF", extensions: ["dxf"] };
@@ -31,10 +32,26 @@ const PDF_IMAGE_WIDTH = 2400;
 /** Gap between the four elevations on one sheet (paper mm). */
 const SHEET_GAP = 18;
 
-/** Asks before the open project's changes would be lost; true when it may go ahead. */
+/**
+ * Applies what is typed in the focused field: fields apply on Enter or when they lose focus, and
+ * closing, quitting or updating would otherwise drop it without counting it as a change.
+ */
+export function commitFocusedField() {
+  const el = typeof document !== "undefined" ? document.activeElement : null;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.blur();
+}
+
+/**
+ * Asks before the open project's changes would be lost: save them, drop them or stay. True when
+ * the caller may go ahead (saved or dropped).
+ */
 export async function confirmDiscard(): Promise<boolean> {
-  if (!useStore.getState().dirty) return true;
-  return confirmDialog(t("file.discardQuestion"), t("app.name"), t("file.discard"), t("common.cancel"));
+  commitFocusedField();
+  const { dirty, project } = useStore.getState();
+  if (!dirty) return true;
+  const answer = await askUnsaved(project.info.name || t("app.untitled"));
+  if (answer === "save") return saveFile();
+  return answer === "discard";
 }
 
 export async function newFile() {
@@ -82,7 +99,8 @@ export async function saveFile(as = false): Promise<boolean> {
   try {
     const written = await saveText(as ? null : path, `${safeFileName(project.info.name)}.kplan`, PROJECT_FILTER, serializeProject(project));
     if (!written) return false;
-    useStore.getState().markSaved(written);
+    // The project as written: edits made while the file was written still count as changes.
+    useStore.getState().markSaved(written, project);
     void addRecentFile(written).catch(() => {});
     toast(t("file.saved", { name: baseName(written) }));
     return true;
@@ -96,6 +114,8 @@ export type ExportKind = "plan-svg" | "plan-dxf" | "plan-png" | "elevation-svg" 
 
 /** Runs one export; `facing` picks the elevation for the single-elevation exports. */
 export async function runExport(kind: ExportKind, facing: Facing) {
+  // As for saving: the export shows the project without a running operator's half-done move.
+  cancelActiveOperator();
   const { project, prefs } = useStore.getState();
   const base = safeFileName(project.info.name);
   const lang = currentLang();
@@ -155,6 +175,7 @@ export async function runExport(kind: ExportKind, facing: Facing) {
  * the plan prints names when the dialog asks for them.
  */
 export async function exportPlanSet(opts: PlanSetOptions): Promise<boolean> {
+  cancelActiveOperator();
   const { project, prefs } = useStore.getState();
   const lang = currentLang();
   try {

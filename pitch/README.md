@@ -7,14 +7,14 @@ Pixeldichte: jedes Bild 3840 × 2160 (außer 09, ein Ausschnitt). Erzeugt mit `e
 
 | Bild | Bildunterschrift |
 | --- | --- |
-| `01-alle-ansichten.png` | Alles auf einen Blick: Grundriss, 3D und zwei Wandansichten, links der Katalog, rechts die Anschlusswerte des Projekts. |
+| `01-alle-ansichten.png` | Alles auf einen Blick: Grundriss, 3D und zwei Ansichten, links der Katalog, rechts die Anschlusswerte des Projekts. |
 | `02-grundriss.png` | Der bemaßte Grundriss einer kompletten Restaurantküche mit 65 Positionen. |
 | `03-grundriss-kochinsel-auswahl.png` | Mit einem Rahmen die ganze Kochinsel auswählen – zwölf Geräte auf einmal. |
 | `04-3d-uebersicht.png` | Die Küche in 3D aus Südost, die Wände zur Kamera blendet die App von selbst aus. |
 | `05-3d-kochinsel.png` | Nah an der Kochinsel: jedes Gerät mit seinem eigenen 3D-Modell. |
 | `06-3d-begehen.png` | Begehen auf Augenhöhe: der Gang zwischen Kochwand und Kochinsel. |
 | `07-3d-von-oben.png` | Von oben in Parallelprojektion – der Grundriss als 3D-Modell. |
-| `08-ansichten.png` | Alle vier Wandansichten, bemaßt, mit allem, was bis 1,5 m vor der Wand steht. |
+| `08-ansichten.png` | Alle vier Ansichten, bemaßt, mit allem, was bis 1.500 mm vor der Wand steht. |
 | `09-ansicht-nord.png` | Die Kochwand im Aufriss: Kippbratpfanne, Kessel und Kombidämpfer unter ihren Hauben (Ausschnitt: der Bereich „Ansicht Nord“). |
 | `10-katalog-vorschau.png` | Der Katalog mit 3D-Vorschau und Anschlusswerten jedes Geräts, hier die Suche nach „kombi“. |
 | `11-operator-verschieben.png` | Verschieben wie in CAD: G, X für die Achse, Maß eintippen – die Statuszeile zeigt, was passiert. |
@@ -33,6 +33,6 @@ Pixeldichte: jedes Bild 3840 × 2160 (außer 09, ein Ausschnitt). Erzeugt mit `e
 | `grundriss.svg` | Grundriss als SVG mit Plankopf, in Millimetern |
 | `grundriss.dxf` | Grundriss als DXF für CAD |
 | `grundriss.png` | Grundriss als PNG |
-| `ansichten.svg` | Alle vier Wandansichten als SVG |
+| `ansichten.svg` | Alle vier Ansichten als SVG |
 | `geraeteliste.csv` | Geräteliste mit Anschlusswerten für Excel |
 | `3d-ansicht.png` | 3D-Ansicht als PNG in hoher Auflösung |

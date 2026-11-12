@@ -64,7 +64,12 @@ describe("View3D overlay", () => {
     render(480);
     expect(buttons()).toEqual(["Perspektive", "Von oben", "Einpassen"]);
     const more = host.querySelector<HTMLButtonElement>("[aria-haspopup=menu]")!;
-    expect(more.title).toBe("Weitere Ansichtsoptionen");
+    expect(more.title).toBe("Weitere 3D-Optionen");
+    // The button carries its name itself (screen readers skip a name on a hidden icon), and its
+    // icons are drawn with the app's stroke width.
+    expect(more.textContent).toContain("Weitere 3D-Optionen");
+    expect(more.querySelector("svg[aria-label]")).toBeNull();
+    for (const svg of host.querySelectorAll(".v3d-toolbar svg")) expect(svg.getAttribute("stroke-width")).toBe("1.75");
     act(() => more.click());
     const items = [...host.querySelectorAll("[role^=menuitem]")].map((b) => b.textContent);
     expect(items.some((s) => s?.includes("Begehen"))).toBe(true);

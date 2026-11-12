@@ -2,6 +2,7 @@
 // stated scale), and a complete A3 sheet with frame and title block.
 
 import { drawingBounds, expandDim, mm as mmText, TEXT, type Drawing, type Fill, type Pen, type Shape, type TextShape } from "./drawing";
+import { fitText } from "./pdf";
 import { PAPER, PEN_STYLE } from "./style";
 import type { Box } from "../model/geometry";
 import type { ProjectInfo, Vec2 } from "../model/types";
@@ -34,9 +35,16 @@ const FILL_COLOR: Record<Fill, string> = {
   warning: PAPER.warningFill,
 };
 
-/** Escapes text for XML content and attribute values. */
+/**
+ * Characters XML 1.0 does not allow at all, even escaped: C0 controls other than tab, LF and CR,
+ * lone surrogates (in `u` mode a pair is one code point and does not match) and U+FFFE/U+FFFF.
+ * One of them pasted into a name makes the whole SVG unreadable, and with it the PNG export.
+ */
+const NOT_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/gu;
+
+/** Escapes text for XML content and attribute values, dropping characters XML cannot carry. */
 export function xmlEscape(s: string): string {
-  return s.replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c] as string);
+  return s.replace(NOT_XML, "").replace(/[<>&"']/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c] as string);
 }
 
 /** A number for SVG output: at most three decimals, no "-0". */
@@ -216,20 +224,24 @@ export function sheetDrawing(source: Drawing | DrawingAtScale, info: ProjectInfo
 
   const label = (k: TKey) => t(k, undefined, lang);
   const LABEL_PAD = 1.5;
-  const cell = (x: number, row: number, key: TKey, value: string, size: number = TEXT.normal) => {
+  // Texts are cut to their cell with an ellipsis, as in the PDF plan set: a long project name
+  // would otherwise run into the plan number. The PDF's Helvetica widths are Arial's.
+  const cell = (x: number, x1: number, row: number, key: TKey, value: string) => {
     const top = ty0 + row * TITLE_ROW;
-    text(x + LABEL_PAD, top + LABEL_PAD + TEXT.small, label(key), TEXT.small);
-    text(x + LABEL_PAD, top + TITLE_ROW - LABEL_PAD, value, size);
+    const w = x1 - x - 2 * LABEL_PAD;
+    text(x + LABEL_PAD, top + LABEL_PAD + TEXT.small, fitText(label(key), w, TEXT.small), TEXT.small);
+    text(x + LABEL_PAD, top + TITLE_ROW - LABEL_PAD, fitText(value, w, TEXT.normal), TEXT.normal);
   };
-  cell(tx0, 0, "sheet.project", info.name);
-  cell(noX, 0, "sheet.drawingNo", info.drawingNo ?? "");
-  cell(revX, 0, "sheet.revision", info.revision ?? "");
-  cell(tx0, 1, "sheet.client", info.client);
-  cell(mid, 1, "sheet.date", formatDate(info.date, lang));
-  cell(tx0, 2, "sheet.author", info.author);
-  cell(mid, 2, "sheet.scale", `1:${mmText(ps)}`);
-  cell(tx0, 3, "sheet.drawing", drawingTitle);
-  text(mid + LABEL_PAD, ty0 + TITLE_ROWS * TITLE_ROW - LABEL_PAD, label("sheet.dimensionsInMm"), TEXT.normal);
+  cell(tx0, noX, 0, "sheet.project", info.name);
+  cell(noX, revX, 0, "sheet.drawingNo", info.drawingNo ?? "");
+  cell(revX, frame.maxX, 0, "sheet.revision", info.revision ?? "");
+  cell(tx0, mid, 1, "sheet.client", info.client);
+  cell(mid, frame.maxX, 1, "sheet.date", formatDate(info.date, lang));
+  cell(tx0, mid, 2, "sheet.author", info.author);
+  cell(mid, frame.maxX, 2, "sheet.scale", `1:${mmText(ps)}`);
+  cell(tx0, mid, 3, "sheet.drawing", drawingTitle);
+  const note = fitText(label("sheet.dimensionsInMm"), frame.maxX - mid - 2 * LABEL_PAD, TEXT.normal);
+  text(mid + LABEL_PAD, ty0 + TITLE_ROWS * TITLE_ROW - LABEL_PAD, note, TEXT.normal);
 
   const p0 = P(0, 0);
   const p1 = P(SHEET_W, SHEET_H);

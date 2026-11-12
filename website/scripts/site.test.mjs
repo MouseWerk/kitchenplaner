@@ -2,7 +2,11 @@
 // checks of the catalogs and stylesheets. Run with `npm test` in website/.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseNotes, inline } from '../src/data/notes.mjs';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { parseNotes, inline, publishedNotes, readNotes, NOTES_DIR } from '../src/data/notes.mjs';
+import { CATALOG_SIZES, catalogUnits } from '../src/data/catalog.mjs';
+import { ANCHORS } from '../src/data/site.mjs';
 import { toDownloads, compareVersions, available } from '../src/data/release.mjs';
 import { CROPS } from '../src/data/crops.mjs';
 import { checkCatalogs } from './check-i18n.mjs';
@@ -111,5 +115,50 @@ test('phone crops lie inside the 3840 x 2160 screenshots and are wide enough to 
   for (const [name, c] of Object.entries(CROPS)) {
     assert.ok(c.left >= 0 && c.top >= 0 && c.left + c.width <= 3840 && c.top + c.height <= 2160, name);
     assert.ok(c.width >= 600, `${name} is only ${c.width} px wide`);
+  }
+});
+
+test('the catalog size follows the release people download, not main', () => {
+  assert.equal(catalogUnits('0.2.0'), 165);
+  assert.equal(catalogUnits('0.2.1'), 359);
+  assert.equal(catalogUnits('0.3.0'), 359);
+  assert.equal(catalogUnits(null), null);
+  assert.equal(catalogUnits('0.0.9'), null);
+  // A site built while 0.2.0 is the latest release never claims the newer catalog.
+  assert.equal(catalogUnits(toDownloads([rel('v0.2.0')]).latest?.version), 165);
+});
+
+test('every catalog size is the one its release notes state', async () => {
+  for (const { since, units } of CATALOG_SIZES) {
+    const md = await readFile(join(NOTES_DIR, `v${since}.md`), 'utf8');
+    const line = md.split('\n').find((l) => /\bunits\b/.test(l) && new RegExp(`(^|\\D)${units}(\\D|$)`).test(l));
+    assert.ok(line, `v${since}.md does not mention ${units} units`);
+  }
+});
+
+test('feature texts carry no unit count of their own; the count comes from catalog.mjs', () => {
+  for (const dict of [de, en]) {
+    for (const f of dict.home.features.items) assert.ok(!/\d{3}/.test(f.title + f.text), f.title);
+    assert.ok(dict.home.features.items.some((f) => 'titleUnknown' in f && f.title.includes('{units}')));
+  }
+});
+
+test('the changelog shows notes of published releases only', async () => {
+  const notes = [parseNotes('0.2.1', 'x'), parseNotes('0.2.0', 'x'), parseNotes('0.1.0', 'x')];
+  assert.deepEqual(publishedNotes(notes, toDownloads([rel('v0.1.0'), rel('v0.2.0')])).map((n) => n.version), ['0.2.0', '0.1.0']);
+  assert.equal(publishedNotes(notes, toDownloads(null)).length, 3);
+  assert.ok((await readNotes()).length > 0);
+});
+
+test('the macOS updater archive is not offered as a download', () => {
+  const r = rel('v0.2.1');
+  r.assets.push(asset('Kitchenplaner_0.2.1_universal.app.tar.gz'), asset('Kitchenplaner_0.2.1_universal.app.tar.gz.sig'));
+  for (const b of toDownloads([r]).buttons) assert.ok(!/\.app\.tar\.gz/.test(b.file ?? ''), b.file);
+});
+
+test('section anchors are in the language of their page', () => {
+  for (const [k, v] of Object.entries(ANCHORS)) {
+    assert.match(v.en, /^[a-z-]+$/, k);
+    assert.ok(!/ae|oe|ue|fuer/.test(v.en), `${k}: ${v.en}`);
   }
 });

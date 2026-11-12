@@ -3,7 +3,8 @@
  * buttons link straight to the files of the latest release (their names carry the version, so a
  * .../releases/latest/download/<name> link cannot be written down ahead). When the API cannot be
  * read (offline build, rate limit), every button links to the latest release's page instead, which
- * is always right; the build only warns. The deploy workflow runs again after every release.
+ * is always right; the build only warns. The deploy workflow runs again after every release,
+ * manual or automatic (.github/workflows/website.yml).
  *
  * GITHUB_TOKEN (optional, set in CI) raises the API rate limit. KP_RELEASES_JSON (optional) is the
  * path of a saved answer of /releases, for offline builds.
@@ -19,11 +20,13 @@ import { LATEST_URL, REPO } from './site.mjs';
  * @typedef {{ latest: Release | null, byTag: Map<string, Release>, buttons: Button[] }} Downloads
  */
 
-/** The release files the site offers; names as written by .github/workflows/release.yml. */
+/**
+ * The release files the site offers; names as written by .github/workflows/release.yml. Files for
+ * the updater (the macOS .app.tar.gz, *.sig, latest.json) are not for people and are not offered.
+ */
 export const WANTED = [
   { id: 'win-setup', match: /^Kitchenplaner_[\d.]+_x64-setup\.exe$/ },
   { id: 'mac-dmg', match: /^Kitchenplaner_[\d.]+_universal\.dmg$/ },
-  { id: 'mac-app', match: /^Kitchenplaner_[\d.]+_universal\.app\.tar\.gz$/ },
   { id: 'linux-appimage', match: /^Kitchenplaner_[\d.]+_amd64\.AppImage$/ },
   { id: 'linux-deb', match: /^Kitchenplaner_[\d.]+_amd64\.deb$/ },
   { id: 'checksums', match: /^SHA256SUMS\.txt$/ },

@@ -1,6 +1,7 @@
 // Short status messages at the bottom of the window.
 
 import { useSyncExternalStore } from "react";
+import { announce } from "./announce";
 
 export type ToastTone = "neutral" | "danger";
 
@@ -26,6 +27,8 @@ export function toast(text: string, tone: ToastTone = "neutral") {
   const id = nextId++;
   toasts = [...toasts.slice(-2), { id, text, tone }];
   emit();
+  // The toasts themselves are no live region: an error must interrupt, a notice must not.
+  announce(text, tone === "danger" ? "assertive" : "polite");
   setTimeout(() => dismissToast(id), tone === "danger" ? DURATION_ERROR : DURATION);
 }
 

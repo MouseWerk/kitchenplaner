@@ -4,9 +4,13 @@
 // theme changes, never in a loop, so an idle 3D view costs no CPU or GPU time. The only loops
 // are short ones the user drives: a camera move to a view (a quarter second) and walking while a
 // movement key is held. Item models are rebuilt only for items whose object changed (the store
-// replaces an item object on every edit and keeps the others), the room only when the room
-// object changed. Each item model is merged per material (`merge.ts`), so a kitchen of forty
-// items stays at a few hundred draw calls.
+// replaces an item object on every edit and keeps the others), and only when more than their
+// place changed: a moved or turned item keeps its model (`sameModel`). The room is rebuilt only
+// when the room object changed. Each item model is merged per material (`merge.ts`), so a kitchen
+// of forty items stays at a few hundred draw calls.
+//
+// Building models takes about a millisecond per item, so a large kitchen is built a slice per
+// frame (`BUILD_SLICE_MS`) and drawn as it grows; the window stays responsive meanwhile.
 //
 // Navigation follows Blender: left drag orbits, middle or right drag (or Shift + left) pans, the
 // wheel zooms towards the cursor; 1 / 3 / 7 front, side and top (orthographic), 5 toggles the
@@ -20,7 +24,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import type { Item, Project, Room } from "../model/types";
 import { bounds } from "../model/geometry";
 import { useStore, type Mode } from "../store/store";
-import { buildItemObject, itemIdOf, MM_PER_UNIT, releaseShared, retainShared, setItemHighlight } from "./meshes";
+import { buildItemObject, itemIdOf, MM_PER_UNIT, placeItemObject, releaseShared, retainShared, sameModel, setItemHighlight } from "./meshes";
 import { applyCutaway, buildRoomObject, disposeRoomObject } from "./room";
 import { disposeMerged, mergeItemObject } from "./merge";
 import { applyRoomLook, buildContactShadows, disposeContactShadows, LOOK, RoomTextures } from "./look";
@@ -55,6 +59,13 @@ const MAX_CAPTURE_WIDTH = 8192;
 const NEAR = 0.03;
 /** Duration of a camera move to a view (ms). */
 const MOVE_MS = 260;
+/** Time per frame spent building item models (ms); the rest follows in the next frames. */
+const BUILD_SLICE_MS = 12;
+/**
+ * Shortest time between two shadow updates while items move (ms). Contact shadows and the shadow
+ * map cover every item, so following each pointer event with them costs as much as the move.
+ */
+const SHADOW_INTERVAL_MS = 100;
 
 
 export type Quality = "standard" | "high";
@@ -74,6 +85,8 @@ export interface EngineCallbacks {
   onStatus: (s: Status) => void;
   onOrtho: (ortho: boolean) => void;
   onWalk: (walking: boolean) => void;
+  /** True while item models are still being built (`BUILD_SLICE_MS`), false when all are there. */
+  onBuilding?: (building: boolean) => void;
   canvasLabel: string;
 }
 
@@ -109,7 +122,15 @@ export class Engine {
   private readonly itemsRoot = new THREE.Group();
   private readonly overlayRoot = new THREE.Group();
   private readonly items = new Map<string, { item: Item; object: THREE.Group }>();
+  /** Items whose model is still to be built, latest version by id; built a slice per frame. */
+  private readonly pending = new Map<string, Item>();
+  private buildFrame = 0;
+  private building = false;
+  /** A fit asked for while models were missing: done again once they are all built. */
+  private refit: (() => void) | null = null;
   private contact: THREE.Mesh | null = null;
+  private shadowTimer = 0;
+  private shadowsAt = 0;
   private project: Project | null = null;
   private room: Room | null = null;
   private roomObject: THREE.Group | null = null;
@@ -194,6 +215,8 @@ export class Engine {
     this.controls.minDistance = 0.3;
     this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
     this.listen(this.controls, "change", () => this.requestRender());
+    // The user takes the camera: a fit waiting for the models to be built is dropped.
+    this.listen(this.controls, "start", () => (this.refit = null));
 
     // Steel is a reflective material: without something to reflect it renders nearly black. A
     // neutral studio environment, prefiltered once, gives it its look at no per-frame cost.
@@ -269,34 +292,124 @@ export class Engine {
     this.project = p;
     if (p.room !== this.room) this.setRoom(p.room);
     const seen = new Set<string>();
-    let changed = false;
+    let removed = false;
+    let moved = false;
     for (const item of p.items) {
       seen.add(item.id);
       const known = this.items.get(item.id);
-      if (known?.item === item) continue;
-      if (known) this.removeItem(known.object);
-      const object = mergeItemObject(buildItemObject(item));
-      this.itemsRoot.add(object);
-      this.items.set(item.id, { item, object });
-      changed = true;
+      if (known?.item === item) {
+        // Back to the built version (an undo) before a newer one was built.
+        this.pending.delete(item.id);
+        continue;
+      }
+      if (known && sameModel(known.item, item)) {
+        placeItemObject(known.object, item);
+        this.items.set(item.id, { item, object: known.object });
+        this.pending.delete(item.id);
+        moved = true;
+        continue;
+      }
+      this.pending.set(item.id, item);
     }
     for (const [id, known] of this.items) {
       if (seen.has(id)) continue;
       this.removeItem(known.object);
       this.items.delete(id);
-      changed = true;
+      removed = true;
     }
-    if (changed || !this.contact) {
-      this.rebuildContactShadows(p.items);
-      this.updateShadows();
-    }
+    for (const id of this.pending.keys()) if (!seen.has(id)) this.pending.delete(id);
     this.walkSpace = null;
+    if (this.pending.size > 0) this.buildSlice();
+    else if (removed || !this.contact) this.refreshShadows();
+    else if (moved) this.followShadows();
+    this.afterBuild();
+  }
+
+  /**
+   * Builds the models of pending items for one slice of time (`budgetMs`); the next slice in the
+   * next frame.
+   */
+  private buildSlice(budgetMs = BUILD_SLICE_MS): void {
+    const start = performance.now();
+    for (const [id, item] of this.pending) {
+      this.pending.delete(id);
+      const known = this.items.get(id);
+      if (known) this.removeItem(known.object);
+      const object = mergeItemObject(buildItemObject(item));
+      this.itemsRoot.add(object);
+      this.items.set(id, { item, object });
+      if (performance.now() - start > budgetMs) break;
+    }
+    // The shadow pass draws the whole scene again: while models still come, now and then.
+    if (this.pending.size > 0) this.followShadows();
+    else this.refreshShadows();
+    if (this.pending.size > 0 && !this.buildFrame) {
+      this.buildFrame = requestAnimationFrame(() => {
+        this.buildFrame = 0;
+        if (this.pending.size === 0) return;
+        this.buildSlice();
+        this.afterBuild();
+      });
+    }
+  }
+
+  /**
+   * Builds every model still pending at once, with its shadows and the fit that waited for it, and
+   * draws shadows that wait for their interval: a picture shows the whole kitchen as it stands,
+   * not the slices built so far (an export right after opening a project).
+   */
+  private finishBuild(): void {
+    if (this.pending.size > 0) {
+      cancelAnimationFrame(this.buildFrame);
+      this.buildFrame = 0;
+      this.buildSlice(Infinity);
+      this.afterBuild();
+    } else if (this.shadowTimer) this.refreshShadows();
+  }
+
+  /** Frames the first project and redoes a fit once everything is built; draws the change. */
+  private afterBuild(): void {
+    const building = this.pending.size > 0;
+    if (building !== this.building) {
+      this.building = building;
+      this.cb.onBuilding?.(building);
+    }
     if (!this.framed) {
       this.framed = true;
-      this.jumpTo(this.viewFor(VIEW_DIRECTION.perspective, this.sceneBox()));
+      const frame = () => this.jumpTo(this.viewFor(VIEW_DIRECTION.perspective, this.sceneBox()));
+      frame();
+      // Framed on what is built so far: again on all of it, unless the user moved the camera.
+      if (building) this.refit = frame;
+    }
+    if (!building && this.refit) {
+      const refit = this.refit;
+      this.refit = null;
+      // Not while walking: the walker's eye stays where it is.
+      if (!this.walk) refit();
     }
     this.updateOverlays();
     this.requestRender();
+  }
+
+  /** Contact shadows and the shadow map for the items as they stand now. */
+  private refreshShadows(): void {
+    window.clearTimeout(this.shadowTimer);
+    this.shadowTimer = 0;
+    this.shadowsAt = performance.now();
+    if (this.project) this.rebuildContactShadows(this.project.items);
+    this.updateShadows();
+  }
+
+  /** Shadows after a move: at once, or at the end of the interval when the last was just now. */
+  private followShadows(): void {
+    if (this.shadowTimer) return;
+    const wait = this.shadowsAt + SHADOW_INTERVAL_MS - performance.now();
+    if (wait <= 0) return this.refreshShadows();
+    this.shadowTimer = window.setTimeout(() => {
+      this.shadowTimer = 0;
+      this.refreshShadows();
+      this.requestRender();
+    }, wait);
   }
 
   setSelection(ids: readonly string[]): void {
@@ -346,6 +459,8 @@ export class Engine {
   preset(name: ViewName, animate = true): void {
     this.leaveWalk(false);
     const ortho = name !== "perspective";
+    // With models still missing the box is not final: fit again when they are there.
+    if (this.pending.size > 0) this.refit = () => this.preset(name, false);
     const view = this.viewFor(VIEW_DIRECTION[name], this.sceneBox());
     if (ortho !== this.isOrtho()) this.setProjection(ortho);
     this.autoOrtho = ortho;
@@ -355,6 +470,7 @@ export class Engine {
   /** Fits the kitchen into the view from the current direction. */
   fit(animate = true): void {
     this.leaveWalk(false);
+    if (this.pending.size > 0) this.refit = () => this.fit(false);
     this.moveTo(this.viewFor(this.currentView().dir, this.sceneBox()), animate);
   }
 
@@ -484,6 +600,7 @@ export class Engine {
    */
   async capture(widthPx?: number): Promise<Uint8Array> {
     if (this.lost) throw new Error("3D capture: the graphics context is lost; try again in a moment.");
+    this.finishBuild();
     const r = this.renderer;
     const gl = r.getContext();
     const maxSize = Math.min(MAX_CAPTURE_WIDTH, r.capabilities.maxTextureSize, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number);
@@ -544,6 +661,9 @@ export class Engine {
     cancelAnimationFrame(this.frame);
     cancelAnimationFrame(this.hoverFrame);
     cancelAnimationFrame(this.walkFrame);
+    cancelAnimationFrame(this.buildFrame);
+    window.clearTimeout(this.shadowTimer);
+    this.pending.clear();
     this.cancelMove();
     this.cancelDrag();
     for (const f of this.cleanup) f();
@@ -562,6 +682,9 @@ export class Engine {
     this.disposeComposer();
     releaseShared();
     this.environment?.dispose();
+    // Without this the context lives on until garbage collection; after a few 3D views opened
+    // and closed the browser drops the oldest live one, which may be the catalog thumbnails' one.
+    this.renderer.forceContextLoss();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -1113,7 +1236,7 @@ export class Engine {
     cube.dataset.turn = key;
   }
 
-  private listen(target: THREE.EventDispatcher<{ change: object }>, type: "change", f: () => void): void {
+  private listen(target: THREE.EventDispatcher<{ change: object; start: object }>, type: "change" | "start", f: () => void): void {
     target.addEventListener(type, f);
     this.cleanup.push(() => target.removeEventListener(type, f));
   }
