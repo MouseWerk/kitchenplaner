@@ -2,8 +2,8 @@
 // corner, partition or opening; with nothing selected the project, the room, its openings, the
 // connection totals and the plan check.
 
-import { useMemo } from "react";
-import { AlertTriangle, CheckCircle2, Copy, DoorOpen, RotateCcw, RotateCw, Trash2 } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Copy, DoorOpen, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import { catalogEntry, kindOf, placementOf, type Placement } from "../kinds/registry";
 import { checkProject } from "../model/checks";
 import { bounds, MAX_LENGTH, lRoom, normalizeAngle, rectRoom, walls } from "../model/geometry";
@@ -28,11 +28,14 @@ import { removeRoomSelection } from "../views/RoomEditLayer";
 import { cleanSpec, MAX_SIMULTANEITY, MIN_SIMULTANEITY, newId, variantPatch } from "../model/project";
 import { withSimultaneity } from "../model/equipment";
 import { doorHand, doorSetup, isDoor, openingFrame } from "../model/doors";
-import type { Connections, DoorHinge, DoorSwing, Item, ItemSpec, Opening, OpeningKind, Partition, Project, Vec2 } from "../model/types";
+import { estimateHeat } from "../model/heat";
+import { cleanPoints } from "../model/points";
+import type { Connections, DoorHinge, DoorSwing, HeatRelease, Item, ItemSpec, Opening, OpeningKind, Partition, Project, Vec2 } from "../model/types";
 import { selectedItems, useStore } from "../store/store";
 import { currentLang, num, useT, type TKey } from "../lib/i18n";
 import { keyLabel } from "../lib/shortcuts";
-import { CheckField, DateField, NumberField, SelectField, TextField } from "./Fields";
+import { CheckField, DateField, NumberField, NumberInput, Section, SelectField, TextField } from "./Fields";
+import { PointsSection } from "./PointsSection";
 import { AlignTools } from "./AlignTools";
 import { duplicateSelected, renumberItems, rotateSelected } from "../lib/commands";
 
@@ -75,18 +78,6 @@ export function Inspector() {
   );
 }
 
-function Section(props: { title: string; children: React.ReactNode; actions?: React.ReactNode }) {
-  return (
-    <section className="insp-section">
-      <div className="insp-section-head">
-        <h3 className="eyebrow" tabIndex={-1}>{props.title}</h3>
-        {props.actions}
-      </div>
-      {props.children}
-    </section>
-  );
-}
-
 /** What the lower edge above the floor is called, by where the unit stands. */
 const ELEVATION_LABEL: Record<Placement, TKey> = {
   floor: "inspector.elevation",
@@ -100,7 +91,12 @@ function ItemPanel({ item }: { item: Item; project: Project }) {
   const st = useStore.getState();
   const entry = catalogEntry(item.catalogId);
   const set = (patch: Partial<Item>) => st.updateItems([item.id], () => patch);
-  const setConn = (patch: Partial<Connections>) => st.updateItems([item.id], (it) => ({ connections: { ...it.connections, ...patch } }));
+  // A connection switched off takes its point's overrides along, in the same undo step.
+  const setConn = (patch: Partial<Connections>) =>
+    st.updateItems([item.id], (it) => {
+      const connections = { ...it.connections, ...patch };
+      return { connections, points: cleanPoints({ points: it.points, connections }) };
+    });
   const spec = item.spec ?? {};
   const setSpec = (patch: Partial<ItemSpec>) => st.updateItems([item.id], (it) => ({ spec: cleanSpec({ ...it.spec, ...patch }) }));
   const c = item.connections;
@@ -192,11 +188,15 @@ function ItemPanel({ item }: { item: Item; project: Project }) {
         <div className="checks">
           <CheckField label={t("inspector.coldWater")} checked={!!c.coldWater} onChange={(v) => setConn({ coldWater: v || undefined })} />
           <CheckField label={t("inspector.hotWater")} checked={!!c.hotWater} onChange={(v) => setConn({ hotWater: v || undefined })} />
+          <CheckField label={t("inspector.softWater")} checked={!!c.softWater} onChange={(v) => setConn({ softWater: v || undefined })} />
           <CheckField label={t("list.drain")} checked={!!c.drain} onChange={(v) => setConn({ drain: v || undefined })} />
           <CheckField label={t("list.floorDrain")} checked={!!c.floorDrain} onChange={(v) => setConn({ floorDrain: v || undefined })} />
         </div>
+        <MoreConnections key={item.id} c={c} setConn={setConn} />
+        <HeatFields item={item} />
         <p className="hint">{t("data.typicalValues")}</p>
       </Section>
+      <PointsSection key={item.id} item={item} />
       <Section title={t("list.note")}>
         <TextField label={t("list.note")} value={item.note ?? ""} onChange={(v) => set({ note: v || undefined })} wide multiline />
       </Section>
@@ -209,6 +209,59 @@ function ItemPanel({ item }: { item: Item; project: Project }) {
         </button>
       </div>
     </>
+  );
+}
+
+/**
+ * Supply air, steam and remote refrigeration: few units have them, so they wait behind a
+ * disclosure, open from the start when the unit has one of them.
+ */
+function MoreConnections({ c, setConn }: { c: Connections; setConn: (patch: Partial<Connections>) => void }) {
+  const t = useT();
+  const panel = useId();
+  const [open, setOpen] = useState(() => (c.supplyM3h ?? 0) > 0 || (c.steamKgH ?? 0) > 0 || (c.refrigerationKw ?? 0) > 0);
+  return (
+    <div className="disclosure">
+      <button type="button" className="disclosure-btn" aria-expanded={open} aria-controls={panel} onClick={() => setOpen(!open)}>
+        <ChevronRight className="disclosure-chevron" size={14} strokeWidth={1.75} aria-hidden />
+        {t("inspector.moreConnections")}
+      </button>
+      {open && (
+        <div id={panel} className="grid">
+          <NumberField label={t("inspector.supplyM3h")} value={c.supplyM3h ?? 0} min={0} max={100_000} step={100} onChange={(v) => setConn({ supplyM3h: v || undefined })} />
+          <NumberField label={t("inspector.steamKgH")} value={c.steamKgH ?? 0} min={0} max={10_000} step={1} digits={1} onChange={(v) => setConn({ steamKgH: v || undefined })} />
+          <NumberField label={t("inspector.refrigerationKw")} value={c.refrigerationKw ?? 0} min={0} max={1000} step={0.1} digits={1} onChange={(v) => setConn({ refrigerationKw: v || undefined })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The heat a unit gives off; left empty, the fields show the estimate (`model/heat.ts`). */
+function HeatFields({ item }: { item: Item }) {
+  const t = useT();
+  const label = useId();
+  const est = estimateHeat(item);
+  const heat = item.heat ?? {};
+  const set = (patch: HeatRelease) =>
+    useStore.getState().updateItems([item.id], (it) => {
+      const next = { ...it.heat, ...patch };
+      const kept: HeatRelease = {};
+      if (next.sensibleKw !== undefined) kept.sensibleKw = next.sensibleKw;
+      if (next.latentKw !== undefined) kept.latentKw = next.latentKw;
+      return { heat: kept.sensibleKw === undefined && kept.latentKw === undefined ? undefined : kept };
+    });
+  const kw = { min: 0, max: 1000, step: 0.1, digits: 1, unit: "kW", optional: true } as const;
+  return (
+    <div className="field" role="group" aria-labelledby={label}>
+      <span className="field-label" id={label} title={t("inspector.heat")}>
+        {t("inspector.heat")}
+      </span>
+      <div className="grid">
+        <NumberInput {...kw} ariaLabel={t("inspector.heatSensible")} value={heat.sensibleKw} derived={est.sensibleKw} set={heat.sensibleKw !== undefined} onChange={(v) => set({ sensibleKw: v })} />
+        <NumberInput {...kw} ariaLabel={t("inspector.heatLatent")} value={heat.latentKw} derived={est.latentKw} set={heat.latentKw !== undefined} onChange={(v) => set({ latentKw: v })} />
+      </div>
+    </div>
   );
 }
 
@@ -565,7 +618,9 @@ function ProjectPanel({ project }: { project: Project }) {
   const info = project.info;
   const setInfo = (patch: Partial<Project["info"]>) => st.change((p) => ({ ...p, info: { ...p.info, ...patch } }));
   const rect = rectSize(project);
-  const issues = useMemo(() => checkProject(project), [project]);
+  // The findings name points by their code, which is per language („12.KW“, “12.CW”).
+  const lang = currentLang();
+  const issues = useMemo(() => checkProject(project), [project, lang]);
   const totals = useMemo(() => connectionTotals(project.items), [project.items]);
   const factor = project.settings.simultaneity;
   const setFactor = (v: number) => st.change((p) => ({ ...p, settings: { ...p.settings, simultaneity: v } }));

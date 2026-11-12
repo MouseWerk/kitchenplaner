@@ -8,6 +8,7 @@ import { create } from "zustand";
 import type { ElevationCut, ElevationId } from "../model/elevation";
 import type { Item, Opening, Project, Room } from "../model/types";
 import { newProject, numberNew } from "../model/project";
+import { TRADE_GROUPS, type PointFilter } from "../model/trades";
 
 /** How many steps undo keeps. */
 const HISTORY_LIMIT = 200;
@@ -46,6 +47,37 @@ export interface Prefs {
   showDims: boolean;
   /** How deep the elevations reach into the room, on screen and in the exports. */
   elevationCut: ElevationCut;
+  /**
+   * The connection points the plan shows over the equipment, drawn quietly then: off, all, or
+   * one trade group. The installation exports follow it ("off" exports all). Remembered per
+   * computer (`POINTS_KEY`), like the app settings; not part of a project.
+   */
+  points: PointsPref;
+}
+
+export type PointsPref = "off" | PointFilter;
+
+/** The choices of `Prefs.points`, in the order of the view menu. */
+export const POINTS_PREFS: readonly PointsPref[] = ["off", "all", ...TRADE_GROUPS];
+
+const POINTS_KEY = "kitchenplaner.points.v1";
+
+/** The remembered point filter; off when none is stored, the stored one is unknown or storage fails. */
+export function loadPointsPref(): PointsPref {
+  try {
+    const v = localStorage.getItem(POINTS_KEY);
+    return POINTS_PREFS.find((p) => p === v) ?? "off";
+  } catch {
+    return "off";
+  }
+}
+
+function savePointsPref(v: PointsPref) {
+  try {
+    localStorage.setItem(POINTS_KEY, v);
+  } catch {
+    // Storage unavailable: the choice holds for this session.
+  }
 }
 
 export interface AppState {
@@ -125,7 +157,7 @@ export const useStore = create<AppState>((set, get) => ({
   selection: EMPTY_SELECTION,
   layout: "split",
   facing: "north",
-  prefs: { grid: 50, showNames: false, showDims: true, elevationCut: "wall" },
+  prefs: { grid: 50, showNames: false, showDims: true, elevationCut: "wall", points: loadPointsPref() },
   mode: "arrange",
   roomTool: "select",
   status: null,
@@ -219,6 +251,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setPrefs(prefs) {
+    if (prefs.points !== undefined) savePointsPref(prefs.points);
     set((s) => ({ prefs: { ...s.prefs, ...prefs } }));
   },
 

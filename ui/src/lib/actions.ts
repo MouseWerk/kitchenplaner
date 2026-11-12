@@ -3,9 +3,12 @@
 import { elevationDrawing, resolveElevation, standardElevations, type ElevationCut, type ElevationId } from "../model/elevation";
 import { elevationName, elevationTitle } from "../model/elevationNames";
 import { equipmentCsv } from "../model/equipment";
+import { installationDrawing } from "../model/installationPlan";
 import { planDrawing } from "../model/plan";
 import { newProject } from "../model/project";
+import { pointsCsv } from "../model/pointList";
 import { parseProject, serializeProject } from "../model/serialize";
+import { tradeGroupName, type PointFilter } from "../model/trades";
 import type { Project } from "../model/types";
 import { drawingBounds, TEXT, type Drawing, type Shape } from "../render/drawing";
 import { drawingToDxf } from "../render/dxf";
@@ -111,9 +114,25 @@ export async function saveFile(as = false): Promise<boolean> {
   }
 }
 
-export type ExportKind = "plan-svg" | "plan-dxf" | "plan-png" | "elevation-svg" | "elevation-dxf" | "elevations-svg" | "3d-png" | "list-csv";
+export type ExportKind =
+  | "plan-svg"
+  | "plan-dxf"
+  | "plan-png"
+  | "elevation-svg"
+  | "elevation-dxf"
+  | "elevations-svg"
+  | "3d-png"
+  | "list-csv"
+  | "installation-svg"
+  | "installation-dxf"
+  | "installation-png"
+  | "points-csv";
 
-/** Runs one export; `view` picks the elevation (a compass view or a wall) for the single-elevation exports. */
+/**
+ * Runs one export; `view` picks the elevation (a compass view or a wall) for the single-elevation
+ * exports. The installation plan and the connection list show the trade group the plan's filter
+ * shows, all of them while it is off.
+ */
 export async function runExport(kind: ExportKind, view: ElevationId) {
   // As for saving: the export shows the project without a running operator's half-done move.
   cancelActiveOperator();
@@ -123,6 +142,10 @@ export async function runExport(kind: ExportKind, view: ElevationId) {
   // A wall view whose wall is gone exports what the pane shows instead.
   const facing = resolveElevation(project.room, view);
   const facingName = elevationName(facing);
+  const filter: PointFilter = prefs.points === "off" ? "all" : prefs.points;
+  const installation = filter === "all" ? t("installation.title") : t("installation.titleOf", { group: tradeGroupName(filter, lang) });
+  const installationSheet = () =>
+    sheetDrawing((paperScale) => installationDrawing(project, { filter, paperScale, dims: true, legend: true, lang }), project.info, installation, lang);
   try {
     let written: string | null = null;
     switch (kind) {
@@ -165,6 +188,27 @@ export async function runExport(kind: ExportKind, view: ElevationId) {
       case "list-csv":
         written = await saveText(null, `${base} - ${t("list.title")}.csv`, CSV, equipmentCsv(project, lang));
         break;
+      case "installation-svg": {
+        const s = installationSheet();
+        written = await saveText(null, `${base} - ${installation}.svg`, SVG, drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }));
+        break;
+      }
+      case "installation-dxf": {
+        const s = installationSheet();
+        written = await saveText(null, `${base} - ${installation}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "plan" }));
+        break;
+      }
+      case "installation-png": {
+        const s = installationSheet();
+        const png = await svgToPng(drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }), PNG_WIDTH);
+        written = await saveBinary(`${base} - ${installation}.png`, PNG, png);
+        break;
+      }
+      case "points-csv": {
+        const name = filter === "all" ? t("pointList.title") : `${t("pointList.title")} ${tradeGroupName(filter, lang)}`;
+        written = await saveText(null, `${base} - ${name}.csv`, CSV, pointsCsv(project, lang, filter));
+        break;
+      }
     }
     if (written) toast(t("export.done", { name: baseName(written) }));
   } catch (e) {

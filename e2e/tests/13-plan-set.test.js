@@ -32,6 +32,8 @@ function pdfText(bytes) {
 }
 
 appTest("the plan set exports as PDF with the sheets the dialog counts", async (app) => {
+  // A work table has no connections; a sink has cold and hot water and a drain: only the
+  // sanitary group gets an installation plan and a connection table.
   await place(app, "Arbeitstisch an der Wand");
   await place(app, "Spültisch, 1 Becken");
   // Nothing selected: the inspector shows the project.
@@ -40,10 +42,14 @@ appTest("the plan set exports as PDF with the sheets the dialog counts", async (
 
   await app.menu("Exportieren", "Plansatz als PDF…");
   const dialog = await app.waitFor("[role=dialog].plan-set");
-  // „Grundriss: 1:50 · … · 7 Blätter“
+  // „Grundriss: 1:50 · Installationsplan Sanitär: 1:50 · … · 8 Blätter“
   const summary = await app.waitUntil(async () => /(\d+) Bl(ä|a)tt(er)?\b/.exec(await app.textOf(dialog)), "the dialog shows no sheet count");
   const sheets = Number(summary[1]);
-  assert.ok(sheets >= 6, `only ${sheets} sheets: plan, four elevations and the list are on by default`);
+  // On by default: plan, the sanitary installation plan and its table, four elevations, the list.
+  assert.ok(sheets >= 8, `only ${sheets} sheets: plan, installation plan, its table, four elevations and the list are on by default`);
+  const offered = await app.textOf(dialog);
+  assert.ok(offered.includes("Installationsplan Sanitär: 1:"), "the dialog names no sanitary installation plan");
+  assert.ok(!offered.includes("Installationsplan Elektro"), "the dialog offers an electric sheet without electric points");
 
   await app.nextPath(app.file("plansatz.pdf"));
   await app.click("Exportieren…", "[role=dialog]");
@@ -57,6 +63,10 @@ appTest("the plan set exports as PDF with the sheets the dialog counts", async (
   const pages = text.match(/\/Type \/Page\b(?!s)/g) ?? [];
   assert.equal(pages.length, sheets);
   assert.match(text, new RegExp(`/Count ${sheets}\\b`));
-  // The title block names the project.
+  // The title blocks name the project and each sheet.
   assert.ok(text.includes(`(${pdfLiteral(PROJECT)})`), "the project name is not in the PDF");
+  for (const title of ["Grundriss", "Installationsplan Sanitär", "Anschlusstabelle Sanitär", "Geräteliste"]) {
+    assert.ok(text.includes(`(${pdfLiteral(title)})`), `no sheet „${title}“ in the PDF`);
+  }
+  assert.ok(!text.includes("(Installationsplan Elektro)"), "the PDF has an electric sheet without electric points");
 });

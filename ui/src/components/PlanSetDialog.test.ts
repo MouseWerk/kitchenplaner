@@ -24,6 +24,9 @@ vi.mock("../lib/platform", async (orig) => ({
 const { PlanSetDialog } = await import("./PlanSetDialog");
 
 const KEY = "kitchenplaner.planSet.v1";
+/** The drawing and list sheets on by default, and the trade groups with points in the example. */
+const SHEETS = ["Grundriss", "Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West", "Geräteliste"];
+const GROUPS = ["Elektro", "Sanitär", "Lüftung"];
 const example = () => parseProject(readFileSync(resolve(__dirname, "../../../examples/Beispielkueche-Restaurant.kplan"), "utf8"));
 
 describe("PlanSetDialog", () => {
@@ -91,7 +94,7 @@ describe("PlanSetDialog", () => {
     const dialog = mount();
     expect(check(dialog, "3D").disabled).toBe(true);
     expect(dialog.textContent).toContain("Blende die 3D-Ansicht ein");
-    for (const label of ["Grundriss", "Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West", "Geräteliste"]) act(() => check(dialog, label).click());
+    for (const label of [...SHEETS, ...GROUPS]) act(() => check(dialog, label).click());
     expect(dialog.textContent).toContain("Wähle mindestens ein Blatt.");
     expect(button(dialog, "Exportieren…")!.disabled).toBe(true);
   });
@@ -103,7 +106,7 @@ describe("PlanSetDialog", () => {
     expect(walls.value).toBe("slanted");
     expect([...walls.options].map((o) => o.textContent)).toEqual(["Keine", "Schräge Wände (0 Blätter)", "Jede Wand (6 Blätter)"]);
     expect(dialog.textContent).not.toContain("Schräge Wände sieht keine");
-    for (const label of ["Grundriss", "Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West", "Geräteliste"]) act(() => check(dialog, label).click());
+    for (const label of [...SHEETS, ...GROUPS]) act(() => check(dialog, label).click());
     expect(dialog.textContent).toContain("Wähle mindestens ein Blatt.");
     choose(walls, "all");
     expect(dialog.textContent).toContain("Ansicht Wand 6");
@@ -140,7 +143,7 @@ describe("PlanSetDialog", () => {
   it("prints names in the plan only when the dialog asks for them, whatever the view shows", async () => {
     const names = useStore.getState().project.items.map((i) => i.name);
     // Only the plan sheet; the view shows names, the plan set leaves them out by default.
-    localStorage.setItem(KEY, JSON.stringify({ plan: true, elevations: [], list: false }));
+    localStorage.setItem(KEY, JSON.stringify({ plan: true, installation: [], elevations: [], list: false }));
     useStore.getState().setPrefs({ showNames: true });
     const exportPlan = async (dialog: HTMLElement) => {
       await act(async () => button(dialog, "Exportieren…")!.click());
@@ -161,6 +164,53 @@ describe("PlanSetDialog", () => {
     expect(JSON.parse(localStorage.getItem(KEY)!)).toMatchObject({ names: true });
     const withNames = await exportPlan(dialog);
     expect(withNames.filter((s) => names.includes(s)).length).toBeGreaterThan(10);
+  });
+
+  it("offers an installation plan for each trade group with points, with its table, and remembers the choice", () => {
+    let dialog = mount();
+    // The example kitchen is all-electric, without steam or remote refrigeration.
+    for (const g of GROUPS) expect(check(dialog, g)).toMatchObject({ checked: true, disabled: false });
+    for (const g of ["Gas", "Kälte und Dampf"]) expect(check(dialog, g)).toMatchObject({ checked: false, disabled: true });
+    expect(dialog.textContent).toContain("Gewerke ohne Anschlusspunkte bekommen kein Blatt.");
+    expect(check(dialog, "Anschlusstabellen").checked).toBe(true);
+    expect(dialog.textContent).toContain("Installationsplan Elektro: 1:");
+    const sheets = () => Number(/(\d+) Blätter$/.exec(dialog.querySelector(".plan-set-status")!.textContent!)![1]);
+    const all = sheets();
+
+    act(() => check(dialog, "Elektro").click());
+    expect(dialog.textContent).not.toContain("Installationsplan Elektro");
+    const withoutElectric = sheets();
+    expect(withoutElectric).toBeLessThan(all - 1);
+    // The groups without points keep their choice for the next project.
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toMatchObject({ installation: ["sanitary", "gas", "ventilation", "special"], pointTables: true });
+    act(() => check(dialog, "Anschlusstabellen").click());
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toMatchObject({ pointTables: false });
+    // Two sheets left (Sanitär, Lüftung), each without its table pages now.
+    expect(sheets()).toBeLessThan(withoutElectric);
+    for (const g of ["Sanitär", "Lüftung"]) act(() => check(dialog, g).click());
+    expect(dialog.textContent).not.toContain("Installationsplan");
+    expect([...dialog.querySelectorAll("label.check")].some((l) => l.textContent === "Anschlusstabellen")).toBe(false);
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    dialog = mount();
+    expect(check(dialog, "Elektro").checked).toBe(false);
+    expect(check(dialog, "Sanitär").checked).toBe(false);
+    act(() => check(dialog, "Sanitär").click());
+    expect(check(dialog, "Anschlusstabellen").checked).toBe(false);
+  });
+
+  it("exports the installation plan and the connection table of a group", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ plan: false, installation: ["sanitary"], pointTables: true, elevations: [], wallSheets: "none", list: false }));
+    const dialog = mount();
+    expect(dialog.textContent).toContain("Installationsplan Sanitär: 1:");
+    await act(async () => button(dialog, "Exportieren…")!.click());
+    await vi.waitFor(() => expect(closed).toBe(1));
+    const pages = readPdf([...disk.written.values()][0]).pages.map((p) => p.texts);
+    expect(pages.length).toBeGreaterThanOrEqual(2);
+    expect(pages[0]).toContain("Installationsplan Sanitär");
+    expect(pages[0]).toContain("Legende");
+    for (const p of pages.slice(1)) expect(p).toContain("Anschlusstabelle Sanitär");
   });
 
   it("writes the plan set as PDF and closes", async () => {

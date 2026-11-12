@@ -1,17 +1,22 @@
-// The plan set as PDF: floor plan, elevations, equipment list and an optional 3D image on sheets
-// of a chosen paper size, each with frame and title block. The drawings are the same primitives
-// as on screen and in the other exports (`drawing.ts`), placed in paper millimetres at a true
-// scale: a sheet at 1:50 printed at 100 % measures 1:50.
+// The plan set as PDF: floor plan, installation plans with their connection tables, elevations,
+// equipment list and an optional 3D image on sheets of a chosen paper size, each with frame and
+// title block. The drawings are the same primitives as on screen and in the other exports
+// (`drawing.ts`), placed in paper millimetres at a true scale: a sheet at 1:50 printed at 100 %
+// measures 1:50.
 
 import { elevationDrawing, slantedWalls, wallElevation, WALL_CUT_DEPTH, type ElevationCut, type ElevationId } from "../model/elevation";
 import { elevationTitle } from "../model/elevationNames";
 import { walls } from "../model/geometry";
-import { dimensionsText, drainText, equipmentRows, equipmentTotals, formatNumber, waterText, type EquipmentRow } from "../model/equipment";
+import { dimensionsText, drainText, equipmentRows, equipmentTotals, formatNumber, waterText, withSimultaneity, type EquipmentRow } from "../model/equipment";
+import { heightText, installationDrawing } from "../model/installationPlan";
 import { planDrawing } from "../model/plan";
+import { pointRows, wallRefName, type PointRow } from "../model/pointList";
+import { projectPoints, type ConnectionPoint } from "../model/points";
+import { plugName, TRADE_GROUPS, tradeGroupName, type TradeGroup } from "../model/trades";
 import { FACINGS, type Facing, type Item, type Project, type ProjectInfo, type Vec2 } from "../model/types";
 import type { Box } from "../model/geometry";
 import { formatDate, t, type Lang, type TKey } from "../lib/i18n";
-import { drawingBounds, expandDim, TEXT, type Drawing, type Fill, type Pen, type Shape, type TextShape } from "./drawing";
+import { drawingBounds, expandDim, mm, TEXT, type Drawing, type Fill, type Pen, type Shape, type TextShape } from "./drawing";
 import { PdfDocument, fitText, type PdfImage, type PdfPage, type Rgb, type StrokeStyle } from "./pdf";
 import { PAPER, PEN_STYLE } from "./style";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS, type DrawingAtScale } from "./svg";
@@ -33,6 +38,13 @@ export interface PlanSetOptions {
   orientation: Orientation;
   scale: ScaleChoice;
   plan: boolean;
+  /**
+   * The trade groups that get an installation plan after the floor plan, in TRADE_GROUPS order; a
+   * group without points in the project gets none.
+   */
+  installation: TradeGroup[];
+  /** Each installation plan followed by its connection table. */
+  pointTables: boolean;
   /** The compass elevations to print, in FACINGS order. */
   elevations: Facing[];
   /**
@@ -51,7 +63,7 @@ export interface PlanSetOptions {
 export type WallSheets = "none" | "slanted" | "all";
 export const WALL_SHEETS: readonly WallSheets[] = ["none", "slanted", "all"];
 
-export const DEFAULT_PLAN_SET: PlanSetOptions = { paper: "A3", orientation: "landscape", scale: "auto", plan: true, elevations: [...FACINGS], wallSheets: "slanted", list: true, view3d: false, names: false };
+export const DEFAULT_PLAN_SET: PlanSetOptions = { paper: "A3", orientation: "landscape", scale: "auto", plan: true, installation: [...TRADE_GROUPS], pointTables: true, elevations: [...FACINGS], wallSheets: "slanted", list: true, view3d: false, names: false };
 
 /** The walls (indices) the `wallSheets` rule prints for this room. */
 export function wallSheetWalls(room: Project["room"], rule: WallSheets): number[] {
@@ -72,6 +84,9 @@ export function sanitizePlanSetOptions(v: unknown): PlanSetOptions {
     orientation: o.orientation === "portrait" || o.orientation === "landscape" ? o.orientation : d.orientation,
     scale: o.scale === "auto" || PLAN_SCALES.includes(o.scale as never) ? (o.scale as ScaleChoice) : d.scale,
     plan: bool(o.plan, d.plan),
+    // Settings stored before 0.3 have no groups: they get every one, like a new computer.
+    installation: Array.isArray(o.installation) ? TRADE_GROUPS.filter((g) => (o.installation as unknown[]).includes(g)) : [...d.installation],
+    pointTables: bool(o.pointTables, d.pointTables),
     elevations: Array.isArray(o.elevations) ? FACINGS.filter((f) => (o.elevations as unknown[]).includes(f)) : [...d.elevations],
     wallSheets: WALL_SHEETS.includes(o.wallSheets as WallSheets) ? (o.wallSheets as WallSheets) : d.wallSheets,
     list: bool(o.list, d.list),
@@ -156,11 +171,33 @@ interface DrawingSheetSource {
   at: DrawingAtScale;
 }
 
-/** The drawing sheets the options ask for, in print order. */
-function drawingSources(project: Project, opts: PlanSetOptions, ctx: PlanSetContext): DrawingSheetSource[] {
-  const out: DrawingSheetSource[] = [];
+/** The connection table of a trade group: pages without a scale, after its installation plan. */
+interface PointTableSource {
+  kind: "points";
+  title: string;
+  group: TradeGroup;
+}
+
+type SheetSource = DrawingSheetSource | PointTableSource;
+
+/** The trade groups the options ask for that have points in the project, in TRADE_GROUPS order. */
+export function installationGroups(project: Project, opts: Pick<PlanSetOptions, "installation">): TradeGroup[] {
+  return TRADE_GROUPS.filter((g) => opts.installation.includes(g) && projectPoints(project.items, g).length > 0);
+}
+
+/**
+ * The sheets the options ask for, in print order: the floor plan, each installation plan followed
+ * by its table, then the elevations. The equipment list and the 3D page follow them.
+ */
+function sheetSources(project: Project, opts: PlanSetOptions, ctx: PlanSetContext): SheetSource[] {
+  const out: SheetSource[] = [];
   const tr = (k: TKey, vars?: Record<string, string | number>) => t(k, vars, ctx.lang);
   if (opts.plan) out.push({ kind: "drawing", title: tr("view.plan"), at: (ps) => planDrawing(project, { showNames: opts.names, showDims: true, paperScale: ps }) });
+  for (const group of installationGroups(project, opts)) {
+    const name = tradeGroupName(group, ctx.lang);
+    out.push({ kind: "drawing", title: tr("planSet.installation", { group: name }), at: (ps) => installationDrawing(project, { filter: group, paperScale: ps, dims: true, legend: true, lang: ctx.lang }) });
+    if (opts.pointTables) out.push({ kind: "points", title: tr("planSet.pointTable", { group: name }), group });
+  }
   const cutName = tr(`view.cut.${ctx.cut}`, { mm: WALL_CUT_DEPTH });
   const ids: ElevationId[] = [...FACINGS.filter((f) => opts.elevations.includes(f)), ...wallSheetWalls(project.room, opts.wallSheets).map(wallElevation)];
   for (const id of ids) {
@@ -170,6 +207,8 @@ function drawingSources(project: Project, opts: PlanSetOptions, ctx: PlanSetCont
   return out;
 }
 
+const isDrawing = (s: SheetSource): s is DrawingSheetSource => s.kind === "drawing";
+
 export interface SheetFit {
   title: string;
   scale: number;
@@ -177,11 +216,13 @@ export interface SheetFit {
 }
 
 export interface PlanSetCheck {
-  /** Each drawing sheet with its scale and whether it fits. */
+  /** Each drawing sheet (plan, installation plans, elevations) with its scale and whether it fits. */
   sheets: SheetFit[];
+  /** Pages of the connection tables, all groups together (0 when not printed). */
+  tablePages: number;
   /** Pages of the equipment list (0 when not printed). */
   listPages: number;
-  /** All sheets including list and 3D pages. */
+  /** All sheets including table, list and 3D pages. */
   total: number;
   /** With a fixed scale that does not fit: the most detailed coarser scale at which all fit. */
   fittingScale?: number;
@@ -191,17 +232,20 @@ export interface PlanSetCheck {
 
 function fitAll(project: Project, opts: PlanSetOptions, ctx: PlanSetContext): SheetFit[] {
   const { area } = sheetFrame(opts.paper, opts.orientation);
-  return drawingSources(project, opts, ctx).map((s) => {
-    const r = scaleDrawing(s.at, area, opts.scale);
-    return { title: s.title, scale: r.scale, fits: r.fits };
-  });
+  return sheetSources(project, opts, ctx)
+    .filter(isDrawing)
+    .map((s) => {
+      const r = scaleDrawing(s.at, area, opts.scale);
+      return { title: s.title, scale: r.scale, fits: r.fits };
+    });
 }
 
 /** What the plan set dialog shows before exporting: scales, page count and what would fit instead. */
 export function checkPlanSet(project: Project, opts: PlanSetOptions, ctx: PlanSetContext, view3d = opts.view3d): PlanSetCheck {
   const sheets = fitAll(project, opts, ctx);
+  const tablePages = sheetSources(project, opts, ctx).reduce((n, s) => n + (s.kind === "points" ? paginatePoints(project, s.group, opts, ctx.lang).length : 0), 0);
   const listPages = opts.list ? paginateList(project, opts, ctx.lang).length : 0;
-  const check: PlanSetCheck = { sheets, listPages, total: sheets.length + listPages + (view3d ? 1 : 0) };
+  const check: PlanSetCheck = { sheets, tablePages, listPages, total: sheets.length + tablePages + listPages + (view3d ? 1 : 0) };
   if (sheets.every((s) => s.fits)) return check;
   if (opts.scale !== "auto") {
     const coarser = PLAN_SCALES.filter((s) => s > (opts.scale as number));
@@ -336,6 +380,104 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : typeof v === "number" ? String(v) : "";
 }
 
+// ---- Tables (equipment list, connection tables)
+
+const ROW_H = 6;
+const ROW_SPEC_H = 9;
+const HEAD_H = 8;
+const CELL_PAD = 1.2;
+
+interface Column<R> {
+  key: TKey;
+  width: number;
+  align: "start" | "end";
+  cell: (r: R) => string;
+}
+
+interface Table<R> {
+  cols: Column<R>[];
+  /** A second, smaller grey line in the second column (the equipment list's spec line). */
+  sub?: (r: R) => string;
+}
+
+/**
+ * What ends a table on its last page: bold rows of values under the columns named by key, then
+ * one line of text from the second column to the right edge (counts too long for a column).
+ */
+interface TableFoot {
+  rows: Partial<Record<TKey, string>>[];
+  line?: string;
+}
+
+/** The height a foot of `rows` bold rows and its line take under the last row. */
+const footHeight = (rows: number) => (rows + 1) * ROW_H;
+
+function rowHeight<R>(table: Pick<Table<R>, "sub">, r: R): number {
+  return table.sub?.(r) ? ROW_SPEC_H : ROW_H;
+}
+
+/**
+ * Rows split into pages that fit the area under the header. When the last page cannot also hold
+ * the foot (`tail` mm), its last row moves on, so a foot never stands on a page of its own.
+ */
+function paginate<R>(rows: readonly R[], height: (r: R) => number, area: Box, tail: number): R[][] {
+  const room = area.maxY - area.minY - HEAD_H;
+  const pages: R[][] = [[]];
+  let used = 0;
+  for (const r of rows) {
+    if (used + height(r) > room && pages[pages.length - 1].length > 0) {
+      pages.push([]);
+      used = 0;
+    }
+    pages[pages.length - 1].push(r);
+    used += height(r);
+  }
+  const last = pages[pages.length - 1];
+  if (last.length > 1 && used + tail > room) pages.push([last.pop() as R]);
+  return pages;
+}
+
+/** A table page: the header, the rows with a thin rule under each, and the foot when given. */
+function drawTable<R>(page: PdfPage, area: Box, table: Table<R>, rows: readonly R[], lang: Lang, foot?: TableFoot) {
+  const { cols } = table;
+  const thin: StrokeStyle = { width: PEN_STYLE.dim.width, color: RULE_GREY };
+  const head: StrokeStyle = { width: PEN_STYLE.item.width, color: LINE };
+  let y = area.minY;
+  const cellX = (i: number) => area.minX + cols.slice(0, i).reduce((s, c) => s + c.width, 0);
+  const put = (i: number, text: string, baseline: number, size: number, font: "regular" | "bold" = "regular", color?: Rgb) => {
+    const c = cols[i];
+    const w = c.width - 2 * CELL_PAD;
+    const s = fitText(text, w, size, font);
+    const x = c.align === "end" ? cellX(i) + c.width - CELL_PAD : cellX(i) + CELL_PAD;
+    page.text(s, { x, y: baseline }, { size, font, anchor: c.align, color });
+  };
+
+  // Header: labels may need two lines on narrow paper; they are shortened instead.
+  cols.forEach((c, i) => put(i, t(c.key, undefined, lang), y + HEAD_H - 2.2, TEXT.small, "bold"));
+  y += HEAD_H;
+  page.line({ x: area.minX, y }, { x: area.maxX, y }, head);
+
+  for (const r of rows) {
+    const base = y + ROW_H - 1.8;
+    cols.forEach((c, i) => put(i, c.cell(r), base, TEXT.normal));
+    const sub = table.sub?.(r);
+    if (sub) put(1, sub, base + 3.2, TEXT.small, "regular", LABEL_GREY);
+    y += rowHeight(table, r);
+    page.line({ x: area.minX, y }, { x: area.maxX, y }, thin);
+  }
+
+  if (!foot) return;
+  page.line({ x: area.minX, y }, { x: area.maxX, y }, head);
+  foot.rows.forEach((values, k) =>
+    cols.forEach((c, i) => {
+      const v = values[c.key];
+      if (v) put(i, v, y + (k + 1) * ROW_H - 1.8, TEXT.normal, "bold");
+    }),
+  );
+  const x = cellX(1) + CELL_PAD;
+  if (foot.line) page.text(fitText(foot.line, area.maxX - x, TEXT.normal), { x, y: y + (foot.rows.length + 1) * ROW_H - 1.8 }, { size: TEXT.normal });
+}
+
 // ---- Equipment list pages
 
 interface ListRow {
@@ -343,11 +485,6 @@ interface ListRow {
   spec: string;
   price?: number;
 }
-
-const ROW_H = 6;
-const ROW_SPEC_H = 9;
-const HEAD_H = 8;
-const CELL_PAD = 1.2;
 
 /** The spec line of an item (manufacturer, model, article number); read defensively. */
 function specLine(item: Item | undefined, lang: Lang): { spec: string; price?: number } {
@@ -367,43 +504,21 @@ function listRows(project: Project, lang: Lang): ListRow[] {
     .map((row) => ({ row, ...specLine(byId.get(row.id), lang) }));
 }
 
-/** The list rows split into pages that fit the area under the header (the totals on the last). */
+const listSub = (r: ListRow) => r.spec;
+
+/** The list rows split into pages (the totals and the line of water and drain points on the last). */
 function paginateList(project: Project, opts: PlanSetOptions, lang: Lang): ListRow[][] {
   const { area } = sheetFrame(opts.paper, opts.orientation);
-  const room = area.maxY - area.minY - HEAD_H;
-  const height = (r: ListRow) => (r.spec ? ROW_SPEC_H : ROW_H);
-  const rows = listRows(project, lang);
-  const pages: ListRow[][] = [[]];
-  let used = 0;
-  for (const r of rows) {
-    if (used + height(r) > room && pages[pages.length - 1].length > 0) {
-      pages.push([]);
-      used = 0;
-    }
-    pages[pages.length - 1].push(r);
-    used += height(r);
-  }
-  // The last page also holds the totals and the line of water and drain points: when they do
-  // not fit, its last row moves on, so the totals never stand on a page of their own.
-  const last = pages[pages.length - 1];
-  if (last.length > 1 && used + 2 * ROW_H > room) pages.push([last.pop() as ListRow]);
-  return pages;
-}
-
-interface Column {
-  key: TKey;
-  width: number;
-  align: "start" | "end";
-  cell: (r: ListRow) => string;
+  return paginate(listRows(project, lang), (r) => rowHeight({ sub: listSub }, r), area, footHeight(1));
 }
 
 function priceText(v: number, lang: Lang): string {
   return new Intl.NumberFormat(lang === "de" ? "de-DE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 }
 
-function listColumns(rows: ListRow[], width: number, lang: Lang): Column[] {
+function listColumns(rows: ListRow[], width: number, lang: Lang): Column<ListRow>[] {
   const n = (v: number | undefined) => (v === undefined ? "" : formatNumber(v, lang));
-  const fixed: Column[] = [
+  const fixed: Column<ListRow>[] = [
     { key: "list.dimensions", width: 30, align: "end", cell: (r) => dimensionsText(r.row) },
     { key: "list.electric", width: 17, align: "end", cell: (r) => n(r.row.electricKw) },
     { key: "list.voltage", width: 17, align: "end", cell: (r) => n(r.row.voltage) },
@@ -413,46 +528,19 @@ function listColumns(rows: ListRow[], width: number, lang: Lang): Column[] {
     { key: "list.exhaust", width: 18, align: "end", cell: (r) => n(r.row.exhaustM3h) },
   ];
   if (rows.some((r) => r.price !== undefined)) fixed.push({ key: "list.price", width: 22, align: "end", cell: (r) => (r.price === undefined ? "" : priceText(r.price, lang)) });
-  const pos: Column = { key: "list.pos", width: 10, align: "end", cell: (r) => String(r.row.pos) };
+  const pos: Column<ListRow> = { key: "list.pos", width: 10, align: "end", cell: (r) => String(r.row.pos) };
   const rest = width - pos.width - fixed.reduce((s, c) => s + c.width, 0);
   // The note shares the free width with the name when there is room for both.
   const withNote = rest >= 110 && rows.some((r) => r.row.note);
   const nameW = withNote ? rest * 0.6 : rest;
-  const cols: Column[] = [pos, { key: "list.name", width: nameW, align: "start", cell: (r) => r.row.name }, ...fixed];
+  const cols: Column<ListRow>[] = [pos, { key: "list.name", width: nameW, align: "start", cell: (r) => r.row.name }, ...fixed];
   if (withNote) cols.push({ key: "list.note", width: rest - nameW, align: "start", cell: (r) => r.row.note });
   return cols;
 }
 
 function drawListPage(page: PdfPage, area: Box, rows: ListRow[], all: ListRow[], last: boolean, lang: Lang) {
-  const width = area.maxX - area.minX;
-  const cols = listColumns(all, width, lang);
-  const thin: StrokeStyle = { width: PEN_STYLE.dim.width, color: RULE_GREY };
-  const head: StrokeStyle = { width: PEN_STYLE.item.width, color: LINE };
-  let y = area.minY;
-  const cellX = (i: number) => area.minX + cols.slice(0, i).reduce((s, c) => s + c.width, 0);
-  const put = (i: number, text: string, baseline: number, size: number, font: "regular" | "bold" = "regular", color?: Rgb) => {
-    const c = cols[i];
-    const w = c.width - 2 * CELL_PAD;
-    const s = fitText(text, w, size, font);
-    const x = c.align === "end" ? cellX(i) + c.width - CELL_PAD : cellX(i) + CELL_PAD;
-    page.text(s, { x, y: baseline }, { size, font, anchor: c.align, color });
-  };
-
-  // Header: labels may need two lines on narrow paper; they are shortened instead.
-  cols.forEach((c, i) => put(i, t(c.key, undefined, lang), y + HEAD_H - 2.2, TEXT.small, "bold"));
-  y += HEAD_H;
-  page.line({ x: area.minX, y }, { x: area.maxX, y }, head);
-
-  for (const r of rows) {
-    const h = r.spec ? ROW_SPEC_H : ROW_H;
-    const base = y + ROW_H - 1.8;
-    cols.forEach((c, i) => put(i, c.cell(r), base, TEXT.normal));
-    if (r.spec) put(1, r.spec, base + 3.2, TEXT.small, "regular", LABEL_GREY);
-    y += h;
-    page.line({ x: area.minX, y }, { x: area.maxX, y }, thin);
-  }
-
-  if (!last) return;
+  const table: Table<ListRow> = { cols: listColumns(all, area.maxX - area.minX, lang), sub: listSub };
+  if (!last) return drawTable(page, area, table, rows, lang);
   const tot = equipmentTotals(all.map((r) => r.row));
   const n = (v: number) => (v ? formatNumber(v, lang) : "");
   const counted = (pairs: [TKey, number][]) =>
@@ -468,11 +556,6 @@ function drawListPage(page: PdfPage, area: Box, rows: ListRow[], all: ListRow[],
     "list.exhaust": n(tot.exhaustM3h),
     "list.price": priceSum ? priceText(priceSum, lang) : "",
   };
-  page.line({ x: area.minX, y }, { x: area.maxX, y }, head);
-  cols.forEach((c, i) => {
-    const v = totals[c.key];
-    if (v) put(i, v, y + ROW_H - 1.8, TEXT.normal, "bold");
-  });
   // The water and drain points are counts by kind, too long for their columns: one line below.
   const points = [
     ["list.water", counted([["list.cold", tot.coldWater], ["list.hot", tot.hotWater]])],
@@ -482,8 +565,90 @@ function drawListPage(page: PdfPage, area: Box, rows: ListRow[], all: ListRow[],
     .filter(([, v]) => v)
     .map(([k, v]) => `${t(k, undefined, lang)}: ${v}`)
     .join(" · ");
-  const x = cellX(1) + CELL_PAD;
-  if (line) page.text(fitText(line, area.maxX - x, TEXT.normal), { x, y: y + 2 * ROW_H - 1.8 }, { size: TEXT.normal });
+  drawTable(page, area, table, rows, lang, { rows: [totals], line });
+}
+
+// ---- Connection tables
+
+/** A duct's size is its diameter, a pipe's its DN. */
+const DUCT_TRADES: ReadonlySet<ConnectionPoint["trade"]> = new Set(["exhaust", "supply"]);
+
+/**
+ * The values of a point in one line, as the connection table prints them: an electric one
+ * „15,9 kW · 400 V 3N~ · 22,9 A · 25 A · Festanschluss“ (load, supply, current, fuse, connection
+ * type), a pipe „DN 50 · fetthaltig“, a duct „1200 m³/h · Ø 250“.
+ */
+export function pointValuesText(p: Pick<ConnectionPoint, "trade" | "values">, lang: Lang): string {
+  const v = p.values;
+  const n = (x: number) => formatNumber(x, lang);
+  const parts: string[] = [];
+  if (v.kw) parts.push(`${n(v.kw)} kW`);
+  if (v.voltage) parts.push(`${n(v.voltage)} V ${v.phases === 3 ? "3N~" : "1N~"}`);
+  if (v.currentA !== undefined) parts.push(`${n(v.currentA)} A`);
+  if (v.fuseA !== undefined) parts.push(`${n(v.fuseA)} A`);
+  if (v.plug) parts.push(plugName(v.plug, lang));
+  if (v.m3h) parts.push(`${n(v.m3h)} m³/h`);
+  if (v.kgH) parts.push(`${n(v.kgH)} kg/h`);
+  if (v.dn) parts.push(DUCT_TRADES.has(p.trade) ? `Ø ${mm(v.dn)}` : `DN ${mm(v.dn)}`);
+  if (v.greasy) parts.push(t("pointList.greasy", undefined, lang));
+  return parts.join(" · ");
+}
+
+/** The connected electric load of the rows (kW), without float noise. */
+export function electricSum(rows: readonly Pick<PointRow, "point">[]): number {
+  return withSimultaneity(
+    rows.reduce((s, r) => s + (r.point.trade === "electric" ? (r.point.values.kw ?? 0) : 0), 0),
+    1,
+  );
+}
+
+/** Bold rows under the table: the electric one ends with its sums, plain and with the factor. */
+const pointFootRows = (group: TradeGroup) => (group === "electric" ? 2 : 0);
+
+/** The connection table of a group split into pages (the electric sums on the last). */
+function paginatePoints(project: Project, group: TradeGroup, opts: PlanSetOptions, lang: Lang): PointRow[][] {
+  const { area } = sheetFrame(opts.paper, opts.orientation);
+  const foot = pointFootRows(group);
+  // The sums have no line of text below them.
+  return paginate(pointRows(project, group, lang), () => ROW_H, area, foot ? footHeight(foot) - ROW_H : 0);
+}
+
+function pointColumns(width: number, lang: Lang): Column<PointRow>[] {
+  const wall = (k: 0 | 1) => (r: PointRow) => {
+    const w = r.walls[k];
+    return w ? `${mm(w.distance)} / ${wallRefName(w, lang)}` : "";
+  };
+  const lead: Column<PointRow>[] = [
+    { key: "pointList.no", width: 14, align: "start", cell: (r) => r.no },
+    { key: "list.pos", width: 10, align: "end", cell: (r) => String(r.pos) },
+  ];
+  const measures: Column<PointRow>[] = [
+    { key: "planSet.col.wall", width: 26, align: "start", cell: wall(0) },
+    { key: "planSet.col.wall", width: 26, align: "start", cell: wall(1) },
+    { key: "pointList.height", width: 18, align: "end", cell: (r) => heightText(r.point.z) },
+  ];
+  // Name, values and note share what is left; the values are the longest text.
+  const rest = width - [...lead, ...measures].reduce((s, c) => s + c.width, 0);
+  return [
+    ...lead,
+    { key: "list.name", width: rest * 0.35, align: "start", cell: (r) => r.name },
+    ...measures,
+    { key: "planSet.col.values", width: rest * 0.4, align: "start", cell: (r) => pointValuesText(r.point, lang) },
+    { key: "pointList.note", width: rest * 0.25, align: "start", cell: (r) => r.point.values.note ?? "" },
+  ];
+}
+
+function drawPointsPage(page: PdfPage, area: Box, rows: PointRow[], all: PointRow[], group: TradeGroup, last: boolean, project: Project, lang: Lang) {
+  const table: Table<PointRow> = { cols: pointColumns(area.maxX - area.minX, lang) };
+  if (!last || pointFootRows(group) === 0) return drawTable(page, area, table, rows, lang);
+  const sum = electricSum(all);
+  const f = project.settings.simultaneity;
+  drawTable(page, area, table, rows, lang, {
+    rows: [
+      { "list.name": t("planSet.sumKw", undefined, lang), "planSet.col.values": formatNumber(sum, lang) },
+      { "list.name": t("planSet.sumKwFactored", { f: formatNumber(f, lang) }, lang), "planSet.col.values": formatNumber(withSimultaneity(sum, f), lang) },
+    ],
+  });
 }
 
 // ---- The plan set
@@ -502,15 +667,18 @@ export class SheetTooSmall extends Error {}
 export async function planSetPdf(project: Project, opts: PlanSetOptions, input: PlanSetInput): Promise<Uint8Array> {
   const { lang } = input;
   const frame = sheetFrame(opts.paper, opts.orientation);
-  const drawings = drawingSources(project, opts, input).map((s) => ({ title: s.title, ...scaleDrawing(s.at, frame.area, opts.scale) }));
-  const tooBig = drawings.find((d) => !d.fits);
-  if (tooBig) throw new SheetTooSmall(t("planSet.tooSmall", { sheet: tooBig.title, scale: tooBig.scale, paper: opts.paper }, lang));
+  // Every sheet laid out before the first is drawn: the title blocks count them all.
+  const sheets = sheetSources(project, opts, input).map((s) =>
+    s.kind === "drawing" ? { ...s, ...scaleDrawing(s.at, frame.area, opts.scale) } : { ...s, pages: paginatePoints(project, s.group, opts, lang) },
+  );
+  const tooBig = sheets.find((s) => s.kind === "drawing" && !s.fits);
+  if (tooBig?.kind === "drawing") throw new SheetTooSmall(t("planSet.tooSmall", { sheet: tooBig.title, scale: tooBig.scale, paper: opts.paper }, lang));
   const listPages = opts.list ? paginateList(project, opts, lang) : [];
   const doc = new PdfDocument();
   doc.info = { title: `${project.info.name} – ${t("planSet.fileName", undefined, lang)}`, author: project.info.author || undefined, subject: t("planSet.fileName", undefined, lang) };
   let image: PdfImage | null = null;
   if (opts.view3d && input.image) image = await doc.addPng(input.image);
-  const m = drawings.length + listPages.length + (image ? 1 : 0);
+  const m = sheets.reduce((c, s) => c + (s.kind === "drawing" ? 1 : s.pages.length), 0) + listPages.length + (image ? 1 : 0);
   let n = 0;
   const sheet = (title: string, scale: number | null) => {
     const page = doc.addPage(frame.width, frame.height);
@@ -518,7 +686,13 @@ export async function planSetPdf(project: Project, opts: PlanSetOptions, input: 
     return page;
   };
 
-  for (const d of drawings) drawDrawing(sheet(d.title, d.scale), d.drawing, d.scale, frame.area);
+  for (const s of sheets) {
+    if (s.kind === "drawing") drawDrawing(sheet(s.title, s.scale), s.drawing, s.scale, frame.area);
+    else {
+      const rows = s.pages.flat();
+      s.pages.forEach((page, i) => drawPointsPage(sheet(s.title, null), frame.area, page, rows, s.group, i === s.pages.length - 1, project, lang));
+    }
+  }
   const all = listPages.flat();
   listPages.forEach((rows, i) => drawListPage(sheet(t("list.title", undefined, lang), null), frame.area, rows, all, i === listPages.length - 1, lang));
   if (image) {

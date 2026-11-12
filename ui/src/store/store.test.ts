@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CATALOG } from "../kinds/registry";
 import { itemFromCatalog, newProject } from "../model/project";
-import { useStore } from "./store";
+import { loadPointsPref, useStore } from "./store";
 import { duplicateSelected, nudgeSelected, rotateSelected } from "../lib/commands";
 import { parseNumber } from "../components/Fields";
 import { num, setLang, type Lang } from "../lib/i18n";
@@ -202,5 +202,40 @@ describe("parseNumber", () => {
     } finally {
       setLang("de");
     }
+  });
+});
+
+describe("the trade filter of the plan (Prefs.points)", () => {
+  const KEY = "kitchenplaner.points.v1";
+
+  it("is off by default, and when what is stored is unknown", () => {
+    localStorage.removeItem(KEY);
+    expect(loadPointsPref()).toBe("off");
+    localStorage.setItem(KEY, "plumbing");
+    expect(loadPointsPref()).toBe("off");
+    localStorage.removeItem(KEY);
+  });
+
+  it("is a view setting: the project stays the same (no undo step, nothing to save), kept over undo and open", () => {
+    st().addItems([itemFromCatalog(CATALOG[0], 1000, 1000)]);
+    const { past, project, dirty } = st();
+    st().setPrefs({ points: "electric" });
+    expect(st().prefs.points).toBe("electric");
+    expect(st().past).toBe(past);
+    expect(st().project).toBe(project);
+    expect(st().dirty).toBe(dirty);
+    st().undo();
+    expect(st().prefs.points).toBe("electric");
+    st().load(newProject(), null);
+    expect(st().prefs.points).toBe("electric");
+    st().setPrefs({ points: "off" });
+  });
+
+  it("is remembered per computer", () => {
+    st().setPrefs({ points: "sanitary" });
+    expect(localStorage.getItem(KEY)).toBe("sanitary");
+    expect(loadPointsPref()).toBe("sanitary");
+    st().setPrefs({ points: "off" });
+    expect(loadPointsPref()).toBe("off");
   });
 });

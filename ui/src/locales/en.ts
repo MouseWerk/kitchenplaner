@@ -1256,10 +1256,53 @@ export const en: Record<keyof typeof de, Msg> = {
   "check.pointOutside": "The connection {point} lies outside the room or inside a partition.",
 
   // ---- 0.3 E inspector
+  "inspector.softWater": "Softened water",
+  "inspector.moreConnections": "More connections",
+  "inspector.supplyM3h": "Supply air (m³/h)",
+  "inspector.steamKgH": "Steam (kg/h)",
+  "inspector.refrigerationKw": "Remote refrigeration (kW)",
+  "inspector.heat": "Heat release sensible / latent (kW)",
+  "inspector.heatSensible": "Heat release sensible (kW)",
+  "inspector.heatLatent": "Heat release latent (kW)",
+  "inspector.points": "Connection points",
+  "point.fromLeft": "From left",
+  "point.fromBack": "From back",
+  "point.height": "Height above FFL",
+  "point.current": "Current",
+  "point.fuse": "Fuse",
+  "point.plug": "Connection type",
+  "point.dn": "Nominal size",
+  "point.greasy": "greasy",
+  "point.note": "Note",
+  "point.reset": "Reset",
+  "point.resetAll": "Reset all connection points",
 
   // ---- 0.3 F plan
+  "points.off": "Connections off",
+  "points.all": "All connections",
+  "points.electric": "Electric only",
+  "points.sanitary": "Plumbing only",
+  "points.gas": "Gas only",
+  "points.ventilation": "Ventilation only",
+  "points.special": "Refrigeration and steam only",
+  "export.installationSvg": "Installation plan as SVG…",
+  "export.installationDxf": "Installation plan as DXF…",
+  "export.installationPng": "Installation plan as PNG…",
+  "export.pointsCsv": "Connection list as CSV…",
+  "installation.title": "Installation plan",
+  "installation.titleOf": "Installation plan {group}",
+  "pointList.title": "Connection list",
 
   // ---- 0.3 G pdf
+  "planSet.installation": "Installation plan {group}",
+  "planSet.pointTable": "Connection table {group}",
+  "planSet.installationSheets": "Installation plans",
+  "planSet.pointTables": "Connection tables",
+  "planSet.installationHint": "Trades without connection points get no sheet.",
+  "planSet.col.wall": "Distance/wall",
+  "planSet.col.values": "Values",
+  "planSet.sumKw": "Total (kW)",
+  "planSet.sumKwFactored": "With simultaneity {f} (kW)",
 
   // ---- 0.3 H dxf
 

@@ -3,18 +3,40 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { deflateSync } from "node:zlib";
 import { t } from "../lib/i18n";
-import { equipmentRows, equipmentTotals } from "../model/equipment";
+import { equipmentRows, equipmentTotals, formatNumber, withSimultaneity } from "../model/equipment";
+import { heightText } from "../model/installationPlan";
+import { pointRows, wallRefName } from "../model/pointList";
+import { projectPoints } from "../model/points";
 import { parseProject } from "../model/serialize";
+import { TRADE_GROUPS, tradeGroupName } from "../model/trades";
 import { FACINGS, type Project } from "../model/types";
 import type { Drawing } from "./drawing";
 import { PdfDocument, PT_PER_MM } from "./pdf";
-import { checkPlanSet, DEFAULT_PLAN_SET, drawDrawing, PAPER_SIZES, planSetPdf, sanitizePlanSetOptions, scaleDrawing, sheetFrame, SheetTooSmall, wallSheetWalls, type PlanSetOptions } from "./planSet";
-import { pathPoints, readPdf } from "./testPdf";
+import {
+  checkPlanSet,
+  DEFAULT_PLAN_SET,
+  drawDrawing,
+  electricSum,
+  installationGroups,
+  PAPER_SIZES,
+  planSetPdf,
+  pointValuesText,
+  sanitizePlanSetOptions,
+  scaleDrawing,
+  sheetFrame,
+  SheetTooSmall,
+  wallSheetWalls,
+  type PlanSetOptions,
+} from "./planSet";
+import { pathPoints, readPdf, type ReadPage } from "./testPdf";
 
 const DATE = new Date(Date.UTC(2026, 9, 15, 12, 0, 0));
 const ctx = { lang: "de" as const, cut: "wall" as const };
 const example = (): Project => parseProject(readFileSync(resolve(__dirname, "../../../examples/Beispielkueche-Restaurant.kplan"), "utf8"));
-const opts = (patch: Partial<PlanSetOptions> = {}): PlanSetOptions => ({ ...DEFAULT_PLAN_SET, elevations: [...FACINGS], ...patch });
+/** The options without installation plans unless a test asks for them: the sheets as before 0.3. */
+const opts = (patch: Partial<PlanSetOptions> = {}): PlanSetOptions => ({ ...DEFAULT_PLAN_SET, elevations: [...FACINGS], installation: [], ...patch });
+/** Only the installation plans of `installation` and their tables. */
+const installationOnly = (patch: Partial<PlanSetOptions> = {}): PlanSetOptions => opts({ plan: false, elevations: [], wallSheets: "none", list: false, installation: [...TRADE_GROUPS], ...patch });
 
 /** A rectangular room `w` × `d` mm with nothing in it, as a drawing. */
 const box = (w: number, d: number): Drawing => ({
@@ -138,6 +160,22 @@ describe("plan set check", () => {
     expect(sanitizePlanSetOptions({ paper: "A7", orientation: "diagonal", scale: 33, plan: "yes", elevations: ["west", "up", "north"] })).toEqual({ ...DEFAULT_PLAN_SET, elevations: ["north", "west"] });
     expect(sanitizePlanSetOptions({ paper: "A1", orientation: "portrait", scale: 75, list: false })).toMatchObject({ paper: "A1", orientation: "portrait", scale: 75, list: false });
   });
+
+  it("reads the installation plans defensively: settings from before 0.3 get every group", () => {
+    expect(DEFAULT_PLAN_SET).toMatchObject({ installation: ["electric", "sanitary", "gas", "ventilation", "special"], pointTables: true });
+    // What 0.2 stored: no installation options at all.
+    const old = { paper: "A2", orientation: "landscape", scale: "auto", plan: true, elevations: ["north"], wallSheets: "none", list: true, view3d: false, names: true };
+    expect(sanitizePlanSetOptions(old)).toEqual({ ...old, installation: [...TRADE_GROUPS], pointTables: true });
+    // Known groups in TRADE_GROUPS order, the rest dropped; an empty list stays empty.
+    expect(sanitizePlanSetOptions({ installation: ["gas", "plumbing", 3, "electric", "gas"] }).installation).toEqual(["electric", "gas"]);
+    expect(sanitizePlanSetOptions({ installation: [] }).installation).toEqual([]);
+    expect(sanitizePlanSetOptions({ installation: "electric" }).installation).toEqual([...TRADE_GROUPS]);
+    expect(sanitizePlanSetOptions({ pointTables: false }).pointTables).toBe(false);
+    expect(sanitizePlanSetOptions({ pointTables: "no" }).pointTables).toBe(true);
+    // Fresh arrays: changing what was read leaves the defaults alone.
+    sanitizePlanSetOptions(null).installation.pop();
+    expect(DEFAULT_PLAN_SET.installation).toHaveLength(5);
+  });
 });
 
 describe("plan set PDF", () => {
@@ -236,5 +274,171 @@ describe("plan set PDF", () => {
     expect(pdf.pages).toHaveLength(1);
     expect(pdf.pages[0].texts).toContain("1:50");
     expect(pdf.pages[0].width).toBeLessThan(pdf.pages[0].height);
+  });
+});
+
+describe("installation plans and connection tables", () => {
+  /** The title in a page's title block (the text after the „Zeichnung“ label). */
+  const titleOf = (page: ReadPage) => page.texts[page.texts.indexOf(t("sheet.drawing", undefined, "de")) + 1];
+  /** Whether a page's texts contain `s`, whole or shortened with an ellipsis to fit its cell. */
+  const shows = (texts: string[], s: string) => texts.some((x) => x === s || (x.endsWith("…") && s.startsWith(x.slice(0, -1))));
+
+  /** A project whose only units are `n` copies of a purely electric unit of the example. */
+  const electricOnly = (n: number): Project => {
+    const p = example();
+    const unit = p.items.find((it) => (it.connections.electricKw ?? 0) > 0 && !it.connections.coldWater && !it.connections.drain && !it.connections.exhaustM3h);
+    expect(unit).toBeDefined();
+    const u = unit!;
+    p.items = Array.from({ length: n }, (_, i) => ({ ...u, id: `e${i}`, pos: i + 1, points: undefined, x: 1000 + (i % 10) * (u.width + 50), y: 1000 + Math.floor(i / 10) * 1200 }));
+    return p;
+  };
+
+  it("adds a sheet only for the trade groups with points, after the plan and before the elevations", () => {
+    const project = example();
+    const groups = TRADE_GROUPS.filter((g) => projectPoints(project.items, g).length > 0);
+    // The example kitchen is all-electric and has no steam or remote refrigeration.
+    expect(groups).toEqual(["electric", "sanitary", "ventilation"]);
+    expect(installationGroups(project, DEFAULT_PLAN_SET)).toEqual(groups);
+    expect(installationGroups(project, { installation: ["gas", "special", "sanitary"] })).toEqual(["sanitary"]);
+    const c = checkPlanSet(project, opts({ installation: [...TRADE_GROUPS], list: false }), ctx);
+    expect(c.sheets.map((s) => s.title.split(" – ")[0])).toEqual(["Grundriss", "Installationsplan Elektro", "Installationsplan Sanitär", "Installationsplan Lüftung", "Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West"]);
+    expect(c.tablePages).toBeGreaterThanOrEqual(3);
+    expect(c.total).toBe(8 + c.tablePages);
+    // Without tables only the sheets; without groups that have points nothing of it.
+    expect(checkPlanSet(project, opts({ installation: [...TRADE_GROUPS], pointTables: false, list: false }), ctx)).toMatchObject({ tablePages: 0, total: 8 });
+    expect(checkPlanSet(project, installationOnly({ installation: ["gas", "special"] }), ctx).total).toBe(0);
+    expect(checkPlanSet(project, installationOnly({ installation: ["ventilation"] }), ctx)).toMatchObject({ sheets: [{ title: "Installationsplan Lüftung" }], tablePages: 1, total: 2 });
+    // A gas unit brings the gas sheet.
+    const gas = project.items.find((it) => (it.connections.electricKw ?? 0) > 0)!;
+    gas.connections = { ...gas.connections, gasKw: 12 };
+    expect(installationGroups(project, DEFAULT_PLAN_SET)).toEqual(["electric", "sanitary", "gas", "ventilation"]);
+  });
+
+  it("prints each installation plan followed by its table, with legend, scale and the points by row", async () => {
+    const project = example();
+    const o = opts({ installation: [...TRADE_GROUPS], elevations: ["north"] });
+    const check = checkPlanSet(project, o, ctx);
+    const pdf = readPdf(await planSetPdf(project, o, { ...ctx, date: DATE }));
+    expect(pdf.pages).toHaveLength(check.total);
+    const titles = pdf.pages.map(titleOf);
+    const pages = (title: string) => pdf.pages.filter((p) => titleOf(p) === title);
+    // The order of the sheets, a table's pages one after another right after its plan.
+    const order = titles.filter((s, i) => s !== titles[i - 1]);
+    expect(order).toEqual([
+      "Grundriss",
+      "Installationsplan Elektro",
+      "Anschlusstabelle Elektro",
+      "Installationsplan Sanitär",
+      "Anschlusstabelle Sanitär",
+      "Installationsplan Lüftung",
+      "Anschlusstabelle Lüftung",
+      "Ansicht Nord – Schnitttiefe 1.500 mm vor der Wand",
+      "Geräteliste",
+    ]);
+    for (const g of ["electric", "sanitary", "ventilation"] as const) {
+      const name = tradeGroupName(g, "de");
+      const [sheet] = pages(`Installationsplan ${name}`);
+      const fit = check.sheets.find((s) => s.title === `Installationsplan ${name}`)!;
+      expect(sheet.texts).toContain(`1:${fit.scale}`);
+      expect(sheet.texts).toContain("Legende");
+      expect(sheet.texts).toContain("Höhen in mm über Fertigfußboden (FFB)");
+      // Every point of the group as a label on its sheet and as a row of its table, in order.
+      const rows = pointRows(project, g, "de");
+      for (const r of rows) expect(sheet.texts).toContain(r.no);
+      const table = pages(`Anschlusstabelle ${name}`);
+      expect(table.every((p) => p.texts.includes("o. M."))).toBe(true);
+      const cells = table.flatMap((p) => p.texts);
+      expect(cells.filter((s) => /^\d+\.[A-Z]+$/.test(s))).toEqual(rows.map((r) => r.no));
+      for (const k of ["Nr.", "Pos.", "Bezeichnung", "Abstand/Wand", "Höhe ü. FFB", "Werte", "Bemerkung"]) expect(table[0].texts).toContain(k);
+      // Name, height, values and distances as the model gives them.
+      const first = rows[0];
+      expect(shows(table[0].texts, first.name)).toBe(true);
+      expect(table[0].texts).toContain(heightText(first.point.z));
+      expect(shows(table[0].texts, pointValuesText(first.point, "de"))).toBe(true);
+      expect(shows(table[0].texts, `${Math.round(first.walls[0].distance)} / ${wallRefName(first.walls[0], "de")}`)).toBe(true);
+    }
+    // The sums only under the electric table.
+    expect(pages("Anschlusstabelle Sanitär").flatMap((p) => p.texts)).not.toContain("Summe (kW)");
+  });
+
+  it("splits a long table into pages, the sums never alone on the last one", async () => {
+    // A4 landscape holds 20 rows of 6 mm under the header, the last page 18 and the two rows of
+    // sums: with one point more, the last point moves on to stand with the sums.
+    const o = installationOnly({ paper: "A4", installation: ["electric"] });
+    const frame = sheetFrame("A4", "landscape");
+    for (const [n, pages] of [
+      [18, 1],
+      [19, 2],
+      [38, 2],
+      [39, 3],
+    ] as const) {
+      const project = electricOnly(n);
+      const check = checkPlanSet(project, o, ctx);
+      expect(check.tablePages, `${n} points`).toBe(pages);
+      const pdf = readPdf(await planSetPdf(project, o, { ...ctx, date: DATE }));
+      expect(pdf.pages).toHaveLength(1 + pages);
+      const table = pdf.pages.slice(1);
+      const ids = table.map((p) => p.texts.filter((s) => /^\d+\.E$/.test(s)));
+      expect(ids.flat()).toEqual(Array.from({ length: n }, (_, i) => `${i + 1}.E`));
+      expect(ids.every((x) => x.length > 0 && x.length <= 20)).toBe(true);
+      expect(table[table.length - 1].texts).toContain("Summe (kW)");
+      expect(table.slice(0, -1).some((p) => p.texts.includes("Summe (kW)"))).toBe(false);
+      // Nothing of the table runs into the title block.
+      for (const page of table) {
+        for (const m of page.content.matchAll(/1 0 0 1 ([\d.]+) ([\d.]+) Tm/g)) {
+          const x = Number(m[1]) / PT_PER_MM;
+          const y = page.height - Number(m[2]) / PT_PER_MM;
+          if (y > frame.area.maxY + 0.01) expect(x).toBeGreaterThanOrEqual(frame.title.minX);
+        }
+      }
+    }
+  });
+
+  it("ends the electric table with the connected load, plain and with the simultaneity factor", async () => {
+    const project = example();
+    project.settings = { simultaneity: 0.65 };
+    const sum = equipmentTotals(equipmentRows(project)).electricKw;
+    expect(electricSum(pointRows(project, "electric"))).toBe(sum);
+    expect(electricSum([])).toBe(0);
+    const pdf = readPdf(await planSetPdf(project, installationOnly({ installation: ["electric"] }), { ...ctx, date: DATE }));
+    const last = pdf.pages[pdf.pages.length - 1].texts;
+    const at = last.indexOf("Summe (kW)");
+    expect(at).toBeGreaterThan(0);
+    expect(last[at + 1]).toBe(formatNumber(sum, "de"));
+    expect(last[at + 2]).toBe("Mit Gleichzeitigkeit 0,65 (kW)");
+    expect(last[at + 3]).toBe(formatNumber(withSimultaneity(sum, 0.65), "de"));
+    // English: decimal point and the English labels.
+    const en = readPdf(await planSetPdf(project, installationOnly({ installation: ["electric"] }), { ...ctx, lang: "en", date: DATE }));
+    const enTexts = en.pages.flatMap((p) => p.texts);
+    expect(enTexts).toContain("Installation plan Electric");
+    expect(enTexts).toContain("Connection table Electric");
+    expect(enTexts).toContain("With simultaneity 0.65 (kW)");
+    expect(enTexts).toContain(String(withSimultaneity(sum, 0.65)));
+  });
+
+  it("writes a point's values in one line", () => {
+    expect(pointValuesText({ trade: "electric", values: { kw: 15.9, voltage: 400, phases: 3, currentA: 22.9, fuseA: 25, plug: "fixed" } }, "de")).toBe("15,9 kW · 400 V 3N~ · 22,9 A · 25 A · Festanschluss");
+    expect(pointValuesText({ trade: "electric", values: { kw: 2.5, voltage: 230, phases: 1, currentA: 10.9, fuseA: 13, plug: "schuko" } }, "en")).toBe("2.5 kW · 230 V 1N~ · 10.9 A · 13 A · Schuko");
+    expect(pointValuesText({ trade: "drain", values: { dn: 50, greasy: true } }, "de")).toBe("DN 50 · fetthaltig");
+    expect(pointValuesText({ trade: "coldWater", values: { dn: 15 } }, "de")).toBe("DN 15");
+    expect(pointValuesText({ trade: "exhaust", values: { m3h: 1200, dn: 280 } }, "de")).toBe("1200 m³/h · Ø 280");
+    expect(pointValuesText({ trade: "gas", values: { kw: 12, dn: 15 } }, "de")).toBe("12 kW · DN 15");
+    expect(pointValuesText({ trade: "steam", values: { kgH: 25.5, dn: 20 } }, "de")).toBe("25,5 kg/h · DN 20");
+    expect(pointValuesText({ trade: "refrigeration", values: { kw: 3.2 } }, "en")).toBe("3.2 kW");
+  });
+
+  it("refuses an installation plan that does not fit, like any other sheet", async () => {
+    const project = example();
+    const o = installationOnly({ paper: "A4", scale: 20, installation: ["sanitary"] });
+    const c = checkPlanSet(project, o, ctx);
+    expect(c.sheets).toEqual([{ title: "Installationsplan Sanitär", scale: 20, fits: false }]);
+    expect(c.fittingScale).toBeGreaterThan(20);
+    expect(c.fittingPaper).toBeDefined();
+    expect(checkPlanSet(project, { ...o, scale: c.fittingScale as PlanSetOptions["scale"] }, ctx).sheets.every((s) => s.fits)).toBe(true);
+    await expect(planSetPdf(project, o, { ...ctx, date: DATE })).rejects.toThrow("Installationsplan Sanitär passt bei 1:20 nicht auf A4.");
+    // The legend stands beside the plan: an installation plan never fits at a finer scale.
+    const plan = checkPlanSet(project, opts({ elevations: [], list: false }), ctx).sheets[0];
+    const inst = checkPlanSet(project, installationOnly({ installation: ["electric"] }), ctx).sheets[0];
+    expect(inst.scale).toBeGreaterThanOrEqual(plan.scale);
   });
 });

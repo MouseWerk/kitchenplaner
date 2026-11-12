@@ -1,5 +1,5 @@
 /* The plan set dialog („Plansatz als PDF…“): the shared dialog, fields and checks of app.css,
-   plus the sheet list and the fit messages. */
+   plus the sheet lists (drawings, installation plans by trade group) and the fit messages. */
 
 .plan-set .grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -18,6 +18,13 @@
 .plan-set-sheets > legend {
   margin-bottom: var(--sp-1);
   padding: 0;
+}
+
+/* Five trade groups in two columns: the dialog stays short enough for a laptop screen. */
+.plan-set-groups .checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--sp-3);
 }
 
 .plan-set-status {

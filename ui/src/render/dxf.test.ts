@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { CONNECTION_LAYER, DXF_ATTRIBUTES, drawingToDxf, dxfArcAngles, dxfLayers, dxfText, LABEL_LAYER, triangulate } from "./dxf";
-import { blockEntities, checkDxf, entities, inserts, pairs, readDxf, val, vals } from "./testDxf";
-import type { Drawing } from "./drawing";
+import { CONNECTION_LAYER, DXF_ATTRIBUTES, drawingToDxf, dxfArcAngles, dxfLayers, dxfText, LABEL_LAYER, POINT_ATTRIBUTES, TRADE_LAYER, triangulate } from "./dxf";
+import { blockEntities, checkDxf, entities, inserts, pairs, readDxf, undxf, val, vals, type ReadInsert } from "./testDxf";
+import { expandDim, type Drawing } from "./drawing";
 import { sheetDrawing } from "./svg";
+import { symbolOf, symbolParts, SYMBOLS } from "./symbols";
+import { exampleKitchen } from "../examples/exampleKitchen";
 import { elevationDrawing } from "../model/elevation";
 import { footprint, lRoom } from "../model/geometry";
+import { itemHeat } from "../model/heat";
+import { heightText, installationDrawing, pointDims } from "../model/installationPlan";
 import { planDrawing } from "../model/plan";
+import { pointLabel, projectPoints, type ConnectionPoint } from "../model/points";
 import { testItem, testProject } from "../model/testProject";
-import type { Item, Project, Vec2 } from "../model/types";
+import { TRADES } from "../model/trades";
+import type { Item, Project, Trade, Vec2 } from "../model/types";
 
 const plain = (d: Drawing) => readDxf(drawingToDxf(d, 50));
 
@@ -182,6 +188,248 @@ describe("drawingToDxf units as blocks", () => {
       expect(ins).toHaveLength(shown.size);
       expect(ins.every((i) => i.rotation === 0 && i.block.includes("_ANSICHT_"))).toBe(true);
     }
+  });
+});
+
+describe("drawingToDxf unit attributes", () => {
+  it("keeps the attribute order of 0.2 and appends the new ones", () => {
+    // Extraction templates read the attributes by position: never reorder, only append.
+    expect(DXF_ATTRIBUTES.map((a) => a.tag)).toEqual([
+      "POS",
+      "BEZEICHNUNG",
+      "KATALOG",
+      "ENERGIE",
+      "BREITE",
+      "TIEFE",
+      "HOEHE",
+      "HERSTELLER",
+      "TYP",
+      "ARTIKELNR",
+      "ELEKTRO_KW",
+      "SPANNUNG_V",
+      "GAS_KW",
+      "KALTWASSER",
+      "WARMWASSER",
+      "ABLAUF",
+      "BODENABLAUF",
+      "ABLUFT_M3H",
+      "ENTHAERTET",
+      "ZULUFT_M3H",
+      "DAMPF_KGH",
+      "KAELTE_KW",
+      "WAERME_S_KW",
+      "WAERME_L_KW",
+    ]);
+  });
+
+  it("writes softened water, supply air, steam, refrigeration and heat release", () => {
+    const it0 = testItem("u", "range-6", 1000, 1000, 0, {
+      pos: 1,
+      connections: { electricKw: 12, voltage: 400, softWater: true, supplyM3h: 700, steamKgH: 25, refrigerationKw: 2.5 },
+      heat: { sensibleKw: 3.2 },
+    });
+    const p = testProject([it0, testItem("v", "range-6", 3000, 1000, 0, { pos: 2 })]);
+    const ins = new Map(inserts(readDxf(planDxf(p))).map((i) => [i.attribs.get("POS"), i.attribs]));
+    const a = ins.get("1")!;
+    expect([a.get("ENTHAERTET"), a.get("ZULUFT_M3H"), a.get("DAMPF_KGH"), a.get("KAELTE_KW")]).toEqual(["ja", "700", "25", "2.5"]);
+    // The planner's sensible heat, the estimated latent heat.
+    expect(a.get("WAERME_S_KW")).toBe("3.2");
+    expect(a.get("WAERME_L_KW")).toBe(String(itemHeat(it0).latentKw));
+    const b = ins.get("2")!;
+    expect([b.get("ENTHAERTET"), b.get("ZULUFT_M3H"), b.get("DAMPF_KGH"), b.get("KAELTE_KW")]).toEqual(["nein", "", "", ""]);
+    const attribs = entities(readDxf(planDxf(p)), "ATTRIB");
+    const layerOf = (tag: string) => new Set(attribs.filter((t) => val(t, 2) === tag).map((t) => val(t, 8)));
+    expect(layerOf("ENTHAERTET")).toEqual(new Set([CONNECTION_LAYER.water]));
+    expect(layerOf("DAMPF_KGH")).toEqual(new Set([CONNECTION_LAYER.steam]));
+    expect(layerOf("KAELTE_KW")).toEqual(new Set([CONNECTION_LAYER.refrigeration]));
+  });
+});
+
+/** A unit with every trade switched on, a turned one with a few, and a sink. */
+function allTrades(): Project {
+  const every = { electricKw: 15.9, voltage: 400, gasKw: 30, coldWater: true, hotWater: true, softWater: true, drain: true, floorDrain: true, exhaustM3h: 1200, supplyM3h: 800, steamKgH: 20, refrigerationKw: 3 };
+  return testProject([
+    testItem("a", "range-6", 2000, 1500, 0, { pos: 1, connections: every, points: { drain: { greasy: true } } }),
+    testItem("b", "range-6", 5000, 3000, 90, { pos: 2, connections: { electricKw: 15.9, voltage: 400, coldWater: true, drain: true } }),
+    testItem("c", "sink-2", 6500, 1000, 0, { pos: 3 }),
+  ]);
+}
+
+const installation = (p: Project, ps = 50) => drawingToDxf(installationDrawing(p, { filter: "all", paperScale: ps, dims: true, legend: true, lang: "de" }), ps, { items: p.items, view: "plan" });
+const pointInserts = (doc: ReturnType<typeof readDxf>) => inserts(doc).filter((i) => i.block.startsWith("KP_"));
+const pointOf = (points: ConnectionPoint[], i: ReadInsert) => points.find((p) => pointLabel(p, "de") === i.attribs.get("NR"))!;
+
+describe("drawingToDxf connection points", () => {
+  it("defines one block per symbol, built from its parts, shared by every point using it", () => {
+    const p = allTrades();
+    const doc = readDxf(installation(p));
+    const points = projectPoints(p.items);
+    const used = new Set(points.map((q) => symbolOf(q.trade, q.values.plug)));
+    const blocks = blockEntities(doc);
+    const kp = [...blocks.keys()].filter((n) => n.startsWith("KP_"));
+    expect(kp.sort()).toEqual([...used].map((id) => `KP_${id}`).sort());
+    for (const id of used) {
+      const ents = blocks.get(`KP_${id}`)!;
+      expect(ents).toHaveLength(symbolParts(id).length);
+      // On layer 0, so each reference shows on its own trade layer.
+      expect(ents.every((e) => val(e.tags, 8) === "0")).toBe(true);
+    }
+    const ins = pointInserts(doc);
+    expect(ins).toHaveLength(points.length);
+    // Several units with cold water and drain points share those blocks.
+    for (const trade of ["coldWater", "drain"] as const) {
+      const of = ins.filter((i) => pointOf(points, i).trade === trade);
+      expect(of.length).toBeGreaterThan(1);
+      expect(new Set(of.map((i) => i.block)).size).toBe(1);
+    }
+    expect(SYMBOLS.map((id) => `KP_${id}`)).toEqual(expect.arrayContaining(kp));
+  });
+
+  it("draws the symbol at the export's paper scale, y flipped", () => {
+    for (const ps of [50, 100]) {
+      const doc = readDxf(installation(testProject([testItem("a", "range-6", 2000, 1500, 0, { pos: 1, connections: { refrigerationKw: 3 } })]), ps));
+      const [k1, k2] = blockEntities(doc).get("KP_K")!;
+      const parts = symbolParts("K");
+      for (const [e, part] of [
+        [k1, parts[0]],
+        [k2, parts[1]],
+      ] as const) {
+        if (part.t !== "circle") throw new Error("K is two circles");
+        expect([Number(val(e.tags, 10)), Number(val(e.tags, 20)), Number(val(e.tags, 40))]).toEqual([part.c.x * ps, -part.c.y * ps || 0, part.r * ps]);
+      }
+    }
+  });
+
+  it("inserts each point upright at its place, y flipped, on its trade's layer", () => {
+    const p = allTrades();
+    const points = projectPoints(p.items);
+    const ins = pointInserts(readDxf(installation(p)));
+    for (const i of ins) {
+      const q = pointOf(points, i);
+      expect(i.x).toBeCloseTo(q.at.x, 3);
+      expect(i.y).toBeCloseTo(-q.at.y, 3);
+      expect(i.rotation).toBe(0);
+      expect(i.layer).toBe(TRADE_LAYER[q.trade]);
+    }
+    // Every trade is there, each on its layer.
+    expect(new Set(ins.map((i) => pointOf(points, i).trade))).toEqual(new Set(TRADES));
+  });
+
+  it("carries the attributes of each trade with the point's values", () => {
+    const head = ["NR", "POS", "GEWERK", "HOEHE_FFB_MM"];
+    const expected: Record<Trade, string[]> = {
+      electric: [...head, "KW", "SPANNUNG_V", "PHASEN", "STROM_A", "SICHERUNG_A", "ANSCHLUSSART"],
+      gas: [...head, "KW", "DN"],
+      coldWater: [...head, "DN"],
+      hotWater: [...head, "DN"],
+      softWater: [...head, "DN"],
+      drain: [...head, "DN", "FETTHALTIG"],
+      floorDrain: [...head, "DN", "FETTHALTIG"],
+      exhaust: [...head, "M3H", "DN"],
+      supply: [...head, "M3H", "DN"],
+      steam: [...head, "KGH", "DN"],
+      refrigeration: [...head, "KW"],
+    };
+    for (const trade of TRADES) expect(POINT_ATTRIBUTES[trade].map((a) => a.tag)).toEqual(expected[trade]);
+
+    const p = allTrades();
+    const doc = readDxf(installation(p));
+    const points = projectPoints(p.items);
+    const byNr = new Map(pointInserts(doc).map((i) => [i.attribs.get("NR"), i]));
+    for (const q of points) {
+      const a = byNr.get(pointLabel(q, "de"))!.attribs;
+      expect([...a.keys()]).toEqual(expected[q.trade]);
+      expect(a.get("POS")).toBe(String(q.pos));
+      expect(a.get("HOEHE_FFB_MM")).toBe(String(Math.round(q.z)));
+    }
+    const e = byNr.get("1.E")!.attribs;
+    expect([e.get("GEWERK"), e.get("KW"), e.get("SPANNUNG_V"), e.get("PHASEN"), e.get("STROM_A"), e.get("SICHERUNG_A")]).toEqual(["Elektro", "15.9", "400", "3", "22.9", "25"]);
+    expect(e.get("ANSCHLUSSART")).toBeTruthy();
+    const g = byNr.get("1.G")!.attribs;
+    expect([g.get("GEWERK"), g.get("KW"), g.get("DN")]).toEqual(["Gas", "30", "20"]);
+    expect(byNr.get("1.AW")!.attribs.get("FETTHALTIG")).toBe("ja");
+    expect(byNr.get("1.AB")!.attribs.get("M3H")).toBe("1200");
+    expect(byNr.get("1.ZU")!.attribs.get("M3H")).toBe("800");
+    expect(byNr.get("1.D")!.attribs.get("KGH")).toBe("20");
+    expect(byNr.get("1.K")!.attribs.get("KW")).toBe("3");
+    expect(byNr.get("1.EW")!.attribs.get("GEWERK")).toBe("Enthärtetes Wasser");
+    // Each attribute invisible and on its point's layer, whatever its block.
+    const ents = doc.sections.get("ENTITIES")!;
+    for (let i = 0; i < ents.length; i++) {
+      if (ents[i].type !== "INSERT" || !val(ents[i].tags, 2)!.startsWith("KP_")) continue;
+      for (let j = i + 1; ents[j].type === "ATTRIB"; j++) {
+        expect(val(ents[j].tags, 8)).toBe(val(ents[i].tags, 8));
+        expect(val(ents[j].tags, 70)).toBe("1");
+      }
+    }
+  });
+
+  it("adds the steam and refrigeration layers with their own colours", () => {
+    const layers = readDxf(installation(allTrades()))
+      .sections.get("TABLES")!
+      .filter((o) => o.type === "LAYER");
+    const colour = (name: string) => val(layers.find((l) => val(l.tags, 2) === name)!.tags, 62);
+    expect([colour("ANSCHLUSS_DAMPF"), colour("ANSCHLUSS_KAELTE")]).toEqual(["200", "150"]);
+    // Every trade layer has a colour no other layer has.
+    const trade = new Set(Object.values(TRADE_LAYER));
+    const colours = layers.filter((l) => trade.has(val(l.tags, 2)!)).map((l) => val(l.tags, 62));
+    expect(new Set(colours).size).toBe(trade.size);
+    expect(layers.filter((l) => !trade.has(val(l.tags, 2)!) && colours.includes(val(l.tags, 62)))).toEqual([]);
+  });
+
+  it("puts labels, leaders and dimensions on the trade's layer", () => {
+    const p = allTrades();
+    const doc = readDxf(installation(p));
+    const texts = entities(doc, "TEXT").map((t) => ({ text: undxf(val(t, 1)!), layer: val(t, 8) }));
+    for (const q of projectPoints(p.items)) {
+      expect(texts).toContainEqual({ text: pointLabel(q, "de"), layer: TRADE_LAYER[q.trade] });
+      expect(texts).toContainEqual({ text: heightText(q.z), layer: TRADE_LAYER[q.trade] });
+    }
+    // Each point dimension is five lines and its text on the trade layer; the other lines there
+    // are the leaders and the legend's symbols (the points' own symbols are in their blocks).
+    const drawing = installationDrawing(p, { filter: "all", paperScale: 50, dims: true, legend: true, lang: "de" });
+    const dims = pointDims(p, "all");
+    expect(dims.length).toBeGreaterThan(0);
+    const lines = entities(doc, "LINE").concat(entities(doc, "LWPOLYLINE"));
+    for (const layer of new Set(Object.values(TRADE_LAYER))) {
+      const own = dims.filter((d) => TRADE_LAYER[d.trade!] === layer);
+      const loose = drawing.shapes.filter((s) => s.t === "poly" && s.trade && TRADE_LAYER[s.trade] === layer && (!s.point || s.label)).length;
+      expect(lines.filter((t) => val(t, 8) === layer)).toHaveLength(own.length * 5 + loose);
+      for (const d of own) expect(texts).toContainEqual({ text: expandDim(d, 50).text.text, layer });
+    }
+    const plainPlan = readDxf(drawingToDxf(planDrawing(p, { showNames: false, showDims: true, paperScale: 50, symbols: false, quiet: true }), 50, { items: p.items, view: "plan" }));
+    expect(entities(doc, "LINE").filter((t) => val(t, 8) === "BEMASSUNG")).toHaveLength(entities(plainPlan, "LINE").filter((t) => val(t, 8) === "BEMASSUNG").length);
+  });
+
+  it("keeps point shapes out of the units' blocks", () => {
+    // The units' blocks are the same with and without the points drawn (handles aside).
+    const p = allTrades();
+    const drawing = installationDrawing(p, { filter: "all", paperScale: 50, dims: true, legend: true, lang: "de" });
+    const unitBlocks = (d: Drawing) => {
+      const out = [...blockEntities(readDxf(drawingToDxf(d, 50, { items: p.items, view: "plan" })))].filter(([name]) => !name.startsWith("KP_"));
+      return out.map(([name, list]) => [name, list.map((e) => [e.type, e.tags.filter(([c]) => c !== 5 && c !== 330)])]);
+    };
+    expect(unitBlocks(drawing)).toEqual(unitBlocks({ shapes: drawing.shapes.filter((s) => !s.trade) }));
+    expect(unitBlocks(drawing).length).toBeGreaterThan(2);
+  });
+
+  it("writes the points as plain geometry on their layer when the items are not given", () => {
+    const p = allTrades();
+    const doc = readDxf(drawingToDxf(installationDrawing(p, { filter: "all", paperScale: 50, dims: false, legend: false, lang: "de" }), 50));
+    expect(inserts(doc)).toEqual([]);
+    expect(entities(doc, "CIRCLE").filter((t) => val(t, 8) === CONNECTION_LAYER.refrigeration)).toHaveLength(2);
+  });
+
+  it("writes a valid file for the example kitchen at 1:50 and 1:100, every filter", () => {
+    const p = exampleKitchen("de");
+    for (const ps of [50, 100]) {
+      for (const filter of ["all", "electric", "sanitary", "gas", "ventilation", "special"] as const) {
+        const dxf = drawingToDxf(installationDrawing(p, { filter, paperScale: ps, dims: true, legend: true, lang: "de" }), ps, { items: p.items, view: "plan" });
+        expect(checkDxf(dxf)).toEqual([]);
+        expect(pointInserts(readDxf(dxf))).toHaveLength(projectPoints(p.items, filter).length);
+      }
+    }
+    expect(checkDxf(installation(allTrades()))).toEqual([]);
   });
 });
 

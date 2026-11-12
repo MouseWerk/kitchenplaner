@@ -1,5 +1,6 @@
-// The plan set dialog („Plansatz als PDF…“): paper, orientation, scale and the sheets to print,
-// the four compass elevations and, by a rule, those of single walls.
+// The plan set dialog („Plansatz als PDF…“): paper, orientation, scale and the sheets to print:
+// the floor plan, an installation plan with its connection table per trade group, the four compass
+// elevations and, by a rule, those of single walls.
 // It checks before exporting that every drawing fits its sheet at the chosen scale and offers the
 // next scale or paper that fits, since a sheet never clips a drawing. The choices are remembered
 // per computer.
@@ -10,8 +11,9 @@ import { exportPlanSet } from "../lib/actions";
 import { currentLang, useT } from "../lib/i18n";
 import { loadPlanSetOptions, savePlanSetOptions } from "../lib/planSetSettings";
 import { WALL_CUT_DEPTH } from "../model/elevation";
+import { TRADE_GROUPS, tradeGroupName, type TradeGroup } from "../model/trades";
 import { FACINGS, type Facing } from "../model/types";
-import { checkPlanSet, PAPER_SIZES, PLAN_SCALES, WALL_SHEETS, wallSheetWalls, type Orientation, type PaperSize, type PlanSetOptions, type ScaleChoice, type WallSheets } from "../render/planSet";
+import { checkPlanSet, installationGroups, PAPER_SIZES, PLAN_SCALES, WALL_SHEETS, wallSheetWalls, type Orientation, type PaperSize, type PlanSetOptions, type ScaleChoice, type WallSheets } from "../render/planSet";
 import { useStore } from "../store/store";
 import { useCanCapture3d } from "../three/capture";
 import { CheckField, SelectField } from "./Fields";
@@ -40,6 +42,11 @@ export function PlanSetDialog(props: { onClose: () => void }) {
       return next;
     });
   const toggleFacing = (f: Facing, on: boolean) => set({ elevations: FACINGS.filter((x) => (x === f ? on : opts.elevations.includes(x))) });
+  const toggleGroup = (g: TradeGroup, on: boolean) => set({ installation: TRADE_GROUPS.filter((x) => (x === g ? on : opts.installation.includes(x))) });
+  // A group without points gets no sheet: its box is off and disabled, but the choice is kept for
+  // the next project that has some.
+  const withPoints = useMemo(() => installationGroups(project, { installation: [...TRADE_GROUPS] }), [project]);
+  const printed = withPoints.filter((g) => opts.installation.includes(g));
 
   // Focus moves into the dialog and back to where it was when it closes.
   useEffect(() => {
@@ -120,6 +127,20 @@ export function PlanSetDialog(props: { onClose: () => void }) {
           {slanted > 0 && <p className="hint">{t("planSet.wallSheetsHint")}</p>}
           {!can3d && <p className="hint">{t("planSet.view3dHint")}</p>}
           {elevationSheets > 0 && <p className="hint">{t("planSet.cutHint", { cut: cutName })}</p>}
+        </fieldset>
+
+        <fieldset className="plan-set-sheets plan-set-groups">
+          <legend className="field-label">{t("planSet.installationSheets")}</legend>
+          <div className="checks">
+            {TRADE_GROUPS.map((g) => (
+              <label key={g} className="check">
+                <input type="checkbox" checked={printed.includes(g)} disabled={!withPoints.includes(g)} onChange={(e) => toggleGroup(g, e.target.checked)} />
+                <span>{tradeGroupName(g, lang)}</span>
+              </label>
+            ))}
+          </div>
+          {printed.length > 0 && <CheckField label={t("planSet.pointTables")} checked={opts.pointTables} onChange={(pointTables) => set({ pointTables })} />}
+          {withPoints.length < TRADE_GROUPS.length && <p className="hint">{t("planSet.installationHint")}</p>}
         </fieldset>
 
         <div className="plan-set-status" aria-live="polite">

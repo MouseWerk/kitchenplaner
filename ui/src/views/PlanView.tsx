@@ -2,20 +2,23 @@
 // equipment as in Blender: click and frame selection, dragging with snapping guides, the modal
 // G (grab) and R (rotate) operators, Shift+D, and dropping catalog entries. In the room mode the
 // room editor (RoomEditLayer.tsx) lies above the drawing and takes all input; the plan only draws.
-// Above both lies the measure tool while it is on (MeasureLayer.tsx). A right click without
+// Above both lies the measure tool while it is on (MeasureLayer.tsx). With a trade filter set
+// (`Prefs.points`) the equipment is drawn quietly and the connection points lie on top. A right click without
 // moving opens the context menu of the mode (planMenu.ts); a right drag pans.
 //
 // The plan is a tab stop of its own (`data-drawing`, lib/shortcuts.ts): with the focus on it Tab
 // switches the mode, N and Shift+N step through the units, and Shift+F10 or the menu key opens the
 // context menu at the selection.
 
-import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
 import { catalogEntry, kindOf, placementOf, wallSnapReach } from "../kinds/registry";
 import { checkProject } from "../model/checks";
 import { add, area, bounds, footprint, itemsInFrame, partitionOutline, pointInPolygon, round, scale, snapItem, snapValue, sub, walls, type Box } from "../model/geometry";
 import { snapGroupGuides, snapItemGuides, type Guide } from "../model/snapGuides";
 import { planDrawing } from "../model/plan";
+import { numberBoxes, pointsDrawing } from "../model/installationPlan";
+import type { PointFilter } from "../model/trades";
 import { RoomEditLayer } from "./RoomEditLayer";
 import { MeasureLayer } from "./MeasureLayer";
 import { arrangeMenu, roomMenu } from "./planMenu";
@@ -24,9 +27,9 @@ import { useMeasuring } from "../lib/measureTool";
 import { itemFromCatalog } from "../model/project";
 import type { Item, Project, Vec2 } from "../model/types";
 import { drawingBounds, mm, type Drawing, type Shape } from "../render/drawing";
-import { useStore } from "../store/store";
+import { useStore, type Prefs } from "../store/store";
 import { toScreen, toWorld, useViewport, type Viewport } from "../lib/viewport";
-import { num, t as translate, useT } from "../lib/i18n";
+import { currentLang, num, t as translate, useT, type Lang } from "../lib/i18n";
 import { grabDelta, operatorKey, operatorLabel, rotateAngle, startGrab, startRotate, type ModalOp } from "../lib/modal";
 import { setModeKeyHandler } from "../lib/shortcuts";
 import { announce } from "../lib/announce";
@@ -104,8 +107,16 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
   const project = useStore((s) => s.project);
   const selection = useStore((s) => s.selection);
   const prefs = useStore((s) => s.prefs);
-  const drawing = useMemo(() => planDrawing(project, { showNames: prefs.showNames, showDims: prefs.showDims, paperScale: SCREEN_PAPER_SCALE }), [project, prefs.showNames, prefs.showDims]);
-  const issues = useMemo(() => checkProject(project), [project]);
+  // `useT` re-renders on a language switch; the point labels and the findings' point codes follow it.
+  const lang = currentLang();
+  const quiet = prefs.points !== "off";
+  const drawing = useMemo(() => planViewDrawing(project, { showNames: prefs.showNames, showDims: prefs.showDims, quiet }), [project, prefs.showNames, prefs.showDims, quiet]);
+  // Only the warned units are used here, but the findings carry point codes in the language.
+  const issues = useMemo(() => checkProject(project), [project, lang]);
+  // The point layer lags behind a drag: it is laid out from a deferred copy of the plan, so the
+  // moves themselves render at once and the labels follow when the pointer rests.
+  const later = useDeferredValue(useMemo(() => ({ project, drawing }), [project, drawing]));
+  const points = useMemo(() => (prefs.points === "off" ? null : planPointLayer(later.project, later.drawing, prefs.points, lang)), [later, prefs.points, lang]);
   const box = useMemo(() => drawingBounds(drawing, SCREEN_PAPER_SCALE), [drawing]);
   const { ref, vp, setVp, size } = useViewport(box, props.fitSignal);
   const drag = useRef<Drag | null>(null);
@@ -538,6 +549,7 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
           <g transform={transform}>
             <DrawingShapes drawing={drawing} />
             <DrawingShapes drawing={overlay} />
+            {points && <DrawingShapes drawing={points} />}
             {!roomEdit && selected.map((it) => <path key={it.id} d={polyPath(footprint(it))} className="draw-selected" />)}
             {!roomEdit && hover && !selection.items.includes(hover) && <HoverOutline item={project.items.find((i) => i.id === hover)} />}
           </g>
@@ -557,6 +569,23 @@ export function PlanView(props: { fitSignal: number; onCursor?: (p: Vec2 | null)
       {menu && <ContextMenu at={menu.at} entries={menu.entries} label={t("contextMenu.title")} backLabel={t("contextMenu.back")} onClose={() => setMenu(null)} />}
     </div>
   );
+}
+
+/**
+ * The plan as the view draws it: with names and dimensions as the view settings say, the
+ * equipment quiet (thin outlines, no kind details) while connection points are shown.
+ */
+export function planViewDrawing(project: Project, o: Pick<Prefs, "showNames" | "showDims"> & { quiet: boolean }): Drawing {
+  return planDrawing(project, { showNames: o.showNames, showDims: o.showDims, paperScale: SCREEN_PAPER_SCALE, ...(o.quiet ? { symbols: false, quiet: true } : {}) });
+}
+
+/**
+ * The connection points over the plan view: symbols and labels at the screen's paper scale, the
+ * labels clear of the plan's position numbers. Laid out for a fixed scale, so zooming never lays
+ * them out again (500 units with 1400 points take about 25 ms).
+ */
+export function planPointLayer(project: Project, plan: Drawing, filter: PointFilter, lang: Lang): Drawing {
+  return pointsDrawing(project, filter, SCREEN_PAPER_SCALE, { lang, avoid: numberBoxes(plan.shapes, SCREEN_PAPER_SCALE) });
 }
 
 /** Reads out the item just placed with its position number. */

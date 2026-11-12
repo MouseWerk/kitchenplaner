@@ -6,10 +6,24 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { currentLang, formatDate, num, parseDate, useT, type Lang } from "../lib/i18n";
 
-export function Field(props: { label: string; children: (id: string) => ReactNode; wide?: boolean }) {
+/** A titled section of the inspector; `actions` sit at the end of the heading line. */
+export function Section(props: { title: string; children: ReactNode; actions?: ReactNode }) {
+  return (
+    <section className="insp-section">
+      <div className="insp-section-head">
+        <h3 className="eyebrow" tabIndex={-1}>{props.title}</h3>
+        {props.actions}
+      </div>
+      {props.children}
+    </section>
+  );
+}
+
+/** `set` marks a value the planner set over a derived one (by text weight, see app.css). */
+export function Field(props: { label: string; children: (id: string) => ReactNode; wide?: boolean; set?: boolean }) {
   const id = useId();
   return (
-    <div className={props.wide ? "field wide" : "field"}>
+    <div className={`field${props.wide ? " wide" : ""}${props.set ? " is-set" : ""}`}>
       {/* A narrow inspector cuts long labels; the tooltip keeps the whole name. */}
       <label htmlFor={id} title={props.label}>
         {props.label}
@@ -56,23 +70,60 @@ export function parseNumber(text: string, lang: Lang = currentLang()): number | 
 /** Whether the key event belongs to an input method's composition (Enter picks a candidate there). */
 const composing = (e: React.KeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
-export function NumberField(props: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
+interface NumberLimits {
   min?: number;
   max?: number;
   step?: number;
   digits?: number;
   unit?: string;
   disabled?: boolean;
-}) {
+}
+
+export function NumberField(props: NumberLimits & { label: string; value: number; onChange: (v: number) => void }) {
+  const { label, onChange, ...rest } = props;
+  return <Field label={label}>{(id) => <NumberInput {...rest} id={id} onChange={(v) => v !== undefined && onChange(v)} />}</Field>;
+}
+
+/**
+ * A number the planner may leave to a derived value: empty, the field shows `derived` as its
+ * placeholder; a typed value overrides it and shows in a heavier weight; emptying the field gives
+ * the value back to the derivation (`onChange(undefined)`). The arrow keys step from the derived
+ * value. `placeholder` replaces the formatted derived value where it needs words („< 0,1“).
+ */
+export function OptionalNumberField(
+  props: NumberLimits & { label: string; value: number | undefined; derived: number | undefined; placeholder?: string; onChange: (v: number | undefined) => void; wide?: boolean },
+) {
+  const { label, wide, ...rest } = props;
+  return (
+    <Field label={label} wide={wide} set={props.value !== undefined}>
+      {(id) => <NumberInput {...rest} id={id} optional set={props.value !== undefined} />}
+    </Field>
+  );
+}
+
+/**
+ * The input of a number field, also on its own where one label names several inputs (then
+ * `ariaLabel` names each). Without `optional` the value is always a number.
+ */
+export function NumberInput(
+  props: NumberLimits & {
+    id?: string;
+    ariaLabel?: string;
+    value: number | undefined;
+    onChange: (v: number | undefined) => void;
+    optional?: boolean;
+    derived?: number;
+    placeholder?: string;
+    /** The value is the planner's, over a derived one: shown in a heavier weight. */
+    set?: boolean;
+  },
+) {
   const { value, digits = 0 } = props;
   // Re-renders on a language switch: the shown text must follow it, or leaving the field would
   // read "3.200" (German) by English rules as 3.2.
   useT();
   const lang = currentLang();
-  const show = (v: number) => num(v, digits);
+  const show = (v: number | undefined) => (v === undefined ? "" : num(v, digits));
   const [text, setText] = useState(show(value));
   // The text is the user's (typed since focus or since the last Enter), not the shown value.
   const [editing, setEditing] = useState(false);
@@ -86,6 +137,11 @@ export function NumberField(props: {
     // The untouched shown text is rounded to `digits`; reading it back must not change the value.
     if (raw === show(value)) {
       setText(raw);
+      return;
+    }
+    if (props.optional && raw.trim() === "") {
+      if (value !== undefined) props.onChange(undefined);
+      setText("");
       return;
     }
     const v = parseNumber(raw);
@@ -103,52 +159,50 @@ export function NumberField(props: {
   };
 
   return (
-    <Field label={props.label}>
-      {(id) => (
-        <div className="num-input">
-          <input
-            id={id}
-            inputMode="decimal"
-            value={text}
-            disabled={props.disabled}
-            onFocus={(e) => {
-              cancelled.current = false;
-              setEditing(true);
-              e.currentTarget.select();
-            }}
-            onChange={(e) => {
-              setEditing(true);
-              setText(e.target.value);
-            }}
-            onBlur={(e) => {
-              setEditing(false);
-              if (cancelled.current) {
-                cancelled.current = false;
-                setText(show(value));
-              } else commit(e.target.value);
-            }}
-            onKeyDown={(e) => {
-              if (composing(e)) return;
-              if (e.key === "Enter") {
-                commit(e.currentTarget.value);
-                // The field shows the value again as the store holds it (clamped, rounded).
-                setEditing(false);
-              } else if (e.key === "Escape") {
-                cancelled.current = true;
-                (e.target as HTMLInputElement).blur();
-                e.stopPropagation();
-              } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                e.preventDefault();
-                const step = (props.step ?? 1) * (e.shiftKey ? 10 : 1);
-                const typed = text === show(value) ? value : parseNumber(text);
-                commitValue((typed ?? value) + (e.key === "ArrowUp" ? step : -step));
-              }
-            }}
-          />
-          {props.unit && <span className="unit">{props.unit}</span>}
-        </div>
-      )}
-    </Field>
+    <div className={props.set ? "num-input is-set" : "num-input"}>
+      <input
+        id={props.id}
+        aria-label={props.ariaLabel}
+        inputMode="decimal"
+        value={text}
+        placeholder={props.optional ? (props.placeholder ?? show(props.derived)) : undefined}
+        disabled={props.disabled}
+        onFocus={(e) => {
+          cancelled.current = false;
+          setEditing(true);
+          e.currentTarget.select();
+        }}
+        onChange={(e) => {
+          setEditing(true);
+          setText(e.target.value);
+        }}
+        onBlur={(e) => {
+          setEditing(false);
+          if (cancelled.current) {
+            cancelled.current = false;
+            setText(show(value));
+          } else commit(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (composing(e)) return;
+          if (e.key === "Enter") {
+            commit(e.currentTarget.value);
+            // The field shows the value again as the store holds it (clamped, rounded).
+            setEditing(false);
+          } else if (e.key === "Escape") {
+            cancelled.current = true;
+            (e.target as HTMLInputElement).blur();
+            e.stopPropagation();
+          } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+            e.preventDefault();
+            const step = (props.step ?? 1) * (e.shiftKey ? 10 : 1);
+            const typed = text === show(value) ? value : parseNumber(text);
+            commitValue((typed ?? value ?? props.derived ?? 0) + (e.key === "ArrowUp" ? step : -step));
+          }
+        }}
+      />
+      {props.unit && <span className="unit">{props.unit}</span>}
+    </div>
   );
 }
 
@@ -276,9 +330,50 @@ export function SelectField<T extends string | number>(props: { label: string; v
   );
 }
 
-export function CheckField(props: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+/**
+ * A choice the planner may leave to a derived value: the first option is the derived one, labelled
+ * `derivedLabel` and shown in the placeholder colour; picking any other option, even the same
+ * value from the list, sets it (heavier weight). Picking the first option again gives the value
+ * back to the derivation (`onChange(undefined)`). A set value missing from `options` (from a file)
+ * is listed too, so the select can show it.
+ */
+export function OptionalSelectField<T extends string | number>(props: {
+  label: string;
+  value: T | undefined;
+  derivedLabel: string;
+  options: { value: T; label: string }[];
+  onChange: (v: T | undefined) => void;
+  format: (v: T) => string;
+}) {
+  const options = props.value === undefined || props.options.some((o) => o.value === props.value) ? props.options : [...props.options, { value: props.value, label: props.format(props.value) }];
   return (
-    <label className="check">
+    <Field label={props.label} set={props.value !== undefined}>
+      {(id) => (
+        <select
+          id={id}
+          className={props.value === undefined ? "is-derived" : undefined}
+          value={props.value === undefined ? "" : String(props.value)}
+          onChange={(e) => {
+            if (e.target.value === "") return props.onChange(undefined);
+            const o = options.find((x) => String(x.value) === e.target.value);
+            if (o) props.onChange(o.value);
+          }}
+        >
+          <option value="">{props.derivedLabel}</option>
+          {options.map((o) => (
+            <option key={String(o.value)} value={String(o.value)}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}
+
+export function CheckField(props: { label: string; checked: boolean; onChange: (v: boolean) => void; set?: boolean }) {
+  return (
+    <label className={props.set ? "check is-set" : "check"}>
       <input type="checkbox" checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} />
       <span>{props.label}</span>
     </label>

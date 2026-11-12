@@ -996,6 +996,61 @@
   min-width: 0;
 }
 
+/* A value the planner set over a derived one: heavier text, no frame. A derived value left to the
+   derivation shows like a placeholder (the number fields use the real placeholder). */
+.num-input.is-set input,
+.field.is-set > select,
+.check.is-set > span {
+  font-weight: var(--fw-semibold);
+}
+
+.field > select.is-derived {
+  color: var(--text-faint);
+}
+
+/* The open list shows every option in the text colour; only the closed field looks derived. */
+.field > select.is-derived option {
+  color: var(--text);
+}
+
+/* A button that opens and closes the part below it. */
+.disclosure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.disclosure-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 4px;
+  margin: 0 -4px;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.disclosure-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.disclosure-chevron,
+.point-chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+[aria-expanded="true"] > .disclosure-chevron,
+[aria-expanded="true"] > .point-chevron {
+  transform: rotate(90deg);
+}
+
 .hint {
   font-size: var(--fs-xs);
   line-height: 1.45;
@@ -1157,6 +1212,63 @@
 .list-row[aria-current="true"] {
   background: var(--bg-selected);
   font-weight: var(--fw-semibold);
+}
+
+/* A connection point: the id and trade over its values in short, the height at the end. The
+   values wrap rather than cut: they are what the row is for. */
+.list-row.point-row {
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.point-row > .point-chevron {
+  margin-top: 2px;
+}
+
+.list-row.point-row > .point-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  white-space: normal;
+}
+
+.point-head {
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+}
+
+.point-code {
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A point with values the planner set: its id in the heavier weight, as the fields show them. */
+.point-row.has-set .point-code {
+  font-weight: var(--fw-semibold);
+}
+
+.point-summary {
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.list-row.point-row > .muted {
+  line-height: 1.6;
+}
+
+.point-row[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+
+.point-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0 var(--sp-3) var(--sp-6);
 }
 
 .notice {

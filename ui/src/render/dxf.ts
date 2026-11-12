@@ -4,6 +4,11 @@
 // equipment or the electrical data can be shown and hidden on their own. y is flipped (DXF y
 // points up). The file format itself is `dxfWriter.ts`; this module maps a Drawing onto it.
 //
+// Connection points (the installation plan) are block references too: one block per symbol
+// (`KP_<id>`), inserted upright at each point with the point's data as attributes. Everything of a
+// trade (symbols, labels, leaders, dimensions, legend rows) lies on that trade's layer, so hiding
+// ANSCHLUSS_ELEKTRO hides everything electric.
+//
 // Dimensions stay plain lines and text on BEMASSUNG, cut walls stay SOLID triangles: both look
 // in every reader exactly as in the app.
 
@@ -11,7 +16,11 @@ import { drawingBounds, expandDim, LAYER_OF, TEXT, type Drawing, type Pen, type 
 import { dxfNumber, writeDxf, type DxfAttDef, type DxfAttrib, type DxfBlock, type DxfEntity, type DxfLayer, type DxfLinetype, type Pt } from "./dxfWriter";
 import { PEN_STYLE } from "./style";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "./svg";
-import type { Item, Vec2 } from "../model/types";
+import { symbolOf, symbolParts, symbolTrade, type SymbolId } from "./symbols";
+import { itemHeat } from "../model/heat";
+import { itemPoints, pointLabel, type ConnectionPoint } from "../model/points";
+import { plugName, tradeName } from "../model/trades";
+import type { Item, Trade, Vec2 } from "../model/types";
 
 export { dxfText } from "./dxfWriter";
 
@@ -25,11 +34,29 @@ export const CONNECTION_LAYER = {
   water: "ANSCHLUSS_WASSER",
   drain: "ANSCHLUSS_ABWASSER",
   exhaust: "ANSCHLUSS_LUEFTUNG",
+  steam: "ANSCHLUSS_DAMPF",
+  refrigeration: "ANSCHLUSS_KAELTE",
 } as const;
+
+/** The layer of each trade's points, labels and dimensions: the waters share one, as do drains and air. */
+export const TRADE_LAYER: Readonly<Record<Trade, string>> = {
+  electric: CONNECTION_LAYER.electric,
+  gas: CONNECTION_LAYER.gas,
+  coldWater: CONNECTION_LAYER.water,
+  hotWater: CONNECTION_LAYER.water,
+  softWater: CONNECTION_LAYER.water,
+  drain: CONNECTION_LAYER.drain,
+  floorDrain: CONNECTION_LAYER.drain,
+  exhaust: CONNECTION_LAYER.exhaust,
+  supply: CONNECTION_LAYER.exhaust,
+  steam: CONNECTION_LAYER.steam,
+  refrigeration: CONNECTION_LAYER.refrigeration,
+};
 
 /**
  * Every layer of the export: AutoCAD colour index (7 black/white, 8 grey, 4 cyan, 6 magenta,
- * 3 green, 1 red, 30 orange, 5 blue, 34 brown, 140 blue-cyan), line type and lineweight in
+ * 3 green, 1 red, 30 orange, 5 blue, 34 brown, 140 blue-cyan; 200 violet and 150 light blue keep
+ * steam and refrigeration apart from the other trades), line type and lineweight in
  * 1/100 mm. Entities carry their pen's own lineweight; the layer's is the one new lines get.
  */
 const LAYERS: DxfLayer[] = [
@@ -46,6 +73,8 @@ const LAYERS: DxfLayer[] = [
   { name: CONNECTION_LAYER.water, color: 5, ltype: "CONTINUOUS", lineweight: 18 },
   { name: CONNECTION_LAYER.drain, color: 34, ltype: "CONTINUOUS", lineweight: 18 },
   { name: CONNECTION_LAYER.exhaust, color: 140, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: CONNECTION_LAYER.steam, color: 200, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: CONNECTION_LAYER.refrigeration, color: 150, ltype: "CONTINUOUS", lineweight: 18 },
 ];
 
 /** Line type per pen: the dashed pens get their own DXF line type, the rest CONTINUOUS. */
@@ -80,8 +109,9 @@ export function dxfLayers(): string[] {
 export interface DxfOptions {
   /**
    * The items the drawing shows. Each one's shapes (those with its `itemId`, except texts and
-   * labels) become one block reference carrying its data as attributes; without items every
-   * shape is written as plain geometry.
+   * labels) become one block reference carrying its data as attributes, and each of its
+   * connection points (the shapes of the point's symbol) one reference of the symbol's block
+   * carrying the point's data. Without items every shape is written as plain geometry.
    */
   items?: readonly Item[];
   /**
@@ -110,10 +140,35 @@ export function drawingToDxf(drawing: Drawing, paperScale: number, opts: DxfOpti
     else parts.set(s.itemId, [s]);
   }
 
+  // The connection point a symbol shape draws, resolved from its item once per point.
+  const points = new Map<string, ConnectionPoint | null>();
+  const pointOf = (s: Shape): ConnectionPoint | null => {
+    if (!s.point || isLabel(s) || s.t === "dim") return null;
+    const key = pointKey(s.point);
+    let p = points.get(key);
+    if (p === undefined) {
+      const it = items.get(s.point.itemId);
+      const trade = s.point.trade;
+      p = (it && itemPoints(it).find((q) => q.trade === trade)) ?? null;
+      points.set(key, p);
+    }
+    return p;
+  };
+
   const blocks = new BlockSet();
   const entities: DxfEntity[] = [];
   const inserted = new Set<string>();
   for (const s of drawing.shapes) {
+    const point = pointOf(s);
+    if (point) {
+      // A symbol's shapes become one reference of its block, where the first of them was.
+      const key = pointKey(point);
+      if (!inserted.has(key)) {
+        inserted.add(key);
+        entities.push(pointInsert(point, ps, blocks));
+      }
+      continue;
+    }
     const own = s.itemId !== undefined ? parts.get(s.itemId) : undefined;
     if (own && !isLabel(s)) {
       // The reference goes where the item's first shape was, keeping the drawing order.
@@ -195,6 +250,7 @@ function place(p: Pt, deg: number, by: Pt): Pt {
 // ---- Shapes ----
 
 function layerOf(s: Shape): string {
+  if (s.trade) return TRADE_LAYER[s.trade];
   return s.itemId !== undefined && isLabel(s) ? LABEL_LAYER : LAYER_OF[s.pen];
 }
 
@@ -263,6 +319,14 @@ class BlockSet {
   private readonly names = new Set<string>();
 
   /** The name of the block with these entities and attributes, defining it on first use. */
+  /** The block of a fixed name (a symbol's), defined on first use from what `make` returns. */
+  named(name: string, make: () => Omit<DxfBlock, "name">): string {
+    if (this.names.has(name)) return name;
+    this.names.add(name);
+    this.list.push({ name, ...make() });
+    return name;
+  }
+
   use(base: string, entities: DxfEntity[], attdefs: DxfAttDef[]): string {
     const sig = signature(entities);
     const known = this.bySignature.get(`${base}\n${sig}`);
@@ -328,12 +392,20 @@ export const DXF_ATTRIBUTES: readonly AttrSpec[] = [
   { tag: "ABLAUF", prompt: "Ablauf", layer: CONNECTION_LAYER.drain, value: (it) => yes(it.connections.drain) },
   { tag: "BODENABLAUF", prompt: "Bodenablauf", layer: CONNECTION_LAYER.drain, value: (it) => yes(it.connections.floorDrain) },
   { tag: "ABLUFT_M3H", prompt: "Abluft (m³/h)", layer: CONNECTION_LAYER.exhaust, value: (it) => num(it.connections.exhaustM3h) },
+  // Added in 0.3, after all the others: extraction templates read the attributes in this order.
+  { tag: "ENTHAERTET", prompt: "Enthärtetes Wasser", layer: CONNECTION_LAYER.water, value: (it) => yes(it.connections.softWater) },
+  { tag: "ZULUFT_M3H", prompt: "Zuluft (m³/h)", layer: CONNECTION_LAYER.exhaust, value: (it) => num(it.connections.supplyM3h) },
+  { tag: "DAMPF_KGH", prompt: "Dampf (kg/h)", layer: CONNECTION_LAYER.steam, value: (it) => num(it.connections.steamKgH) },
+  { tag: "KAELTE_KW", prompt: "Kälte Verbund (kW)", layer: CONNECTION_LAYER.refrigeration, value: (it) => num(it.connections.refrigerationKw) },
+  // The heat release sizes the air, so it lies with the ventilation: the planner's value or the estimate.
+  { tag: "WAERME_S_KW", prompt: "Wärme sensibel (kW)", layer: CONNECTION_LAYER.exhaust, value: (it) => num(itemHeat(it).sensibleKw) },
+  { tag: "WAERME_L_KW", prompt: "Wärme latent (kW)", layer: CONNECTION_LAYER.exhaust, value: (it) => num(itemHeat(it).latentKw) },
 ];
 
 /** Attribute definitions stacked below the block's base point, small text. */
-function attdefs(ps: number): DxfAttDef[] {
+function attdefs(ps: number, specs: readonly { tag: string; prompt: string; layer: string }[] = DXF_ATTRIBUTES): DxfAttDef[] {
   const height = TEXT.small * ps * CAP_HEIGHT_PER_EM;
-  return DXF_ATTRIBUTES.map((a, i) => ({ tag: a.tag, prompt: a.prompt, layer: a.layer, p: { x: 0, y: -(i + 1) * height * 1.6 }, height, invisible: true }));
+  return specs.map((a, i) => ({ tag: a.tag, prompt: a.prompt, layer: a.layer, p: { x: 0, y: -(i + 1) * height * 1.6 }, height, invisible: true }));
 }
 
 function itemInsert(it: Item, shapes: readonly Shape[], view: DxfOptions["view"], ps: number, blocks: BlockSet): DxfEntity {
@@ -371,6 +443,100 @@ function itemInsert(it: Item, shapes: readonly Shape[], view: DxfOptions["view"]
     rotation,
   }));
   return { type: "INSERT", layer: insertLayer(shapes), block: name, p: at, rotation, attribs };
+}
+
+// ---- Connection points as blocks ----
+
+const pointKey = (p: { itemId: string; trade: Trade }) => `${p.itemId}\n${p.trade}`;
+
+/** One attribute of a connection point: tag, prompt and value. It lies on the point's trade layer. */
+interface PointAttrSpec {
+  tag: string;
+  prompt: string;
+  value: (p: ConnectionPoint) => string;
+}
+
+// German and fixed, like the layers and the unit attributes, whatever the UI language.
+const NR: PointAttrSpec = { tag: "NR", prompt: "Nr.", value: (p) => pointLabel(p, "de") };
+const POS: PointAttrSpec = { tag: "POS", prompt: "Pos.", value: (p) => String(p.pos) };
+const GEWERK: PointAttrSpec = { tag: "GEWERK", prompt: "Gewerk", value: (p) => tradeName(p.trade, "de") };
+const HOEHE: PointAttrSpec = { tag: "HOEHE_FFB_MM", prompt: "Höhe ü. FFB (mm)", value: (p) => whole(p.z) };
+const kwAttr = (prompt: string): PointAttrSpec => ({ tag: "KW", prompt, value: (p) => num(p.values.kw) });
+const DN: PointAttrSpec = { tag: "DN", prompt: "Nennweite (DN)", value: (p) => num(p.values.dn) };
+const GREASY: PointAttrSpec = { tag: "FETTHALTIG", prompt: "fetthaltig", value: (p) => yes(p.values.greasy) };
+const M3H: PointAttrSpec = { tag: "M3H", prompt: "Luftmenge (m³/h)", value: (p) => num(p.values.m3h) };
+const KGH: PointAttrSpec = { tag: "KGH", prompt: "Dampf (kg/h)", value: (p) => num(p.values.kgH) };
+const ELECTRIC: readonly PointAttrSpec[] = [
+  kwAttr("Elektro (kW)"),
+  { tag: "SPANNUNG_V", prompt: "Spannung (V)", value: (p) => num(p.values.voltage) },
+  { tag: "PHASEN", prompt: "Phasen", value: (p) => num(p.values.phases) },
+  { tag: "STROM_A", prompt: "Strom (A)", value: (p) => num(p.values.currentA) },
+  { tag: "SICHERUNG_A", prompt: "Absicherung (A)", value: (p) => num(p.values.fuseA) },
+  { tag: "ANSCHLUSSART", prompt: "Anschlussart", value: (p) => (p.values.plug ? plugName(p.values.plug, "de") : "") },
+];
+const head = (...specs: PointAttrSpec[]): readonly PointAttrSpec[] => [NR, POS, GEWERK, HOEHE, ...specs];
+
+/**
+ * The attributes of a point by trade, in this order: which point and how high, then the values a
+ * fitter of that trade needs. A symbol stands for one trade, so its block's definitions are fixed.
+ */
+export const POINT_ATTRIBUTES: Readonly<Record<Trade, readonly PointAttrSpec[]>> = {
+  electric: head(...ELECTRIC),
+  gas: head(kwAttr("Gas (kW)"), DN),
+  coldWater: head(DN),
+  hotWater: head(DN),
+  softWater: head(DN),
+  drain: head(DN, GREASY),
+  floorDrain: head(DN, GREASY),
+  exhaust: head(M3H, DN),
+  supply: head(M3H, DN),
+  steam: head(KGH, DN),
+  refrigeration: head(kwAttr("Kälte Verbund (kW)")),
+};
+
+/** The attribute definitions of a trade's points, on its layer. */
+function pointAttdefs(trade: Trade, ps: number): DxfAttDef[] {
+  const layer = TRADE_LAYER[trade];
+  return attdefs(ps, POINT_ATTRIBUTES[trade].map((a) => ({ tag: a.tag, prompt: a.prompt, layer })));
+}
+
+/**
+ * The block of a symbol: its parts at the export's paper scale around the base point, y flipped.
+ * They lie on layer 0, so they take the trade layer and colour of each reference.
+ */
+function symbolBlock(id: SymbolId, ps: number): Omit<DxfBlock, "name"> {
+  const m = (q: Vec2): Pt => ({ x: q.x * ps, y: -q.y * ps });
+  const style = { layer: "0", ...penStyle("connection") };
+  const entities = symbolParts(id).map((part): DxfEntity => {
+    switch (part.t) {
+      case "line":
+        if (part.pts.length === 2 && !part.closed) return { type: "LINE", ...style, a: m(part.pts[0]), b: m(part.pts[1]) };
+        return { type: "LWPOLYLINE", ...style, pts: part.pts.map(m), closed: part.closed };
+      case "circle":
+        return { type: "CIRCLE", ...style, c: m(part.c), r: part.r * ps };
+      case "arc":
+        return { type: "ARC", ...style, c: m(part.c), r: part.r * ps, ...dxfArcAngles(part.a0, part.a1) };
+    }
+  });
+  return { entities, attdefs: pointAttdefs(symbolTrade(id), ps) };
+}
+
+/** A point as a reference of its symbol's block: at the point, upright, on its trade's layer. */
+function pointInsert(p: ConnectionPoint, ps: number, blocks: BlockSet): DxfEntity {
+  const id = symbolOf(p.trade, p.values.plug);
+  const block = blocks.named(`KP_${id}`, () => symbolBlock(id, ps));
+  const layer = TRADE_LAYER[p.trade];
+  const at = MODEL.map(p.at);
+  const defs = pointAttdefs(p.trade, ps);
+  const attribs: DxfAttrib[] = POINT_ATTRIBUTES[p.trade].map((a, i) => ({
+    tag: a.tag,
+    value: a.value(p),
+    layer,
+    p: place(defs[i].p, 0, at),
+    height: defs[i].height,
+    rotation: 0,
+  }));
+  return { type: "INSERT", layer, block, p: at, rotation: 0, attribs };
 }
 
 /**

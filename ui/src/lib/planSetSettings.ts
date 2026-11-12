@@ -1,16 +1,18 @@
-// The choices of the plan set dialog (paper, scale, sheets): remembered per computer like the
-// app settings (`settings.ts`), not part of a project. A failing storage only loses the choice.
+// The choices of the plan set dialog (paper, scale, sheets, installation plans): remembered per
+// computer like the app settings (`settings.ts`), not part of a project. A failing storage only
+// loses the choice. Options added later read as their default from what an older version stored.
 
-import { DEFAULT_PLAN_SET, sanitizePlanSetOptions, type PlanSetOptions } from "../render/planSet";
+import { sanitizePlanSetOptions, type PlanSetOptions } from "../render/planSet";
 
 const KEY = "kitchenplaner.planSet.v1";
 
 export function loadPlanSetOptions(): PlanSetOptions {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? sanitizePlanSetOptions(JSON.parse(raw)) : { ...DEFAULT_PLAN_SET, elevations: [...DEFAULT_PLAN_SET.elevations] };
+    return sanitizePlanSetOptions(raw ? JSON.parse(raw) : null);
   } catch {
-    return { ...DEFAULT_PLAN_SET, elevations: [...DEFAULT_PLAN_SET.elevations] };
+    // The defaults as fresh arrays, never the shared DEFAULT_PLAN_SET.
+    return sanitizePlanSetOptions(null);
   }
 }
 

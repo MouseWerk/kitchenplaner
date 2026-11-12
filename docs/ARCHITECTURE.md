@@ -25,12 +25,21 @@ files, keeps the autosave backups and installs updates. Every layer depends only
      connection values ride along as invisible attributes. Layers by trade: walls, openings,
      equipment (hanging units on their own, dashed), details, labels (position numbers, names,
      leaders), dimensions, frame, and one layer per connection trade (electric, gas, water,
-     drain, exhaust) for the attributes. Dimensions stay lines and text, cut walls SOLID
-     triangles, both as on screen; `render/testDxf.ts` checks the structure in the tests;
+     drain, ventilation, steam, refrigeration) for the attributes. New unit attributes are only
+     ever appended (extraction templates read them in order). In the installation plan each
+     connection point is a reference to its symbol's block (`KP_<symbol>`, one per symbol, at the
+     export's paper scale), upright at the point, with its data (Nr., Pos., Gewerk, height and the
+     values of its trade) as invisible attributes; symbol, label, leader and dimensions of a point
+     lie on its trade's layer, so hiding a layer hides that trade. Dimensions stay lines and
+     text, cut walls SOLID triangles, both as on screen; `render/testDxf.ts` checks the structure in the tests;
    - PNG export: the SVG rendered into a canvas;
    - PDF plan set (`render/planSet.ts` on the small writer `render/pdf.ts`, no dependency): plan,
-     elevations, equipment list and an optional 3D image on sheets A4 to A0 at a true scale, each
-     with frame and title block. Standard Helvetica in WinAnsiEncoding (no embedded font);
+     an installation plan per trade group that has points (`installationDrawing`), each followed
+     by its connection table (`pointRows`; the electric one ends with the connected load, plain
+     and with the simultaneity factor), elevations, equipment list and an optional 3D image on
+     sheets A4 to A0 at a true scale, each with frame and title block. Both tables are drawn by
+     one `drawTable` and paginated by one rule: a foot (totals, sums) never stands on a page
+     without rows. Standard Helvetica in WinAnsiEncoding (no embedded font);
      characters outside it fall back (accents dropped, else "?"). A drawing that does not fit its
      sheet at the chosen scale is refused, never clipped; the dialog offers a scale or paper that
      fits.
@@ -279,6 +288,15 @@ square on paper, stay upright and are told apart by shape only; their parts are 
 takes the first free place of a ring search around its symbol, clear of other labels, symbols and
 the position numbers, with a leader (`label: true`) when it had to move off the first ring. All
 point shapes carry `trade` and `point` and no `itemId`; the legend carries `trade` only.
+
+The plan view's trade filter (`Prefs.points`: off, all or one trade group) is view state,
+remembered per computer in the webview's storage and never in the undo history or the file. With
+a filter set the view draws the plan quietly and lays the points (symbols and labels, no point
+dimensions, no legend) on top through `pointsDrawing` at the screen's paper scale, so zooming
+never lays them out again; 500 units with about 1400 points take some 25 ms. The layer is laid
+out from a deferred copy of the project (`useDeferredValue`), so a drag renders its moves first
+and the labels follow when the pointer rests. The exports „Installationsplan als SVG/DXF/PNG“
+and „Anschlussliste als CSV“ follow the filter; off exports all trades.
 
 ## Elevations (`ui/src/model/elevation.ts`)
 

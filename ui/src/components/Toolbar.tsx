@@ -11,7 +11,7 @@ import { keyLabel } from "../lib/shortcuts";
 import { useCanCapture3d } from "../three/capture";
 import { resolveElevation } from "../model/elevation";
 import { elevationName } from "../model/elevationNames";
-import { useStore, type Layout } from "../store/store";
+import { POINTS_PREFS, useStore, type Layout } from "../store/store";
 import { Menu } from "./Menu";
 import { PlanSetDialog } from "./PlanSetDialog";
 import { openExampleKitchen } from "./Intro";
@@ -175,6 +175,12 @@ export function Toolbar() {
             { label: t("export.png3d"), hint: can3d ? undefined : t("export.needs3d"), disabled: !can3d, onSelect: () => void runExport("3d-png", facing) },
             "sep",
             { label: t("export.listCsv"), onSelect: () => void runExport("list-csv", facing) },
+            "sep",
+            // These follow the plan's trade filter, all trades while it is off.
+            { label: t("export.installationSvg"), onSelect: () => void runExport("installation-svg", facing) },
+            { label: t("export.installationDxf"), onSelect: () => void runExport("installation-dxf", facing) },
+            { label: t("export.installationPng"), onSelect: () => void runExport("installation-png", facing) },
+            { label: t("export.pointsCsv"), onSelect: () => void runExport("points-csv", facing) },
           ]}
         />
         <Menu
@@ -187,6 +193,8 @@ export function Toolbar() {
             { label: t("settings.showNames"), checked: prefs.showNames, onSelect: () => st.setPrefs({ showNames: !prefs.showNames }) },
             "sep",
             ...GRIDS.map((g) => ({ label: g === 0 ? t("settings.gridOff") : t("settings.grid", { mm: g }), checked: prefs.grid === g, radio: true, onSelect: () => st.setPrefs({ grid: g }) })),
+            "sep" as const,
+            ...POINTS_PREFS.map((p) => ({ label: t(`points.${p}` as const), checked: prefs.points === p, radio: true, onSelect: () => st.setPrefs({ points: p }) })),
             "sep" as const,
             { label: t("settings.themeSystem"), checked: settings.theme === "system", radio: true, onSelect: () => updateSettings({ theme: "system" }) },
             { label: t("settings.themeLight"), checked: settings.theme === "light", radio: true, onSelect: () => updateSettings({ theme: "light" }) },

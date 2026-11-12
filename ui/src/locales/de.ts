@@ -1270,10 +1270,53 @@ export const de = {
   "check.pointOutside": "Der Anschluss {point} liegt außerhalb des Raums oder in einer Trennwand.",
 
   // ---- 0.3 E inspector
+  "inspector.softWater": "Enthärtetes Wasser",
+  "inspector.moreConnections": "Weitere Anschlüsse",
+  "inspector.supplyM3h": "Zuluft (m³/h)",
+  "inspector.steamKgH": "Dampf (kg/h)",
+  "inspector.refrigerationKw": "Kälte (Verbund, kW)",
+  "inspector.heat": "Wärmeabgabe sensibel / latent (kW)",
+  "inspector.heatSensible": "Wärmeabgabe sensibel (kW)",
+  "inspector.heatLatent": "Wärmeabgabe latent (kW)",
+  "inspector.points": "Anschlusspunkte",
+  "point.fromLeft": "Abstand links",
+  "point.fromBack": "Abstand hinten",
+  "point.height": "Höhe ü. FFB",
+  "point.current": "Strom",
+  "point.fuse": "Absicherung",
+  "point.plug": "Anschlussart",
+  "point.dn": "Nennweite",
+  "point.greasy": "fetthaltig",
+  "point.note": "Bemerkung",
+  "point.reset": "Zurücksetzen",
+  "point.resetAll": "Alle Anschlusspunkte zurücksetzen",
 
   // ---- 0.3 F plan
+  "points.off": "Anschlüsse aus",
+  "points.all": "Alle Anschlüsse",
+  "points.electric": "Nur Elektro",
+  "points.sanitary": "Nur Sanitär",
+  "points.gas": "Nur Gas",
+  "points.ventilation": "Nur Lüftung",
+  "points.special": "Nur Kälte und Dampf",
+  "export.installationSvg": "Installationsplan als SVG…",
+  "export.installationDxf": "Installationsplan als DXF…",
+  "export.installationPng": "Installationsplan als PNG…",
+  "export.pointsCsv": "Anschlussliste als CSV…",
+  "installation.title": "Installationsplan",
+  "installation.titleOf": "Installationsplan {group}",
+  "pointList.title": "Anschlussliste",
 
   // ---- 0.3 G pdf
+  "planSet.installation": "Installationsplan {group}",
+  "planSet.pointTable": "Anschlusstabelle {group}",
+  "planSet.installationSheets": "Installationspläne",
+  "planSet.pointTables": "Anschlusstabellen",
+  "planSet.installationHint": "Gewerke ohne Anschlusspunkte bekommen kein Blatt.",
+  "planSet.col.wall": "Abstand/Wand",
+  "planSet.col.values": "Werte",
+  "planSet.sumKw": "Summe (kW)",
+  "planSet.sumKwFactored": "Mit Gleichzeitigkeit {f} (kW)",
 
   // ---- 0.3 H dxf
 

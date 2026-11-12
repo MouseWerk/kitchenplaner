@@ -101,6 +101,22 @@ describe("inspector opening panel", () => {
   });
 });
 
+describe("inspector plan check", () => {
+  it("names the points of a finding in the language switched to", () => {
+    // A combi oven in the middle of the room: its water points stand free, with no floor box.
+    const combi = testItem("c", "combi-10", 4000, 3000, 0, { connections: { electricKw: 18.9, voltage: 400, coldWater: true, drain: true } });
+    st().load(testProject([combi]), "/a.kplan");
+    st().select({ items: [] });
+    mount();
+    const findings = () => [...host.querySelectorAll<HTMLButtonElement>("button.notice.warn")].map((b) => b.textContent ?? "");
+    expect(findings().some((f) => f.includes("1.KW"))).toBe(true);
+    // No edit in between: the cached findings must follow the language too.
+    act(() => setLang("en"));
+    expect(findings().some((f) => f.includes("1.CW"))).toBe(true);
+    expect(findings().some((f) => f.includes("1.KW"))).toBe(false);
+  });
+});
+
 describe("inspector focus after a panel change", () => {
   it("moves the focus to the item's panel when a plan-check finding is activated", async () => {
     st().load(testProject([testItem("a", "table", 3000, 3000), testItem("b", "table", 3000, 3000)]), "/a.kplan");

@@ -46,7 +46,7 @@ export function installationDrawing(project: Project, o: InstallationOptions): D
 }
 
 /** The boxes of the circled position numbers of a plan (plan mm), for labels to keep clear of. */
-function numberBoxes(shapes: readonly Shape[], ps: number): Box[] {
+export function numberBoxes(shapes: readonly Shape[], ps: number): Box[] {
   const out: Box[] = [];
   for (const s of shapes) {
     if (s.t !== "text" || !s.circled) continue;
