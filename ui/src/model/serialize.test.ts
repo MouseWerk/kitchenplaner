@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseProject, ProjectError, serializeProject } from "./serialize";
 import { FORMAT_VERSION, MAX_POS, nextPos } from "./project";
@@ -29,7 +31,7 @@ describe("serializeProject", () => {
   it("writes pretty JSON with a trailing newline in a fixed key order", () => {
     const text = serializeProject(sample());
     expect(text.endsWith("}\n")).toBe(true);
-    expect(text.startsWith('{\n  "format": "kitchenplaner",\n  "version": 3,\n  "info": {')).toBe(true);
+    expect(text.startsWith('{\n  "format": "kitchenplaner",\n  "version": 4,\n  "info": {')).toBe(true);
     // Shuffled keys in memory give the same file.
     const p = sample();
     const shuffled = { ...p, items: p.items.map((it) => Object.fromEntries(Object.entries(it).reverse()) as typeof it) };
@@ -257,7 +259,7 @@ describe("format version 2", () => {
   it("writes the partitions and the openings' partition after the wall", () => {
     const text = serializeProject(withPartitions());
     const raw = JSON.parse(text);
-    expect(raw.version).toBe(3);
+    expect(raw.version).toBe(4);
     expect(raw.room.partitions[0]).toEqual({ id: "p1", a: { x: 5000, y: 0 }, b: { x: 5000, y: 6000 }, thickness: 100, height: 3000 });
     expect(Object.keys(raw.room.openings[0])).toEqual(["id", "kind", "wall", "partition", "offset", "width", "height", "sill"]);
     // Openings in outer walls carry no partition key at all.
@@ -272,22 +274,22 @@ describe("format version 2", () => {
     expect(serializeProject(back)).toBe(serializeProject(p));
   });
 
-  it("reads a version 1 file as a room without partitions and writes it back as version 3", () => {
+  it("reads a version 1 file as a room without partitions and writes it back as version 4", () => {
     const p = parseProject(v1());
-    expect(p.version).toBe(3);
+    expect(p.version).toBe(4);
     expect(p.room.partitions).toEqual([]);
     expect(p.room.openings).toEqual(sample().room.openings);
     // The position numbers are the list order the file showed.
     expect(p.items).toEqual(sample().items);
     expect(p.items.map((i) => i.pos)).toEqual([1, 2]);
     expect(p.settings).toEqual({ simultaneity: 1 });
-    expect(JSON.parse(serializeProject(p)).version).toBe(3);
+    expect(JSON.parse(serializeProject(p)).version).toBe(4);
     // Old, new, old shape again: the content survives the migration.
     expect(parseProject(serializeProject(p))).toEqual(p);
   });
 
-  it("rejects a version 4 file as too new", () => {
-    expect(errorOf(withRaw((r) => (r.version = 4))).key).toBe("error.tooNew");
+  it("rejects a version 5 file as too new", () => {
+    expect(errorOf(withRaw((r) => (r.version = 5))).key).toBe("error.tooNew");
   });
 
   it("rejects damaged partitions", () => {
@@ -403,7 +405,7 @@ function v3Sample() {
 describe("format version 3", () => {
   it("writes position, product, door details, title data and settings in a fixed order", () => {
     const raw = JSON.parse(serializeProject(v3Sample()));
-    expect(raw.version).toBe(3);
+    expect(raw.version).toBe(4);
     expect(Object.keys(raw)).toEqual(["format", "version", "info", "settings", "room", "items"]);
     expect(raw.info).toMatchObject({ drawingNo: "K-101", revision: "B" });
     expect(raw.settings).toEqual({ simultaneity: 0.65 });
@@ -437,7 +439,7 @@ describe("format version 3", () => {
     // A version 2 file knows no `pos`; one there (a hand edit) does not count.
     raw.items[0].pos = 9;
     const p = parseProject(JSON.stringify(raw));
-    expect(p.version).toBe(3);
+    expect(p.version).toBe(4);
     expect(p.items.map((i) => [i.id, i.pos])).toEqual([
       ["a", 1],
       ["b", 2],
@@ -445,7 +447,7 @@ describe("format version 3", () => {
     expect(p.settings).toEqual({ simultaneity: 1 });
     expect(p.room).toEqual(withPartitions().room);
     const again = JSON.parse(serializeProject(p));
-    expect(again.version).toBe(3);
+    expect(again.version).toBe(4);
     expect(again.items.map((i: any) => i.pos)).toEqual([1, 2]);
   });
 
@@ -499,5 +501,155 @@ describe("format version 3", () => {
   it("accepts sliding doors and the door details", () => {
     const p = parseProject(withRaw((r) => Object.assign(r.room.openings[0], { kind: "slidingDoor", hinge: "start", swing: "in", leaves: 1 })));
     expect(p.room.openings[0]).toMatchObject({ kind: "slidingDoor", hinge: "start", swing: "in", leaves: 1 });
+  });
+});
+
+/** The sample with every field of version 4: point overrides, heat release, the new connections. */
+function v4Sample() {
+  const p = sample();
+  p.items[0] = {
+    ...p.items[0],
+    connections: { ...p.items[0].connections, supplyM3h: 400, steamKgH: 12, refrigerationKw: 2.5 },
+    // In memory in any order; the file has a fixed one.
+    points: {
+      supply: { dn: 160 },
+      electric: { note: "über Decke", plug: "cee32", fuseA: 32, currentA: 30.5, z: 1200, y: -50, x: 300 },
+      steam: { greasy: false, dn: 20 },
+      refrigeration: { x: 0 },
+    },
+    heat: { latentKw: 1.5, sensibleKw: 4.2 },
+  };
+  p.items[1] = { ...p.items[1], connections: { ...p.items[1].connections, softWater: true }, points: { drain: { greasy: true, dn: 70 }, softWater: { z: 450 } } };
+  return p;
+}
+
+/** One item's `points` in a file with an edit applied. */
+function withPoints(edit: (points: any, raw: any) => void): string {
+  const raw = JSON.parse(serializeProject(v4Sample()));
+  edit(raw.items[0].points, raw);
+  return JSON.stringify(raw);
+}
+
+describe("format version 4", () => {
+  it("writes points, heat and the new connections in a fixed order", () => {
+    const raw = JSON.parse(serializeProject(v4Sample()));
+    expect(raw.version).toBe(4);
+    const a = raw.items[0];
+    expect(Object.keys(a)).toEqual(["id", "pos", "catalogId", "name", "x", "y", "rotation", "width", "depth", "height", "elevation", "connections", "points", "heat"]);
+    expect(Object.keys(a.connections).slice(-3)).toEqual(["supplyM3h", "steamKgH", "refrigerationKw"]);
+    // Points in TRADES order, each override in its file order.
+    expect(Object.keys(a.points)).toEqual(["electric", "supply", "steam", "refrigeration"]);
+    expect(Object.keys(a.points.electric)).toEqual(["x", "y", "z", "currentA", "fuseA", "plug", "note"]);
+    expect(Object.keys(a.points.steam)).toEqual(["dn", "greasy"]);
+    expect(Object.keys(a.heat)).toEqual(["sensibleKw", "latentKw"]);
+    const b = raw.items[1];
+    expect(Object.keys(b.connections).at(-1)).toBe("softWater");
+    expect(Object.keys(b.points)).toEqual(["softWater", "drain"]);
+    expect(Object.keys(b).slice(-2)).toEqual(["points", "note"]);
+  });
+
+  it("puts points and heat between energy and spec", () => {
+    const p = v4Sample();
+    p.items[0] = { ...p.items[0], energy: "electric", spec: { manufacturer: "Muster" }, note: "n" };
+    const keys = Object.keys(JSON.parse(serializeProject(p)).items[0]);
+    expect(keys.slice(-6)).toEqual(["connections", "energy", "points", "heat", "spec", "note"]);
+  });
+
+  it("round-trips every field unchanged", () => {
+    const p = v4Sample();
+    const text = serializeProject(p);
+    const back = parseProject(text);
+    expect(back).toEqual(p);
+    expect(serializeProject(back)).toBe(text);
+  });
+
+  it("leaves out empty points and heat, and overrides of inactive trades", () => {
+    const p = v4Sample();
+    p.items[0] = { ...p.items[0], points: { gas: { dn: 25 } }, heat: {} };
+    p.items[1] = { ...p.items[1], points: {} };
+    const raw = JSON.parse(serializeProject(p));
+    expect(raw.items[0]).not.toHaveProperty("points");
+    expect(raw.items[0]).not.toHaveProperty("heat");
+    expect(raw.items[1]).not.toHaveProperty("points");
+  });
+
+  it("drops unknown trades, unknown fields and overrides of trades the unit does not have", () => {
+    const p = parseProject(
+      withPoints((points) => {
+        points.laser = { x: 5 };
+        points.gas = { dn: 25 };
+        points.hotWater = { z: 300 };
+        points.electric.colour = "red";
+      }),
+    );
+    expect(Object.keys(p.items[0].points ?? {})).toEqual(["electric", "supply", "steam", "refrigeration"]);
+    expect(p.items[0].points?.electric).toEqual(v4Sample().items[0].points?.electric);
+    // Nothing left: no points at all.
+    const none = parseProject(withPoints((_, raw) => (raw.items[0].points = { gas: { dn: 25 } })));
+    expect(none.items[0]).not.toHaveProperty("points");
+    // An override with no field is no override.
+    const empty = parseProject(withPoints((points) => (points.electric = {})));
+    expect(Object.keys(empty.items[0].points ?? {})).not.toContain("electric");
+  });
+
+  it("accepts the limits of the values", () => {
+    const p = parseProject(
+      withPoints((points) => {
+        points.electric = { x: -100_000, y: 100_000, z: 0, currentA: 2000, fuseA: 0.5, plug: "fixed" };
+      }),
+    );
+    expect(p.items[0].points?.electric).toEqual({ x: -100_000, y: 100_000, z: 0, currentA: 2000, fuseA: 0.5, plug: "fixed" });
+  });
+
+  it("rejects damaged points, heat and connections", () => {
+    const cases: ((points: any, raw: any) => void)[] = [
+      (_, r) => (r.items[0].points = []),
+      (_, r) => (r.items[0].points = "E"),
+      (q) => (q.electric = 5),
+      (q) => (q.electric = null),
+      (q) => (q.electric.x = 100_001),
+      (q) => (q.electric.y = "50"),
+      (q) => (q.electric.z = -1e6),
+      (q) => (q.electric.currentA = 0),
+      (q) => (q.electric.fuseA = -16),
+      (q) => (q.electric.fuseA = 2001),
+      (q) => (q.supply.dn = 0),
+      (q) => (q.supply.dn = 5000),
+      (q) => (q.electric.plug = "cee125"),
+      (q) => (q.steam.greasy = "yes"),
+      (q) => (q.electric.note = 7),
+      (_, r) => (r.items[0].heat = 4),
+      (_, r) => (r.items[0].heat = { sensibleKw: -1 }),
+      (_, r) => (r.items[0].heat = { latentKw: "1" }),
+      (_, r) => (r.items[0].connections.supplyM3h = -5),
+      (_, r) => (r.items[0].connections.steamKgH = "12"),
+      (_, r) => (r.items[0].connections.refrigerationKw = -0.1),
+      (_, r) => (r.items[1].connections.softWater = 1),
+    ];
+    for (const edit of cases) expect(errorOf(withPoints(edit)).key, edit.toString()).toBe("error.invalid");
+  });
+
+  it("reads a version 3 file unchanged: derived points, no overrides", () => {
+    const raw = JSON.parse(serializeProject(sample()));
+    raw.version = 3;
+    const p = parseProject(JSON.stringify(raw));
+    expect(p.version).toBe(4);
+    expect(p.items).toEqual(sample().items);
+  });
+});
+
+describe("the example file of version 3", () => {
+  // The example kitchen as 0.2 wrote it (examples/ before version 4), kept as it was.
+  const text = readFileSync(resolve(__dirname, "testdata/example-v3.kplan"), "utf8").replace(/\r\n/g, "\n");
+
+  it("opens and writes back identically except for its version", () => {
+    expect(JSON.parse(text).version).toBe(3);
+    const written = serializeProject(parseProject(text));
+    expect(written).toBe(text.replace('\n  "version": 3,\n', '\n  "version": 4,\n'));
+  });
+
+  it("has no overrides: every unit shows its derived points", () => {
+    const p = parseProject(text);
+    expect(p.items.some((it) => it.points !== undefined || it.heat !== undefined)).toBe(false);
   });
 });

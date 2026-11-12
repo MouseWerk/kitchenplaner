@@ -9,7 +9,7 @@ and ask the unit's kind for the rest.
 kinds/
   types.ts          CatalogEntry, KindDef, Area
   registry.ts       CATALOG, CATEGORIES, catalogEntry(id), kindOf(id), kindDef(kind),
-                    placementOf(kind), collides(a, b), wallSnapReach(kind)
+                    placementOf(kind), collides(a, b), wallSnapReach(kind), withConnectionRules
   contract.test.ts  what every unit must keep (runs for every entry and variant)
   parts/
     plan.ts         PlanSketch (line, rect, circle, quarter) + hob, controlStrip, upstandLine, frontDoorSwing, cross
@@ -27,6 +27,8 @@ kinds/
     frost.ts        the freezer mark in every view (frostMark, frostFront, frostPlan, FROST_STRIP)
     disc.ts         a tilted disc (discFrame, discOutline): its outline as Parts.bar lays it
     entries.ts      withVariants (an entry whose connection values come from its variants)
+    points.ts       connection point defaults: anchors, PROFILES, defaultPoints, registerPointRule
+    pointRules.ts   the catalog's point rules (by group, kind, values, entry), SOFT_WATER_KINDS
     sizes.ts        WORK_HEIGHT, TABLE_WIDTHS, HOOD_ELEVATION, WALL_SHELF_ELEVATION, FLUSH_HEIGHT
   <area>/           cooking, cooling, washing, prep, serving, storage, ventilation, building
     entries.ts      the catalog entries of the area
@@ -222,6 +224,37 @@ elevation of those items to the platform's height where it matters.
 the footprint rectangle in the plan with an own outline inside it (the round column's circle);
 the plan check keeps the rectangle.
 
+## Connection points
+
+A unit has one connection point per trade its connection values switch on (electric, gas, cold,
+hot and softened water, drain, floor drain, exhaust, supply air, steam, remote refrigeration).
+Points are derived when they are drawn, never stored: `Item.points` holds only what the planner
+changed. Where a point sits and its catalog values come from four sources, the later one winning:
+
+1. the profile of the placement (`parts/points.ts`): `back` for floor units, `tableTop`,
+   `overhead`, `flat`;
+2. the profile of the group (`PROFILE_BY_GROUP` in `parts/pointRules.ts`): `line` for the cooking
+   lines, `tall` for ovens and fridges, `sink`, `dish`; overhead units outside ventilation hang on
+   the wall (`wallHung`);
+3. by kind: `PROFILE_BY_KIND` (tilting units `tilt`, hand wash basins `wallHung`) and
+   `LAYOUT_BY_KIND` (water under the bowl of a sink, the inlet and outlet of a conveyor
+   dishwasher), then the values: `GREASY_DRAIN`, `DN_BY_KIND` (a number or a function of the
+   item), `PLUG_BY_KIND` and Schuko for cooling, serving and preparation units;
+4. `LAYOUT_BY_ENTRY` or the entry's own `points`, for the few real exceptions.
+
+Positions are anchors from an edge (`L`, `C`, `R` along the width seen from the front, back or
+front along the depth, and a height from the floor, the unit's lower edge or its top), so a
+resized unit keeps its points at their distance from that edge. Water follows the fitter's
+convention: hot on the left, cold on the right. `SOFT_WATER_KINDS` (combi ovens, steamers, coffee
+machines) get softened water besides cold water in every variant through `withConnectionRules`
+in the registry; units already placed keep their values. Supply air volumes are written in the
+ventilation entries.
+
+A new unit usually needs nothing here: its placement and group give it sensible points. Add a
+kind to the rules when its connections sit elsewhere (a bowl at one end, a floor drain in front),
+and an entry only when it differs from its kind. All values are typical; mark the ones without a
+common source as unsure in a comment.
+
 ## Adding a unit
 
 1. **Entry** in `kinds/<area>/entries.ts`. The `id` is written into project files: never change or
@@ -290,7 +323,13 @@ export const brattPan: KindDef = {
 - the model stays within the budget (200 parts, 10 000 triangles) in every variant;
 - a gas variant has the `flue` parts and an electric one none (unless the kind has `flue: false`),
   and every energy variant of an entry looks different in 3D from the default one;
-- an item of the entry survives saving and opening the project unchanged;
+- an item of the entry survives saving and opening the project unchanged, also with every
+  connection point overridden;
+- its connection points: one per active trade; inside the footprint (a floor drain up to 600 mm
+  in front); flat points and floor drains at the floor, air at the top (except `AIR_BELOW`), a
+  table-top unit's socket above its lower edge; current, fuse and plug agree (Schuko on one phase
+  only); a gas variant has a sized gas point and an electric one none; every pipe and duct has a
+  nominal size of its series;
 - the thumbnail framing (`fitOrthoCamera`) fits the model, centred, with a margin.
 
 Never loosen the test for a unit: declare what the unit needs (`rise`, `elevationBase`) or fix the

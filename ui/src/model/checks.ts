@@ -5,6 +5,7 @@ import { clearanceIssues, clearanceSpotTest } from "./clearances";
 import { across, doorLeaves, doorSetup, isDoor, leafRect, openingFrame, SLIDE_CLEAR, swingFrame } from "./doors";
 import { bounds, convexOverlap, cross, EPS, footprint, pointInPolygon, sub } from "./geometry";
 import { bandPiece, partitionBand, partitionLength, partitionOutline } from "./partitions";
+import { pointIssues } from "./pointChecks";
 import { positions } from "./project";
 import { selfIntersects } from "./roomEdit";
 import type { Item, Partition, Project, Room, Vec2 } from "./types";
@@ -25,8 +26,10 @@ export interface Issue {
  * door on the side it opens to (in an outer wall or a partition), items higher than the room
  * (each by position), then the workplace checks of `clearances.ts`: free space in front of
  * units (movement area, aisles, function areas of doors and pans), in front of the room's doors,
- * hood overhang over cooking units, hand-wash basins near production (thresholds in
- * `checkRules.ts`).
+ * hood overhang over cooking units (a gas unit needs a canopy in any case), hand-wash basins near
+ * production; then the checks of the connection points and the heat of `pointChecks.ts`: points
+ * outside the room, supply of points away from the walls, floor drains, the gas shut-off and the
+ * hood airflow (thresholds in `checkRules.ts`).
  *
  * Items only collide with items of the same placement (`collides`): a hood above a range or a
  * slicer on a table is the normal case, and flat ones (drains, platforms) collide with nothing.
@@ -74,6 +77,9 @@ export function checkProject(project: Project): Issue[] {
     }
   }
 
+  // Their connection points are not reported again as lying outside.
+  const misplaced = new Set(issues.flatMap((i) => (i.key === "check.outside" || i.key === "check.partitionOverlap" ? i.itemIds : [])));
+
   const doorAreas = doorClearances(project);
   const inDoor = new Set<string>();
   items.forEach((it, i) => {
@@ -87,7 +93,9 @@ export function checkProject(project: Project): Issue[] {
     if (it.elevation + it.height > project.room.height + 0.1) issues.push({ key: "check.tooHigh", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
   });
 
-  issues.push(...clearanceIssues(project, { fps, placement, posOf }, inDoor));
+  const prep = { fps, placement, posOf };
+  issues.push(...clearanceIssues(project, prep, inDoor));
+  issues.push(...pointIssues(project, prep, misplaced));
   return issues;
 }
 

@@ -16,7 +16,7 @@ lohnen sich Grundriss, die vier Ansichten, 3D mit Rundgang und die Geräteliste 
 | | |
 | --- | --- |
 | Raum | L-förmig, Innenmaß 13,2 × 9,6 m, 104,6 m², 3,20 m hoch, Wände 300 mm |
-| Geräte und Einrichtung | 65 Positionen |
+| Geräte und Einrichtung | 67 Positionen |
 | Anschlussleistung | 283 kW elektrisch, kein Gas |
 | Abluft | 11 600 m³/h (zwei Inselhauben, Wandhaube, Bandspülmaschine) |
 | Wasser | 15 Kaltwasser-, 11 Warmwasseranschlüsse, 20 Abläufe, 2 Bodenabläufe (Rinne, Gully) |
@@ -55,7 +55,9 @@ auf eigenem Weg zurück.
   Handwaschbecken. Eine Tür verbindet Spülküche und Küche.
 - **Hygiene:** Handwaschbecken an jedem Zugang: Vorbereitung, Kochwand, Personaleingang
   (Ostwand), Spülküche.
-- **Gebäude:** eine Stütze an der Nordwand, ein Fenster in der Ostwand.
+- **Gebäude:** eine Stütze an der Nordwand, ein Fenster in der Ostwand, zwei Bodentanks für Wasser
+  und Abwasser: unter der Kochinsel (Nudelkocher, Bain-Marie) und unter der Patisserie-Insel
+  (Schockkühler).
 
 ## Energie
 

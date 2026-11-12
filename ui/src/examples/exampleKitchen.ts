@@ -152,6 +152,11 @@ const SPECS: readonly Spec[] = [
 
   // The building: a column of the structure on the north wall.
   { catalogId: "column", face: "south", x: 6450, y: 0, zone: "building" },
+  // Floor boxes bring water and drain up to the units away from the walls: one in the joint of
+  // the cooking island under the pasta cooker and the bain-marie, one under the end of the pastry
+  // island for the blast chiller. Listed last, so the numbers of 0.2 stay.
+  { catalogId: "floor-box", face: "south", x: 7900, y: 3150, zone: "island" },
+  { catalogId: "floor-box", face: "south", x: 4800, y: 3450, zone: "pastry" },
 ];
 
 const PARTITIONS: readonly Partition[] = [

@@ -1233,10 +1233,41 @@ export const de = {
   // ---- 0.3 A catalog
 
   // ---- 0.3 B files
+  "list.soft": "EW",
+  "list.supply": "Zuluft (m³/h)",
+  "list.heat": "Wärme sensibel/latent (kW)",
+  "pointList.no": "Nr.",
+  "pointList.trade": "Gewerk",
+  "pointList.x": "X",
+  "pointList.y": "Y",
+  "pointList.wallA": "Wand A",
+  "pointList.distA": "Abstand A",
+  "pointList.wallB": "Wand B",
+  "pointList.distB": "Abstand B",
+  "pointList.height": "Höhe ü. FFB",
+  "pointList.kw": "kW",
+  "pointList.voltage": "V",
+  "pointList.phases": "Phasen",
+  "pointList.current": "A",
+  "pointList.fuse": "Absicherung",
+  "pointList.plug": "Anschlussart",
+  "pointList.dn": "DN",
+  "pointList.m3h": "m³/h",
+  "pointList.kgH": "kg/h",
+  "pointList.greasy": "fetthaltig",
+  "pointList.note": "Bemerkung",
 
   // ---- 0.3 C drawing
+  "legend.title": "Legende",
+  "legend.heights": "Höhen in mm über Fertigfußboden (FFB)",
 
   // ---- 0.3 D checks
+  "check.gasNoHood": "Über dem Gasgerät Pos. {pos} hängt keine Abzugshaube oder Lüftungsdecke.",
+  "check.gasShutoffMissing": "Im Plan fehlt eine Gas-Notabsperrung.",
+  "check.islandSupply": "Der Anschluss {point} liegt {measured} mm von der nächsten Wand, ohne Bodentank, Versorgungssäule oder Schacht in Reichweite.",
+  "check.floorDrainMissing": "Im Umkreis von {required} mm um den Bodenablauf {point} liegt kein Ablauf und keine Rinne.",
+  "check.hoodAirflow": "Die Haube Pos. {hood} saugt {measured} m³/h ab, nötig sind etwa {required} m³/h (Richtwert).",
+  "check.pointOutside": "Der Anschluss {point} liegt außerhalb des Raums oder in einer Trennwand.",
 
   // ---- 0.3 E inspector
 

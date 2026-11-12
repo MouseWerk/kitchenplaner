@@ -227,7 +227,7 @@ async function openExample() {
   await app.nextPath(EXAMPLE);
   await app.click("Öffnen…", "header");
   await app.waitToast(/„Beispielkueche-Restaurant\.kplan“ geöffnet/);
-  await app.waitUntil(async () => /65 Geräte/.test(await app.statusText()), "the example did not load");
+  await app.waitUntil(async () => /67 Geräte/.test(await app.statusText()), "the example did not load");
 }
 
 async function theme(entry) {

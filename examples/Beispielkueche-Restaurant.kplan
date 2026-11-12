@@ -1,6 +1,6 @@
 {
   "format": "kitchenplaner",
-  "version": 3,
+  "version": 4,
   "info": {
     "name": "Beispielküche Restaurant Lindenhof",
     "client": "Restaurant Lindenhof (Beispiel)",
@@ -662,7 +662,8 @@
         "electricKw": 18.9,
         "voltage": 400,
         "coldWater": true,
-        "drain": true
+        "drain": true,
+        "softWater": true
       },
       "energy": "electric",
       "note": "Kochwand"
@@ -702,7 +703,8 @@
         "electricKw": 37,
         "voltage": 400,
         "coldWater": true,
-        "drain": true
+        "drain": true,
+        "softWater": true
       },
       "energy": "electric",
       "note": "Kochwand"
@@ -1313,6 +1315,36 @@
       "elevation": 0,
       "connections": {},
       "note": "Gebäude"
+    },
+    {
+      "id": "ex-66",
+      "pos": 66,
+      "catalogId": "floor-box",
+      "name": "Bodentank",
+      "x": 8050,
+      "y": 3300,
+      "rotation": 0,
+      "width": 300,
+      "depth": 300,
+      "height": 5,
+      "elevation": 0,
+      "connections": {},
+      "note": "Kochinsel"
+    },
+    {
+      "id": "ex-67",
+      "pos": 67,
+      "catalogId": "floor-box",
+      "name": "Bodentank",
+      "x": 4950,
+      "y": 3600,
+      "rotation": 0,
+      "width": 300,
+      "depth": 300,
+      "height": 5,
+      "elevation": 0,
+      "connections": {},
+      "note": "Patisserie"
     }
   ]
 }

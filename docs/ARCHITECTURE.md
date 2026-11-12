@@ -183,7 +183,7 @@ A crash or a power cut loses at most a few seconds of work.
 - **Browser** (Vite without Tauri): the same in `localStorage`; each page load is a session
   holding a Web Lock, so open tabs are told from closed ones.
 
-## Plan check (`ui/src/model/checks.ts`, `clearances.ts`, `checkRules.ts`)
+## Plan check (`ui/src/model/checks.ts`, `clearances.ts`, `pointChecks.ts`, `checkRules.ts`, `heat.ts`)
 
 `checkProject` runs on every change and lists findings in a fixed order: the layout rules
 (outline crossing itself, overlaps, units outside the room or in a partition, partitions outside,
@@ -207,6 +207,12 @@ constants in `checkRules.ts`, each with its source:
 | Hood overhang over cooking units, open sides | 200 | DGUV Regel 110-002 3.2.11.1 (at a lower edge of 2.10 m), VDI 2052. **Unsure:** VDI 2052 asks more for higher hoods; not scaled |
 | Hood overhang at the door of a steaming unit (combi, convection oven, steamer, deck oven, smoker) | 400 | DGUV Regel 110-002 3.2.11.1 |
 | Hand-wash basin near every production unit, same area (no partition ≥ 2000 mm between), centre to centre | 8000 | Regulation (EC) 852/2004 Annex II (no figure). **Unsure:** own value |
+| Gas unit under a canopy hood or ventilated ceiling (a condensing hood or downdraft does not count; replaces the general hood finding for it) | – | DVGW G 631 / TRGI. **Unsure:** the clause |
+| Gas emergency shut-off in a plan with gas units | – | DVGW G 631. **Unsure:** the clause |
+| Water, drain or gas point further than this from every wall face, with no floor box, media column, shaft or column (for a drain also a floor drain) within reach; height 0 counts as from the floor | 300 / 1000 | **Unsure:** own values |
+| Floor drain point with a floor drain, gully or channel within reach | 600 | **Unsure:** own value |
+| Hood airflow at least the heat under it (`heat.ts`, sensible plus latent) × simultaneity × 90 m³/h per kW, worded as a typical value | 90 | **Unsure:** own value, calibrated so the example kitchen passes |
+| Connection point outside the room or inside a partition below its top (air points excepted) | – | – |
 
 DGUV Regel 110-002 is the former BGR 111; DGUV Regel 110-003 „Branche Küchenbetriebe“ replaced it
 in 2019, and its figures are still taken as the state of the art (**unsure** whether 110-003
@@ -224,6 +230,13 @@ one, a condensing hood on a combi or convection oven and a downdraft module besi
 the canopy. Which units are workplaces, need a hood or count as production follows the catalog
 areas and groups, with the exceptions listed in `checkRules.ts` (a test keeps every kind named
 there in the catalog).
+
+The connection point rules (`pointChecks.ts`) run on the derived points (`model/points.ts`);
+units already reported outside the room or in a partition are not reported again for their
+points. The heat release of a unit (`model/heat.ts`, `itemHeat`) is the planner's value where set,
+else a share of its connected kW (electric plus gas) by a heat class per kind: dry, wet, frying,
+dish, cooling, small or none (own typical values, **unsure**). A unit under several hoods side by
+side is shared out by the area each covers.
 
 Pallets, crates, trolleys, mobile racks and bins and dispensers on castors are no workplaces
 (`NOT_WORKPLACES`): they need no free space of their own but stay obstacles for the others. Water
@@ -253,6 +266,19 @@ an ellipsis to the unit's width (Helvetica widths of `render/pdf.ts`), placed un
 number, else elsewhere inside the unit, else right below or above it inside the room and clear of
 other units; a name with no free place is left out instead of overlapping. Both are
 deterministic, and the tests check the example kitchen at every sheet scale for overlaps.
+
+## Installation plan (`ui/src/model/installationPlan.ts`, `render/symbols.ts`)
+
+`installationDrawing` draws `planDrawing` with `symbols: false` (no kind details) and
+`quiet: true` (equipment as thin outlines without fill; building parts unchanged), then the
+connection points of the trade filter (`projectPoints`) on top: two dimensions per point from
+the wall faces `wallRefs` returns (foot on the face to the point; none from a face the point sits
+on), the symbols, the labels, and a legend to the right of everything else. Symbols fit a 3 mm
+square on paper, stay upright and are told apart by shape only; their parts are kept in paper mm
+(`symbolParts`) so the DXF export can make one block per symbol. A label („12.E“ over „+300“)
+takes the first free place of a ring search around its symbol, clear of other labels, symbols and
+the position numbers, with a leader (`label: true`) when it had to move off the first ring. All
+point shapes carry `trade` and `point` and no `itemId`; the legend carries `trade` only.
 
 ## Elevations (`ui/src/model/elevation.ts`)
 
@@ -294,6 +320,13 @@ on open (`ui/src/model/serialize.ts`). Version 3 (0.2) adds the stable position 
 every item, its product `spec` (manufacturer, model, article, net price), `settings.simultaneity`,
 `info.drawingNo` and `info.revision`, sliding doors and a door's hinge, swing and leaves. Older
 files get the numbers of their list order and the simultaneity 1, so they show what they showed.
+Version 4 (0.3) adds the planner's overrides of the connection points (`points`, keyed by trade,
+only the fields that were changed), the heat release `heat` and the connections `softWater`,
+`supplyM3h`, `steamKgH` and `refrigerationKw`. Connection points themselves are derived at run
+time (`ui/src/model/points.ts`), so a version 3 file needs no migration; overrides of unknown or
+inactive trades are dropped on open. A 0.2 build refuses a version 4 file as too new instead of
+dropping the overrides. The connection list (`ui/src/model/pointList.ts`) exports the points as
+CSV with the equipment list's rules.
 
 Position numbers are stable: a new, pasted or duplicated item gets one above the highest, and a
 deletion renumbers nothing. „Positionen neu nummerieren“ in the project panel counts all items

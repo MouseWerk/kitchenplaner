@@ -519,3 +519,100 @@ one. „Notiz“ / “Note” clashes with `list.note` („Bemerkung“ / “Not
 | G | `planSet.col.no`, `.wall`, `.height`, `.values`, `.note`; `planSet.sumKw`, `planSet.sumKwFactored` | Nr., Abstand/Wand, Höhe ü. FFB, Werte, Bemerkung; Summe (kW), Mit Gleichzeitigkeit {f} (kW) | No., Distance/wall, Height above FFL, Values, Note; Total (kW), With simultaneity {f} (kW) |
 
 H needs no keys: the DXF tags and prompts are German and fixed, like the existing ones.
+
+## Wave 1 notes
+
+### B, file format and lists
+
+- **Format 4.** `FORMAT_VERSION = 4`; versions 1 to 3 open as before, 5 is too new. Overrides are
+  read for any version (a hand-edited v3 file loses nothing) and pass through `cleanPoints`, so
+  unknown trades, inactive trades, unknown fields and empty overrides are dropped. `serialize`
+  writes `cleanPoints(item)` too, so what is written always reads back the same. `x`, `y`, `z` use
+  the coordinate rule (|v| ≤ `MAX_LENGTH`, negative allowed: a point may lie before the left edge
+  or below the floor). `heat` keys are written `sensibleKw, latentKw`.
+- **Fixture.** `ui/src/model/testdata/example-v3.kplan` is the example kitchen as 0.2 wrote it; it
+  must write back byte for byte except `"version": 4`.
+- **Equipment list.** The water cell shows „EW“ / “Soft” (new key `list.soft`, an accepted
+  one-term exception in `translations.test.ts` like `list.cold` and `list.hot`). The CSV gains
+  „Zuluft (m³/h)“ and one column „Wärme sensibel/latent (kW)“ written as „2,4 / 1,1“ (the key
+  names one column); both come after „Abluft“. Heat is `itemHeat` (planner's values or the
+  estimate). The totals gain `softWater`, `supplyM3h`, `heatSensibleKw` and `heatLatentKw`; the
+  CSV total shows supply air only when there is some. `csvDocument` and `csvSeparator` are shared
+  with the connection list.
+- **Connection list.** `pointRows(project, filter, lang)` and `pointsCsv(project, lang, filter)`;
+  „Wand A/B“ are named „Wand 3“ / „Trennwand 2“ as the inspector counts them (`wallRefName`); X, Y,
+  distances and height in whole mm; phases as 1 or 3; a greasy drain is marked „x“.
+- **Release notes.** Points that are not overridden follow the catalog rules (decision 1). When a
+  rule changes in a later release (as wave 1-A's profiles and rules do against wave 0's fallback
+  profiles), the derived points of old plans move. That is expected and goes into the release
+  notes of that version, under „Improved“.
+
+### D, plan check and heat
+
+- **The example kitchen and `check.islandSupply`.** With A's point rules the rule found three
+  units whose pipe points stand free in the room: the pasta cooker (Pos. 34, KW and AW) and the
+  bain-marie (Pos. 35, KW and AW) in the cooking island, about 3150 mm from the nearest wall, and
+  the blast chiller beside the pastry island (Pos. 21, AW), about 2950 mm away. A real island is
+  fed through the floor, so the example was incomplete, not the rule. B has added two floor boxes
+  at the end of `SPECS` (the cooking island's joint, the pastry island's end); with them the
+  example has no finding. The gas rules do not fire: the example is all-electric.
+- **`itemHeat(item)`** (`model/heat.ts`): `{ sensibleKw, latentKw, estimated }`. Each value the
+  planner set (`item.heat`) wins on its own; `estimated` is true while at least one is the
+  estimate. Also exported: `estimateHeat`, `heatClassOf`, `HEAT_SHARES`, `WET_KINDS`,
+  `FRYING_KINDS`. Classes: cooking `dry` unless `wet` or `frying`; washing dish machines `dish`;
+  cooling `cooling` (0.2 of the load with remote refrigeration); washing, tables, prep and serving
+  `small`; storage, ventilation and building `none`.
+- **Gas without a hood** lives in `clearances.ts` with the other hood rules, not in
+  `pointChecks.ts`: it shares the search for the hood above, and the unit gets
+  `check.gasNoHood` instead of `check.hoodMissing`, never both. A gas unit is a floor or
+  table-top unit with `gasKw > 0`.
+- **Decisions within the rules** (all marked unsure in `checkRules.ts`):
+  - Island supply: the pipe trades are gas, the three waters, drain and floor drain; a point is
+    measured to the nearest outer wall or partition face (any partition height); a drain point may
+    also run to a floor drain, gully or channel within reach; points of hung units (hoods,
+    basins) count as fed from the ceiling or their wall; one finding per unit, naming its points.
+  - Points outside: a point on a wall face is inside; a point inside a partition counts only below
+    the partition's top; units already reported outside the room or in a partition are not
+    reported again (nor for island supply).
+  - Hood airflow: heat is sensible plus latent; a unit counts under a hood hanging at or above its
+    top, shared between hoods side by side by the area each covers; the needed airflow is rounded
+    up to 10 m³/h. `HOOD_AIR_PER_KW = 90`, calibrated on the example (see its comment).
+- **Open for the lead:** the point labels in the findings (`{point}`, „12.KW“) are formatted in the
+  language current when the check runs. `App.tsx`, `Inspector.tsx` and `PlanView.tsx` memoize
+  `checkProject` on the project only, so after a language switch the codes stay in the old
+  language until the next edit. Adding the language to those memos (wave 2, E and F) fixes it.
+
+### A, catalog defaults
+
+- **Rules.** `kinds/parts/pointRules.ts` exports `POINT_RULES` (by group, by kind, values, by
+  entry) and the tables `PROFILE_BY_KIND`, `LAYOUT_BY_KIND`, `LAYOUT_BY_ENTRY` (2 entries: the
+  230 V glass washers get Schuko), `SOFT_WATER_KINDS`, `GREASY_DRAIN` with `greasyDrain(entry)`,
+  `DN_BY_KIND`, `PLUG_BY_KIND` and `AIR_BELOW`. It imports types only; `parts/points.ts` seeds its
+  rule list with `POINT_RULES` instead of `pointRules.ts` registering itself from registry.ts,
+  because registry.ts and parts/points.ts import each other and a self-registration could run
+  before the list exists (whichever module a test loads first). `registerPointRule` still adds
+  rules after them.
+- **Hot left, cold right.** Every profile now puts hot water left of the centre and cold water
+  right of it (the fitter's convention for taps and angle valves), the reverse of the table in
+  section 2; softened water stays in the middle.
+- **Overhead units outside ventilation** use `wallHung` (wash basins, salamanders, water heaters,
+  heat lamp bridges, the pre-rinse tap, dosing and cleaning points); only ventilation units and
+  the pendant heat lamp keep `overhead`.
+- **Greasy** (DIN EN 1825): every cooking unit, the groups sinks, dishMachines and dishLine, table
+  sinks, hot food counters and buffets, floor drains, gullies and channels; not the vegetable and
+  boot washers, basins, ice, condensate or a separator's outlet. `greasyDrain(entry)` is the rule
+  to reuse (D, H).
+- **Soft water (for B and D).** `withConnectionRules` (registry.ts) adds `softWater: true` to the
+  connections of combi ovens, steamers (also table-top), espresso and filter coffee machines and
+  the hot water dispenser, in every variant, so new items of these kinds store it. Old items
+  keep their connections and show no EW point. The equipment totals are unchanged (the water
+  count already counts cold water). The regenerated examples carry `"softWater": true` on the
+  two combi ovens; `exampleKitchen.test.ts` fails until B regenerates them.
+- **Supply air.** `supplyM3h` in the ventilation entries: hood with supply air 70 % of its
+  exhaust, supply air ceiling 85 %, swirl diffuser 500 m³/h at 600 mm (by face area), displacement
+  outlet 400 m³/h per 600 mm (all own values, unsure). No other entry has supply air.
+- **Downdraft** takes its exhaust at the bottom (`AIR_BELOW`), the only air point not at the top.
+- **Tiny loads.** `currentOf` rounds an exit sign's 10 W to 0.0 A; the contract test accepts 0 A
+  with the smallest fuse. Showing "< 0.1 A" would be wave 0/E's call.
+- **Touched outside A:** `model/points.test.ts` (wave 0) expects the combi's drain greasy and its
+  softened water point in the label list.

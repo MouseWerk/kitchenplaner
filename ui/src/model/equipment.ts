@@ -2,6 +2,7 @@
 // totals an installer needs (plain and with the simultaneity factor), and the CSV export for
 // spreadsheets.
 
+import { itemHeat } from "./heat";
 import type { Project } from "./types";
 import { num, t, type Lang, type TKey } from "../lib/i18n";
 
@@ -23,9 +24,14 @@ export interface EquipmentRow {
   gasKw?: number;
   coldWater: boolean;
   hotWater: boolean;
+  softWater: boolean;
   drain: boolean;
   floorDrain: boolean;
   exhaustM3h?: number;
+  supplyM3h?: number;
+  /** Heat release into the kitchen (kW): the planner's values or the typical estimate (`itemHeat`). */
+  heatSensibleKw: number;
+  heatLatentKw: number;
   note: string;
 }
 
@@ -33,9 +39,13 @@ export interface EquipmentTotals {
   electricKw: number;
   gasKw: number;
   exhaustM3h: number;
-  /** Number of cold and hot water, drain and floor drain points. */
+  supplyM3h: number;
+  heatSensibleKw: number;
+  heatLatentKw: number;
+  /** Number of cold, hot and softened water, drain and floor drain points. */
   coldWater: number;
   hotWater: number;
+  softWater: number;
   drain: number;
   floorDrain: number;
   /** Sum of the net prices given (positions without a price count as 0). */
@@ -48,6 +58,7 @@ export function equipmentRows(project: Pick<Project, "items">): EquipmentRow[] {
   return sorted.map((it) => {
     const c = it.connections;
     const spec = it.spec ?? {};
+    const heat = itemHeat(it);
     return {
       id: it.id,
       pos: it.pos,
@@ -64,9 +75,13 @@ export function equipmentRows(project: Pick<Project, "items">): EquipmentRow[] {
       gasKw: c.gasKw,
       coldWater: !!c.coldWater,
       hotWater: !!c.hotWater,
+      softWater: !!c.softWater,
       drain: !!c.drain,
       floorDrain: !!c.floorDrain,
       exhaustM3h: c.exhaustM3h,
+      supplyM3h: c.supplyM3h,
+      heatSensibleKw: heat.sensibleKw,
+      heatLatentKw: heat.latentKw,
       note: it.note ?? "",
     };
   });
@@ -80,8 +95,12 @@ export function equipmentTotals(rows: readonly EquipmentRow[]): EquipmentTotals 
     electricKw: round2(sum((r) => r.electricKw)),
     gasKw: round2(sum((r) => r.gasKw)),
     exhaustM3h: round2(sum((r) => r.exhaustM3h)),
+    supplyM3h: round2(sum((r) => r.supplyM3h)),
+    heatSensibleKw: round2(sum((r) => r.heatSensibleKw)),
+    heatLatentKw: round2(sum((r) => r.heatLatentKw)),
     coldWater: count((r) => r.coldWater),
     hotWater: count((r) => r.hotWater),
+    softWater: count((r) => r.softWater),
     drain: count((r) => r.drain),
     floorDrain: count((r) => r.floorDrain),
     price: round2(sum((r) => r.price)),
@@ -117,12 +136,22 @@ export function dimensionsText(r: Pick<EquipmentRow, "width" | "depth" | "height
   return [r.width, r.depth, r.height].map((v) => String(Math.round(v))).join(" × ");
 }
 
-/** The water cell: "KW, WW" / "Cold, Hot". */
-export function waterText(r: Pick<EquipmentRow, "coldWater" | "hotWater">, lang: Lang): string {
+/** The water cell: "KW, WW, EW" / "Cold, Hot, Soft". */
+export function waterText(r: Pick<EquipmentRow, "coldWater" | "hotWater"> & { softWater?: boolean }, lang: Lang): string {
   const parts: string[] = [];
   if (r.coldWater) parts.push(t("list.cold", undefined, lang));
   if (r.hotWater) parts.push(t("list.hot", undefined, lang));
+  if (r.softWater) parts.push(t("list.soft", undefined, lang));
   return parts.join(", ");
+}
+
+/**
+ * The heat cell: sensible and latent heat release (kW) as "2,4 / 1,1", one column as the list
+ * shows it; empty for a unit that gives off none.
+ */
+export function heatText(r: Pick<EquipmentRow, "heatSensibleKw" | "heatLatentKw">, lang: Lang): string {
+  if (r.heatSensibleKw === 0 && r.heatLatentKw === 0) return "";
+  return `${formatNumber(r.heatSensibleKw, lang)} / ${formatNumber(r.heatLatentKw, lang)}`;
 }
 
 /** The drain cell: the drain label and/or "Bodenablauf". */
@@ -146,6 +175,8 @@ const COLUMNS: readonly TKey[] = [
   "list.water",
   "list.drain",
   "list.exhaust",
+  "list.supply",
+  "list.heat",
   "list.note",
   "list.price",
 ];
@@ -162,7 +193,6 @@ const EOL = "\r\n";
  * locale), English commas and a decimal point. Starts with a BOM so Excel reads it as UTF-8.
  */
 export function equipmentCsv(project: Pick<Project, "items" | "settings">, lang: Lang): string {
-  const sep = lang === "de" ? ";" : ",";
   const n = (v: number | undefined) => (v === undefined ? "" : formatNumber(v, lang));
   const rows = equipmentRows(project);
   const lines: string[][] = [COLUMNS.map((k) => t(k, undefined, lang))];
@@ -181,6 +211,8 @@ export function equipmentCsv(project: Pick<Project, "items" | "settings">, lang:
       waterText(r, lang),
       drainText(r, lang),
       n(r.exhaustM3h),
+      n(r.supplyM3h),
+      heatText(r, lang),
       csvText(r.note),
       r.price === undefined ? "" : formatPrice(r.price, lang),
     ]);
@@ -202,16 +234,30 @@ export function equipmentCsv(project: Pick<Project, "items" | "settings">, lang:
     n(tot.electricKw),
     "",
     n(tot.gasKw),
-    counted([["list.cold", tot.coldWater], ["list.hot", tot.hotWater]]),
+    counted([["list.cold", tot.coldWater], ["list.hot", tot.hotWater], ["list.soft", tot.softWater]]),
     counted([["list.drain", tot.drain], ["list.floorDrain", tot.floorDrain]]),
     n(tot.exhaustM3h),
+    tot.supplyM3h > 0 ? n(tot.supplyM3h) : "",
+    heatText(tot, lang),
     "",
     priced ? formatPrice(tot.price, lang) : "",
   ]);
   const f = project.settings.simultaneity;
-  const factored = ["", t("list.simultaneous", { f: formatNumber(f, lang) }, lang), "", "", "", "", n(withSimultaneity(tot.electricKw, f)), "", n(withSimultaneity(tot.gasKw, f)), "", "", "", "", ""];
-  lines.push(factored);
-  lines.push(["", t("data.typicalValues", undefined, lang), "", "", "", "", "", "", "", "", "", "", "", ""]);
+  // The rows below the totals are as wide as the header, with text only in the columns named.
+  const row = (cells: Partial<Record<number, string>>) => COLUMNS.map((_, i) => cells[i] ?? "");
+  lines.push(row({ 1: t("list.simultaneous", { f: formatNumber(f, lang) }, lang), 6: n(withSimultaneity(tot.electricKw, f)), 8: n(withSimultaneity(tot.gasKw, f)) }));
+  lines.push(row({ 1: t("data.typicalValues", undefined, lang) }));
+  return csvDocument(lines, lang);
+}
+
+/** The separator of a CSV file: semicolon in German (Excel with a decimal comma), comma in English. */
+export function csvSeparator(lang: Lang): string {
+  return lang === "de" ? ";" : ",";
+}
+
+/** CSV text of rows of cells: BOM, quoted fields where needed, CRLF after every line. */
+export function csvDocument(lines: readonly (readonly string[])[], lang: Lang): string {
+  const sep = csvSeparator(lang);
   return BOM + lines.map((cells) => cells.map((c) => csvField(c, sep)).join(sep)).join(EOL) + EOL;
 }
 

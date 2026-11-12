@@ -7,15 +7,18 @@ import * as THREE from "three";
 import { de } from "../locales/de";
 import { en } from "../locales/en";
 import type { Msg } from "../locales/de";
+import { itemPoints } from "../model/points";
 import { itemFromCatalog, variantPatch } from "../model/project";
 import { parseProject, serializeProject } from "../model/serialize";
 import { testProject } from "../model/testProject";
-import { ENERGIES, type Connections, type Item, type Vec2 } from "../model/types";
+import { activeTrades, DN_SERIES, PLUG_RATING } from "../model/trades";
+import { ENERGIES, type Connections, type Item, type ItemPoints, type Vec2 } from "../model/types";
 import type { Shape } from "../render/drawing";
 import { buildItemObject } from "../three/meshes";
 import { getShared, isSharedGeometry } from "../three/shared";
 import { fitOrthoCamera } from "../three/thumbnails";
 import { Front } from "./parts/elevation";
+import { AIR_BELOW } from "./parts/pointRules";
 import { FLUSH_HEIGHT } from "./parts/sizes";
 import { PlanSketch } from "./parts/plan";
 import { CATALOG, CATEGORIES, KINDS, kindDef, placementOf, SUBGROUPS, variantConnections, type CatalogEntry, type Energy, type KindDef } from "./registry";
@@ -29,6 +32,8 @@ const MAX_PARTS = 200;
 const MAX_TRIANGLES = 10_000;
 /** Thumbnail aspect of a catalog row (56 × 44 px). */
 const THUMB_ASPECT = 56 / 44;
+/** How far a floor drain point may lie in front of its unit (mm): tilting pans pour forward. */
+const FLOOR_DRAIN_REACH = 600;
 
 const texts: Record<"de" | "en", Record<string, Msg>> = { de, en };
 
@@ -363,5 +368,69 @@ describe.each(ALL.map((c) => [c.label, c] as const))("variant %s", (_, { def, it
     expect(Math.max(maxX - minX, maxY - minY)).toBeGreaterThan(1.6);
     expect(minX + maxX).toBeCloseTo(0, 6);
     expect(minY + maxY).toBeCloseTo(0, 6);
+  });
+});
+
+describe.each(ALL.map((c) => [c.label, c] as const))("connection points of %s", (_, { entry, item, energy }) => {
+  const points = itemPoints(item);
+  const top = item.elevation + item.height;
+  const placement = placementOf(entry.kind);
+
+  it("has one point per active trade", () => {
+    expect(points.map((p) => p.trade)).toEqual(activeTrades(item.connections));
+  });
+
+  it("puts its points within the footprint (a floor drain up to 600 mm in front)", () => {
+    for (const p of points) {
+      const front = p.trade === "floorDrain" ? item.depth + FLOOR_DRAIN_REACH : item.depth;
+      expect(p.fromLeft, `${p.trade} from left`).toBeGreaterThanOrEqual(0);
+      expect(p.fromLeft, `${p.trade} from left`).toBeLessThanOrEqual(item.width);
+      expect(p.fromBack, `${p.trade} from back`).toBeGreaterThanOrEqual(0);
+      expect(p.fromBack, `${p.trade} from back`).toBeLessThanOrEqual(front);
+      expect(p.z, `${p.trade} height`).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("puts flat points and floor drains at the floor, air at the top, a table-top socket above the table", () => {
+    for (const p of points) {
+      if (placement === "flat" || p.trade === "floorDrain") expect(p.z, p.trade).toBe(0);
+      if ((p.trade === "exhaust" || p.trade === "supply") && !AIR_BELOW.has(entry.kind)) expect(p.z, p.trade).toBe(top);
+      if (placement === "tableTop" && p.trade === "electric") expect(p.z).toBeGreaterThan(item.elevation);
+    }
+  });
+
+  it("gives an electric point a current, a fuse that carries it and a plug that carries the fuse", () => {
+    const e = points.find((p) => p.trade === "electric");
+    if (!e) return;
+    const { currentA, fuseA, plug, phases } = e.values;
+    // A tiny load (an exit sign's 10 W) rounds to 0.0 A; the fuse still has its smallest size.
+    expect(currentA).toBeGreaterThanOrEqual(0);
+    expect(fuseA).toBeGreaterThan(0);
+    expect(fuseA).toBeGreaterThanOrEqual(currentA!);
+    expect(PLUG_RATING[plug!]).toBeGreaterThanOrEqual(fuseA!);
+    if (plug === "schuko") expect(phases, "a Schuko socket has one phase").toBe(1);
+  });
+
+  it("has a sized gas point exactly when it burns gas", () => {
+    const gas = points.find((p) => p.trade === "gas");
+    if (energy === "gas") expect(gas?.values.dn).toBeGreaterThan(0);
+    if (energy === "electric") expect(gas).toBeUndefined();
+  });
+
+  it("gives every pipe and duct a nominal size of its series", () => {
+    for (const p of points) {
+      const series = DN_SERIES[p.trade];
+      if (!series) continue;
+      expect(p.values.dn, p.trade).toBeGreaterThan(0);
+      // Ducts beyond the largest round duct stay a computed size (several stubs in practice).
+      if (!(p.values.dn! > series[series.length - 1])) expect(series, p.trade).toContain(p.values.dn);
+    }
+  });
+
+  it("survives saving and opening with every point overridden", () => {
+    const over: ItemPoints = {};
+    for (const p of points) over[p.trade] = { x: 10, y: 20, z: 30, currentA: 12.5, fuseA: 16, plug: "cee16", dn: 50, greasy: true, note: "Prüfen" };
+    const withPoints = { ...item, ...(points.length > 0 ? { points: over } : {}) };
+    expect(parseProject(serializeProject(testProject([withPoints]))).items).toEqual([withPoints]);
   });
 });

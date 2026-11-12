@@ -10,6 +10,7 @@ import { building } from "./building";
 import { cooking } from "./cooking";
 import { cooling } from "./cooling";
 import { withGasFlue } from "./parts/flue";
+import { SOFT_WATER_KINDS } from "./parts/pointRules";
 import { prep } from "./prep";
 import { worktable } from "./prep/worktable";
 import { serving } from "./serving";
@@ -36,7 +37,20 @@ export const SUBGROUPS: Partial<Record<CategoryId, readonly GroupId[]>> = {
   serving: ["serveCounters", "selfService", "coffee", "bar"],
 };
 
-export const CATALOG: readonly CatalogEntry[] = AREAS.flatMap((a) => a.entries);
+/**
+ * Connection values the catalog adds by rule rather than in every entry: softened water for the
+ * kinds that need it (`SOFT_WATER_KINDS`), in every variant. Only new items take it from here;
+ * placed items keep the connections they have.
+ */
+export function withConnectionRules(entry: CatalogEntry): CatalogEntry {
+  if (!SOFT_WATER_KINDS.has(entry.kind)) return entry;
+  const add = (c: Connections): Connections => ({ ...c, softWater: true });
+  const of = entry.variantConnections;
+  return { ...entry, connections: add(entry.connections), ...(of ? { variantConnections: (v: Variant) => add(of(v)) } : {}) };
+}
+
+/** Every entry as the sidebar offers it, with the connection rules applied (`withConnectionRules`). */
+export const CATALOG: readonly CatalogEntry[] = AREAS.flatMap((a) => a.entries).map(withConnectionRules);
 
 /** Every kind as the views draw it: gas variants with their flue outlet (`withGasFlue`). */
 export const KINDS: readonly KindDef[] = AREAS.flatMap((a) => a.kinds).map(withGasFlue);

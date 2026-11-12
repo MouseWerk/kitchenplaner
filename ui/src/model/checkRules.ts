@@ -229,6 +229,55 @@ export const NO_HOOD_KINDS: ReadonlySet<string> = new Set([
 /** Units with a door that releases steam: they need `HOOD_OVERHANG_DOOR` at the front. */
 export const STEAM_DOOR_KINDS: ReadonlySet<string> = new Set(["combiOven", "convectionOven", "steamer", "steamerTable", "deckOven1", "deckOven2", "smoker"]);
 
+// --- Connection points and gas (pointChecks.ts; the gas hood rule in clearances.ts) ------------
+//
+// Sources: DVGW-Arbeitsblatt G 631 „Installation von gewerblichen Gasverbrauchseinrichtungen“ and
+// the DVGW-TRGI (gas units in kitchens). UNSURE: the clauses are to be confirmed; the other values
+// are our own planning values (docs/design/connections-0.3.md, section 6).
+
+// A gas unit is used only under a hood or ventilated ceiling (`HOOD_KINDS`) that takes its flue
+// gas: DVGW G 631 / TRGI, UNSURE which clause. A condensing hood or a downdraft module does not
+// count for it, and the kinds of `NO_HOOD_KINDS` need one too when they burn gas.
+
+/** The gas emergency shut-off (Gas-Notabsperrung) a plan with gas units needs: DVGW G 631. UNSURE: the clause. */
+export const GAS_SHUTOFF_KIND = "gasShutoffBox";
+
+/**
+ * A water, drain or gas point this close to a wall face (outer wall or partition) is supplied
+ * along the wall. UNSURE: own value.
+ */
+export const WALL_REACH = 300;
+/**
+ * Further from a wall, a point needs a floor box, a media column, a shaft or a column within this
+ * distance (to its outline) to bring the pipe up; a drain may also run to a floor drain, gully or
+ * channel. A point at height 0 counts as coming from the floor. UNSURE: own value.
+ */
+export const ISLAND_REACH = 1000;
+/** What supplies a point away from the walls: floor boxes, media columns, shafts, columns. */
+export const ISLAND_SUPPLY_KINDS: ReadonlySet<string> = new Set(["floorBox", "mediaColumn", "shaft", "column", "columnRound", "columnClad"]);
+
+/** Floor drains, gullies and drainage channels: what a floor drain point (and an island drain) runs to. */
+export const FLOOR_DRAIN_KINDS: ReadonlySet<string> = new Set(["floorDrain", "floorGully", "floorGullyBucket", "drainChannel"]);
+/**
+ * A floor drain point (in front of a tilting pan or kettle) needs a floor drain or channel within
+ * this distance (to its outline). UNSURE: own value.
+ */
+export const FLOOR_DRAIN_REACH = 600;
+
+/**
+ * Exhaust air a hood needs per kW of heat (sensible plus latent, `model/heat.ts`) released by the
+ * units under it, after the project's simultaneity factor (m³/h per kW). UNSURE: own value, not
+ * from the VDI 2052 tables; calibrated on the example kitchen (examples/README.md) so that it
+ * passes at the catalog airflows. Its tightest hood is the west island hood: 4200 m³/h over about
+ * 43.8 kW of heat (fryer, pasta cooker, bain-marie, solid top, chargrill, and its share of the
+ * range and the griddle), 96 m³/h per kW; the east island hood has 138, the wall hood over the
+ * tilting pan and the kettle 144. Rounded down to 90, so the example keeps about 6 % in hand. A
+ * typical value, worded as such; a ventilation planner sizes the hoods.
+ */
+export const HOOD_AIR_PER_KW = 90;
+/** The needed airflow is rounded up to this step (m³/h), as the catalog gives hood airflows. */
+export const AIRFLOW_STEP = 10;
+
 /** Hand-wash basins: on the wall, standing, or built into a table. */
 export const HANDWASH_KINDS: ReadonlySet<string> = new Set(["handwash", "handwashKnee", "handwashStation", "handwashPedal", "tableHandwash"]);
 

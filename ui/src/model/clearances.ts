@@ -1,5 +1,6 @@
 // The workplace checks of the plan check: free space in front of units and doors, aisles between
-// units facing each other, hoods over the cooking units, and hand-wash basins near production.
+// units facing each other, hoods over the cooking units (and over every gas unit), and hand-wash
+// basins near production.
 // Their thresholds and the units they apply to are in `checkRules.ts`; each finding gives the
 // measured value against the required one and names the units involved.
 
@@ -581,6 +582,8 @@ const HOOD_KEYS = { front: "check.hoodFront", back: "check.hoodBack", side: "che
 
 /** Does a cooking unit need a hood above it? */
 const needsHood = (u: Unit) => u.category === "cooking" && (u.placement === "floor" || u.placement === "tableTop") && !NO_HOOD_KINDS.has(u.kind);
+/** A unit burning gas, on the floor or a table: it needs a canopy or ceiling whatever its kind. */
+const burnsGas = (u: Unit) => (u.it.connections.gasKw ?? 0) > 0 && (u.placement === "floor" || u.placement === "tableTop");
 
 /**
  * Every cooking unit that needs one stands under a hood (`HOOD_KINDS`, hanging above its top)
@@ -590,6 +593,11 @@ const needsHood = (u: Unit) => u.category === "cooking" && (u.placement === "flo
  * outwards from points along each side; a negative value means the hood ends that far inside the
  * unit. A condensing hood on an oven it serves, or a downdraft module beside the unit, replaces
  * the canopy for it.
+ *
+ * A gas unit needs a canopy or ceiling in any case (DVGW G 631, `checkRules.ts`): a condensing
+ * hood or downdraft does not replace it, and a kind that otherwise needs none is not exempt.
+ * Without one it gets `check.gasNoHood` instead of `check.hoodMissing`, so the unit is reported
+ * once; under one, the overhang is measured as for any cooking unit that needs a hood.
  */
 function hoodIssues(units: Unit[], walls: Obstacle[], posOf: (id: string) => number): Issue[] {
   const hoods = units.filter((u) => u.placement === "overhead" && HOOD_KINDS.has(u.kind));
@@ -597,16 +605,19 @@ function hoodIssues(units: Unit[], walls: Obstacle[], posOf: (id: string) => num
   const downdrafts = units.filter((u) => u.kind === DOWNDRAFT_KIND);
   const issues: Issue[] = [];
   for (const u of units) {
-    if (!needsHood(u)) continue;
+    const gas = burnsGas(u);
+    const needs = needsHood(u);
+    if (!needs && !gas) continue;
     const { it } = u;
-    if (CONDENSING_HOOD_SERVES.has(u.kind) && condensing.some((h) => boxesMeet(h.box, u.box) && convexOverlap(h.fp, u.fp))) continue;
-    if (downdrafts.some((m) => touching(m, u))) continue;
+    if (!gas && CONDENSING_HOOD_SERVES.has(u.kind) && condensing.some((h) => boxesMeet(h.box, u.box) && convexOverlap(h.fp, u.fp))) continue;
+    if (!gas && downdrafts.some((m) => touching(m, u))) continue;
     const top = it.elevation + it.height;
     const above = hoods.filter((h) => h.it.elevation >= top - TOLERANCE && boxesMeet(h.box, u.box) && convexOverlap(h.fp, u.fp));
     if (above.length === 0) {
-      issues.push({ key: "check.hoodMissing", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
+      issues.push({ key: gas ? "check.gasNoHood" : "check.hoodMissing", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
       continue;
     }
+    if (!needs) continue;
     const toLocal = localFrame(it);
     const local = above.map((h) => h.fp.map(toLocal));
     const nearWalls = walls.filter((w) => boxesMeet(w.box, grow(u.box, HOOD_OVERHANG_DOOR))).map((w) => w.pts.map(toLocal));

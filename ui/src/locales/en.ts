@@ -1219,10 +1219,41 @@ export const en: Record<keyof typeof de, Msg> = {
   // ---- 0.3 A catalog
 
   // ---- 0.3 B files
+  "list.soft": "Soft",
+  "list.supply": "Supply air (m³/h)",
+  "list.heat": "Heat sensible/latent (kW)",
+  "pointList.no": "No.",
+  "pointList.trade": "Trade",
+  "pointList.x": "X",
+  "pointList.y": "Y",
+  "pointList.wallA": "Wall A",
+  "pointList.distA": "Distance A",
+  "pointList.wallB": "Wall B",
+  "pointList.distB": "Distance B",
+  "pointList.height": "Height above FFL",
+  "pointList.kw": "kW",
+  "pointList.voltage": "V",
+  "pointList.phases": "Phases",
+  "pointList.current": "A",
+  "pointList.fuse": "Fuse",
+  "pointList.plug": "Connection type",
+  "pointList.dn": "DN",
+  "pointList.m3h": "m³/h",
+  "pointList.kgH": "kg/h",
+  "pointList.greasy": "greasy",
+  "pointList.note": "Note",
 
   // ---- 0.3 C drawing
+  "legend.title": "Legend",
+  "legend.heights": "Heights in mm above finished floor level (FFL)",
 
   // ---- 0.3 D checks
+  "check.gasNoHood": "No extraction hood or ventilated ceiling hangs above the gas unit pos. {pos}.",
+  "check.gasShutoffMissing": "The plan has no gas emergency shut-off.",
+  "check.islandSupply": "The connection {point} is {measured} mm from the nearest wall, with no floor box, service column or shaft within reach.",
+  "check.floorDrainMissing": "No drain or channel lies within {required} mm of the floor drain point {point}.",
+  "check.hoodAirflow": "Hood pos. {hood} extracts {measured} m³/h; about {required} m³/h are needed (typical value).",
+  "check.pointOutside": "The connection {point} lies outside the room or inside a partition.",
 
   // ---- 0.3 E inspector
 

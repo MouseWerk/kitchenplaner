@@ -1,8 +1,8 @@
 // Ventilation: canopy hoods above the cooking line (plain, with UV technology or with supply air),
 // a condensing hood for combi ovens, a vapour hood over the dishwasher, ventilation ceiling
 // modules, a downdraft module for cooking islands, supply air outlets, the fire suppression line,
-// the exhaust fan box, exhaust ducts and shafts. Exhaust volumes are typical starting points that
-// scale with the length of the hood; the ventilation planner sets the real values.
+// the exhaust fan box, exhaust ducts and shafts. Exhaust and supply volumes are typical starting
+// points that scale with the size of the unit; the ventilation planner sets the real values.
 
 import { withVariants } from "../parts/entries";
 import { HOOD_ELEVATION } from "../parts/sizes";
@@ -24,6 +24,17 @@ const DISH_HOOD_ELEVATION = 2050;
 const SUPPRESSION_ELEVATION = 2050;
 /** Lower edge of a fan box hung under a ceiling of a plant room or a ceiling void (mm). */
 const FAN_BOX_ELEVATION = 2400;
+
+/**
+ * Supply air as a share of the exhaust (unsure, own typical values): a hood with a supply air
+ * curtain brings in most of what it extracts, a supply air ceiling most of the kitchen's make-up
+ * air; the kitchen stays at a slight negative pressure either way.
+ */
+const HOOD_SUPPLY_SHARE = 0.7;
+const CEILING_SUPPLY_SHARE = 0.85;
+/** Supply air of a 600 mm swirl diffuser and of a 600 mm wide displacement outlet (m³/h, unsure). */
+const SWIRL_M3H = 500;
+const DISPLACEMENT_M3H = 400;
 
 /** Values rounded: air to 10 m³/h, power to 10 W. */
 const air = (v: number) => Math.round(v / 10) * 10;
@@ -51,11 +62,16 @@ export const entries: readonly CatalogEntry[] = [
   ),
   withVariants(
     { id: "hood-wall-supply", kind: "hoodSupply", category: "ventilation", name: "cat.hoodWallSupply", description: "catDesc.hoodWallSupply", width: 2400, depth: 1100, height: 450, elevation: HOOD_ELEVATION, widths: [1600, 2000, 2400, 2800, 3200, 3600], tags: ["abzugshaube", "zuluft", "zuluftschleier", "induktionshaube", "wandhaube", "canopy", "supply air", "make-up air", "extraction"] },
-    ({ width }) => ({ exhaustM3h: air((width / 2400) * 2600), electricKw: kw((width / 2400) * 0.1), voltage: 230 }),
+    ({ width }) => ({ exhaustM3h: air((width / 2400) * 2600), electricKw: kw((width / 2400) * 0.1), voltage: 230, supplyM3h: air((width / 2400) * 2600 * HOOD_SUPPLY_SHARE) }),
   ),
   withVariants(
     { id: "vent-ceiling-supply", kind: "ventCeilingSupply", category: "ventilation", name: "cat.ventCeilingSupply", description: "catDesc.ventCeilingSupply", width: 3600, depth: 1600, height: 300, elevation: CEILING_ELEVATION, widths: [1800, 3600, 5400], tags: ["lüftungsdecke", "zuluftdecke", "zuluft", "abluftdecke", "ventilated ceiling", "supply air", "extraction", "ceiling"] },
-    ({ width }) => ({ exhaustM3h: air((width / 1000) * CEILING_DEPTH * CEILING_EXHAUST_PER_M2), electricKw: kw((width / 1800) * 0.08), voltage: 230 }),
+    ({ width }) => ({
+      exhaustM3h: air((width / 1000) * CEILING_DEPTH * CEILING_EXHAUST_PER_M2),
+      electricKw: kw((width / 1800) * 0.08),
+      voltage: 230,
+      supplyM3h: air((width / 1000) * CEILING_DEPTH * CEILING_EXHAUST_PER_M2 * CEILING_SUPPLY_SHARE),
+    }),
   ),
   withVariants(
     { id: "dish-hood", kind: "dishHood", category: "ventilation", name: "cat.dishHood", description: "catDesc.dishHood", width: 1000, depth: 900, height: 400, elevation: DISH_HOOD_ELEVATION, widths: [800, 1000, 1200, 1600], tags: ["brüdenhaube", "dampfhaube", "spülmaschine", "haubenspülmaschine", "kondensat", "vapour hood", "dishwasher", "condensate"] },
@@ -65,8 +81,15 @@ export const entries: readonly CatalogEntry[] = [
     { id: "downdraft", kind: "downdraft", category: "ventilation", name: "cat.downdraft", description: "catDesc.downdraft", width: 400, depth: 900, height: 900, elevation: 0, widths: [400, 600, 800], tags: ["tischlüftung", "muldenlüftung", "downdraft", "kochinsel", "absaugung", "island", "extraction"] },
     ({ width }) => ({ exhaustM3h: air((width / 400) * 800), electricKw: kw((width / 400) * 0.25), voltage: 230 }),
   ),
-  { id: "swirl-diffuser", kind: "swirlDiffuser", category: "ventilation", name: "cat.swirlDiffuser", description: "catDesc.swirlDiffuser", width: 600, depth: 600, height: 350, elevation: CEILING_ELEVATION, widths: [500, 600, 625], tags: ["drallauslass", "zuluft", "deckenauslass", "luftauslass", "swirl diffuser", "supply air", "make-up air", "ceiling"], connections: {} },
-  { id: "displacement-outlet", kind: "displacementOutlet", category: "ventilation", name: "cat.displacementOutlet", description: "catDesc.displacementOutlet", width: 600, depth: 300, height: 1200, elevation: 0, widths: [500, 600, 800], tags: ["quellluftauslass", "quellauslass", "zuluft", "verdrängungslüftung", "displacement", "supply air", "make-up air"], connections: {} },
+  withVariants(
+    { id: "swirl-diffuser", kind: "swirlDiffuser", category: "ventilation", name: "cat.swirlDiffuser", description: "catDesc.swirlDiffuser", width: 600, depth: 600, height: 350, elevation: CEILING_ELEVATION, widths: [500, 600, 625], tags: ["drallauslass", "zuluft", "deckenauslass", "luftauslass", "swirl diffuser", "supply air", "make-up air", "ceiling"] },
+    // The face of a square diffuser grows with the square of its size.
+    ({ width }) => ({ supplyM3h: air(SWIRL_M3H * (width / 600) ** 2) }),
+  ),
+  withVariants(
+    { id: "displacement-outlet", kind: "displacementOutlet", category: "ventilation", name: "cat.displacementOutlet", description: "catDesc.displacementOutlet", width: 600, depth: 300, height: 1200, elevation: 0, widths: [500, 600, 800], tags: ["quellluftauslass", "quellauslass", "zuluft", "verdrängungslüftung", "displacement", "supply air", "make-up air"] },
+    ({ width }) => ({ supplyM3h: air(DISPLACEMENT_M3H * (width / 600)) }),
+  ),
   withVariants(
     { id: "fire-suppression", kind: "fireSuppression", category: "ventilation", name: "cat.fireSuppression", description: "catDesc.fireSuppression", width: 2400, depth: 300, height: 400, elevation: SUPPRESSION_ELEVATION, widths: [1600, 2400, 3200, 4000], tags: ["löschanlage", "feuerlöschanlage", "küchenlöschanlage", "düsen", "brandschutz", "fire suppression", "nozzles", "wet chemical"] },
     () => ({ electricKw: 0.05, voltage: 230 }),

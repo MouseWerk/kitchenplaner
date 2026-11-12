@@ -5,8 +5,10 @@ import { catalogEntry } from "../kinds/registry";
 import { clampOpening, MAX_LENGTH } from "./geometry";
 import { clampPartitionOpening, MAX_PARTITION_THICKNESS, MIN_PARTITION_THICKNESS } from "./partitions";
 import { DEFAULT_SETTINGS, FORMAT_VERSION, MAX_SIMULTANEITY, MIN_SIMULTANEITY, newId, repairPositions } from "./project";
+import { cleanPoints } from "./points";
 import { COINCIDENT_DISTANCE, isUsableOutline, removeCoincidentCorners } from "./roomEdit";
-import { ENERGIES, type Connections, type DoorHinge, type DoorSwing, type Energy, type Item, type ItemSpec, type Opening, type OpeningKind, type Partition, type Project, type ProjectInfo, type ProjectSettings, type Room, type Vec2 } from "./types";
+import { PLUGS, TRADES } from "./trades";
+import { ENERGIES, type Connections, type DoorHinge, type DoorSwing, type Energy, type HeatRelease, type Item, type ItemPoints, type ItemSpec, type Opening, type OpeningKind, type Partition, type PointOverride, type Project, type ProjectInfo, type ProjectSettings, type Room, type Trade, type Vec2 } from "./types";
 import { t, type TKey } from "../lib/i18n";
 
 const FORMAT_ID = "kitchenplaner";
@@ -21,10 +23,16 @@ const SWINGS: readonly DoorSwing[] = ["in", "out"];
 const LEAVES: readonly (1 | 2)[] = [1, 2];
 /** Text fields of an item's product, in file order. */
 const SPEC_TEXTS = ["manufacturer", "model", "article"] as const;
-const CONNECTION_NUMBERS = ["electricKw", "voltage", "gasKw", "exhaustM3h"] as const;
-const CONNECTION_FLAGS = ["coldWater", "hotWater", "drain", "floorDrain"] as const;
-/** Key order of connections in the file. */
-const CONNECTION_ORDER: readonly (keyof Connections)[] = ["electricKw", "voltage", "gasKw", "coldWater", "hotWater", "drain", "floorDrain", "exhaustM3h"];
+const CONNECTION_NUMBERS = ["electricKw", "voltage", "gasKw", "exhaustM3h", "supplyM3h", "steamKgH", "refrigerationKw"] as const;
+const CONNECTION_FLAGS = ["coldWater", "hotWater", "drain", "floorDrain", "softWater"] as const;
+/** Key order of connections in the file; the keys of version 4 go last, so older files keep their order. */
+const CONNECTION_ORDER: readonly (keyof Connections)[] = ["electricKw", "voltage", "gasKw", "coldWater", "hotWater", "drain", "floorDrain", "exhaustM3h", "softWater", "supplyM3h", "steamKgH", "refrigerationKw"];
+/** Key order of a point override in the file. */
+const OVERRIDE_ORDER: readonly (keyof PointOverride)[] = ["x", "y", "z", "currentA", "fuseA", "plug", "dn", "greasy", "note"];
+/** Fields of an override that are a current or a nominal size: above 0 and at most MAX_OVERRIDE_SIZE. */
+const OVERRIDE_SIZES = ["currentA", "fuseA", "dn"] as const;
+const MAX_OVERRIDE_SIZE = 2000;
+const HEAT_ORDER: readonly (keyof HeatRelease)[] = ["sensibleKw", "latentKw"];
 
 /** A project file that cannot be opened; `key` is the message for the user, `detail` for logs. */
 export class ProjectError extends Error {
@@ -81,6 +89,9 @@ export function serializeProject(p: Project): string {
       const spec: ItemSpec = {};
       for (const k of SPEC_TEXTS) if (it.spec?.[k] !== undefined) spec[k] = it.spec[k];
       if (it.spec?.price !== undefined) spec.price = it.spec.price;
+      const points = writePoints(it);
+      const heat: HeatRelease = {};
+      for (const k of HEAT_ORDER) if (it.heat?.[k] !== undefined) heat[k] = it.heat[k];
       return {
         id: it.id,
         pos: it.pos,
@@ -95,12 +106,32 @@ export function serializeProject(p: Project): string {
         elevation: it.elevation,
         connections,
         ...(it.energy !== undefined ? { energy: it.energy } : {}),
+        ...(points !== undefined ? { points } : {}),
+        ...(Object.keys(heat).length > 0 ? { heat } : {}),
         ...(Object.keys(spec).length > 0 ? { spec } : {}),
         ...(it.note !== undefined ? { note: it.note } : {}),
       };
     }),
   };
   return JSON.stringify(doc, null, 2) + "\n";
+}
+
+/**
+ * The overrides as the file holds them: those of active trades, in `TRADES` order and each in
+ * `OVERRIDE_ORDER`, empty ones left out (`cleanPoints`), so what is written reads back the same.
+ */
+function writePoints(it: Item): Partial<Record<Trade, Record<string, unknown>>> | undefined {
+  const points = cleanPoints(it);
+  if (!points) return undefined;
+  const out: Partial<Record<Trade, Record<string, unknown>>> = {};
+  for (const tr of TRADES) {
+    const o = points[tr];
+    if (!o) continue;
+    const fields: Record<string, unknown> = {};
+    for (const k of OVERRIDE_ORDER) if (o[k] !== undefined) fields[k] = o[k];
+    out[tr] = fields;
+  }
+  return out;
 }
 
 /**
@@ -116,7 +147,12 @@ export function serializeProject(p: Project): string {
  * and a door's `hinge`, `swing` and `leaves`, `info.drawingNo` and `info.revision`, and
  * `settings.simultaneity`. Older files get the position numbers of their list order (what they
  * showed) and the simultaneity 1 (their totals stay the plain sums). Position numbers that are
- * not whole numbers >= 1 or repeat one before them are renumbered (`repairPositions`).
+ * not whole numbers >= 1 or repeat one before them are renumbered (`repairPositions`). 4 adds the
+ * connection points' overrides (`points`), the heat release (`heat`) and the connections
+ * `softWater`, `supplyM3h`, `steamKgH` and `refrigerationKw`. A version 3 file needs no change: its
+ * units show their derived points. A build for version 3 refuses a version 4 file as too new
+ * instead of silently dropping the overrides. Overrides of unknown trades, and of trades the
+ * unit's connections do not switch on, are dropped.
  */
 export function parseProject(text: string): Project {
   let raw: unknown;
@@ -332,12 +368,57 @@ function parseItem(v: unknown, path: string, listPos?: number): Item {
     if (!ENERGIES.includes(v.energy as Energy)) invalid(`${path}.energy`, v.energy);
     item.energy = v.energy as Energy;
   }
+  if (v.points !== undefined) {
+    const points = cleanPoints({ points: parsePoints(v.points, `${path}.points`), connections: item.connections });
+    if (points) item.points = points;
+  }
+  if (v.heat !== undefined) {
+    const heat = parseHeat(v.heat, `${path}.heat`);
+    if (Object.keys(heat).length > 0) item.heat = heat;
+  }
   if (v.spec !== undefined) {
     const spec = parseSpec(v.spec, `${path}.spec`);
     if (Object.keys(spec).length > 0) item.spec = spec;
   }
   if (v.note !== undefined) item.note = str(v.note, `${path}.note`);
   return item;
+}
+
+/** The overrides of the known trades; whether their trade is active is up to the caller. */
+function parsePoints(v: unknown, path: string): ItemPoints {
+  if (!isObject(v)) invalid(path, v);
+  const points: ItemPoints = {};
+  for (const tr of TRADES) if (v[tr] !== undefined) points[tr] = parseOverride(v[tr], `${path}.${tr}`);
+  return points;
+}
+
+function parseOverride(v: unknown, path: string): PointOverride {
+  if (!isObject(v)) invalid(path, v);
+  const o: PointOverride = {};
+  // Offsets from the unit's edges and the height: a point may lie in front of the unit or below
+  // the floor, but within the range of any position on the plan.
+  for (const k of ["x", "y", "z"] as const) if (v[k] !== undefined) o[k] = num(v[k], `${path}.${k}`, "coordinate");
+  for (const k of OVERRIDE_SIZES) {
+    if (v[k] === undefined) continue;
+    const n = num(v[k], `${path}.${k}`, "positive");
+    if (n > MAX_OVERRIDE_SIZE) invalid(`${path}.${k}`, n);
+    o[k] = n;
+  }
+  const plug = oneOf(v.plug, `${path}.plug`, PLUGS);
+  if (plug !== undefined) o.plug = plug;
+  if (v.greasy !== undefined) {
+    if (typeof v.greasy !== "boolean") invalid(`${path}.greasy`, v.greasy);
+    o.greasy = v.greasy;
+  }
+  if (v.note !== undefined) o.note = str(v.note, `${path}.note`);
+  return o;
+}
+
+function parseHeat(v: unknown, path: string): HeatRelease {
+  if (!isObject(v)) invalid(path, v);
+  const heat: HeatRelease = {};
+  for (const k of HEAT_ORDER) if (v[k] !== undefined) heat[k] = num(v[k], `${path}.${k}`, "nonNegative");
+  return heat;
 }
 
 function parseSpec(v: unknown, path: string): ItemSpec {

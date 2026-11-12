@@ -2,11 +2,12 @@
 
 import { catalogEntry, defaultVariant, variantConnections, type CatalogEntry, type Variant } from "../kinds/registry";
 import { bounds, rectRoom } from "./geometry";
+import { cleanPoints } from "./points";
 import type { Item, ItemSpec, Project, ProjectSettings } from "./types";
 import { t } from "../lib/i18n";
 
 /** The file format version this build writes (`serialize.ts` migrates older ones). */
-export const FORMAT_VERSION = 3;
+export const FORMAT_VERSION = 4;
 
 /**
  * Settings of a new project and of files written before version 3. Simultaneity 1 means the
@@ -76,14 +77,20 @@ export function itemFromCatalog(entry: CatalogEntry, x: number, y: number, rotat
 /**
  * The change of an item switched to another variant of its entry (a width step or an energy).
  * The connection values follow the variant when the entry gives them per variant, or when the
- * energy changes; otherwise the item keeps its own (possibly edited) values.
+ * energy changes; otherwise the item keeps its own (possibly edited) values. Point overrides of
+ * trades the new values switch off are dropped (`cleanPoints`).
  */
 export function variantPatch(item: Item, entry: CatalogEntry, change: Partial<Variant>): Partial<Item> {
   const current = item.energy ?? entry.energy?.[0];
   const v: Variant = { width: change.width ?? item.width, energy: change.energy ?? current };
   const patch: Partial<Item> = { width: v.width };
   if (v.energy !== undefined) patch.energy = v.energy;
-  if (entry.variantConnections || v.energy !== current) patch.connections = variantConnections(entry, v);
+  if (entry.variantConnections || v.energy !== current) {
+    patch.connections = variantConnections(entry, v);
+    // The overrides of trades the new variant does not have go (gas to electric drops the gas
+    // point); undo brings them back with the old variant.
+    if (item.points) patch.points = cleanPoints({ points: item.points, connections: patch.connections });
+  }
   return patch;
 }
 

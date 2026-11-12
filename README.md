@@ -60,7 +60,7 @@ Bildunterschriften: [pitch/](pitch/README.md).
 
 ## Beispielküche
 
-Zum Ausprobieren gibt es eine fertig geplante Restaurantküche mit 65 Positionen in
+Zum Ausprobieren gibt es eine fertig geplante Restaurantküche mit 67 Positionen in
 [`examples/`](examples/README.md) (Deutsch und Englisch). Die beiden Dateien hängen auch an jedem
 Release. In Kitchenplaner „Öffnen…“ (Strg+O) und die Datei wählen, oder die Datei doppelklicken.
 

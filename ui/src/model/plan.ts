@@ -20,6 +20,13 @@ export interface PlanOptions {
    * position numbers and names and spaces the dimension rows, which are sized in paper mm.
    */
   paperScale?: number;
+  /** Draws each unit's kind details (hob plates, bowls, door swings); default true. */
+  symbols?: boolean;
+  /**
+   * Draws the equipment quietly, as the background of an installation plan: thin outlines without
+   * fill. Building parts (columns, shafts) stay as they are. Default false.
+   */
+  quiet?: boolean;
 }
 
 /** The usual plan scale of kitchen plans (1:50). */
@@ -61,7 +68,8 @@ export function planDrawing(project: Project, opts: PlanOptions): Drawing {
 
   const pos = positions(project);
   const ordered = PLAN_ORDER.flatMap((p) => project.items.filter((it) => placementOf(kindOf(it.catalogId)) === p));
-  for (const it of ordered) drawItem(it, shapes);
+  const look = { symbols: opts.symbols ?? true, quiet: opts.quiet ?? false };
+  for (const it of ordered) drawItem(it, look, shapes);
   const centres = labelCentres(ordered, ps);
   ordered.forEach((it, i) => {
     // Circled text hangs its circle above the baseline; lower it so the circle sits on the centre.
@@ -161,7 +169,7 @@ const GRID_MAX_INDEX = 2 ** 25;
 const cellKey = (ix: number, iy: number) => ix * 2 * GRID_MAX_INDEX + iy;
 
 /** The box around `p` reaching `d` in each direction. */
-const around = (p: Vec2, d: number): Box => ({ minX: p.x - d, minY: p.y - d, maxX: p.x + d, maxY: p.y + d });
+export const around = (p: Vec2, d: number): Box => ({ minX: p.x - d, minY: p.y - d, maxX: p.x + d, maxY: p.y + d });
 const grown = (b: Box, d: number): Box => ({ minX: b.minX - d, minY: b.minY - d, maxX: b.maxX + d, maxY: b.maxY + d });
 
 /**
@@ -171,7 +179,7 @@ const grown = (b: Box, d: number): Box => ({ minX: b.minX - d, minY: b.minY - d,
  * looks only at the cells its box touches; every box that reaches into the query box shares one
  * of them, so the caller's exact test sees all it would have seen and decides the same.
  */
-class BoxGrid<T> {
+export class BoxGrid<T> {
   private readonly cells = new Map<number, T[]>();
   /** Values whose box covers too many cells or is not finite: tested by every query. */
   private readonly loose: T[] = [];
@@ -276,7 +284,7 @@ function nameBox(p: Vec2, w: number, h: number): Box {
   return { minX: p.x - w / 2, maxX: p.x + w / 2, minY: p.y - TEXT_ASCENT * h, maxY: p.y + TEXT_DESCENT * h };
 }
 
-const boxesMeet = (a: Box, b: Box, gap: number) => a.minX < b.maxX + gap && b.minX < a.maxX + gap && a.minY < b.maxY + gap && b.minY < a.maxY + gap;
+export const boxesMeet = (a: Box, b: Box, gap: number) => a.minX < b.maxX + gap && b.minX < a.maxX + gap && a.minY < b.maxY + gap && b.minY < a.maxY + gap;
 
 function boxMeetsCircle(b: Box, c: Vec2, r: number): boolean {
   const dx = Math.max(b.minX - c.x, 0, c.x - b.maxX);
@@ -574,11 +582,17 @@ function outlineStyle(def: KindDef): { pen: Pen; fill: Fill } {
   }
 }
 
-function drawItem(it: Item, shapes: Shape[]) {
+/** Thin and unfilled, so the points drawn on top read first; overhead units keep their dashes. */
+function quietStyle(def: KindDef): { pen: Pen; fill: Fill } {
+  if (def.structural) return outlineStyle(def);
+  return { pen: def.placement === "overhead" ? "overhead" : "detail", fill: "none" };
+}
+
+function drawItem(it: Item, look: { symbols: boolean; quiet: boolean }, shapes: Shape[]) {
   const def = kindDef(kindOf(it.catalogId));
   const pts = def.planOutline ? def.planOutline(it.width, it.depth).map((p) => toPlan(it, p)) : footprint(it);
-  shapes.push({ t: "poly", ...outlineStyle(def), pts, closed: true, itemId: it.id });
-  def.plan(new PlanSketch(it, shapes));
+  shapes.push({ t: "poly", ...(look.quiet ? quietStyle(def) : outlineStyle(def)), pts, closed: true, itemId: it.id });
+  if (look.symbols) def.plan(new PlanSketch(it, shapes));
 }
 
 // ---- Dimensions ----

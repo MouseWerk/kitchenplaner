@@ -7,8 +7,12 @@
 // The defaults come from a chain of sources, the later one winning: a profile by placement (this
 // file), then the rules registered with `registerPointRule` (by category or group, by kind, by
 // entry: `pointRules.ts`), then the entry's own `points`.
+//
+// Water follows the fitter's convention for taps and angle valves: hot on the left, cold on the
+// right, seen from the front (softened water between them).
 
 import { catalogEntry, kindOf, placementOf } from "../registry";
+import { POINT_RULES } from "./pointRules";
 import { TRADES } from "../../model/trades";
 import type { Item, Plug, Trade } from "../../model/types";
 import type { CatalogEntry, Placement } from "../types";
@@ -72,8 +76,8 @@ const SUPPLY_TOP = at(L(300), C(), top(0));
 const BACK_PROFILE: Record<Trade, PointPlace> = {
   electric: at(R(150), BACK(50), floor(300)),
   gas: at(L(150), BACK(50), floor(300)),
-  coldWater: at(C(-100), BACK(50), floor(400)),
-  hotWater: at(C(100), BACK(50), floor(400)),
+  coldWater: at(C(100), BACK(50), floor(400)),
+  hotWater: at(C(-100), BACK(50), floor(400)),
   softWater: at(C(0), BACK(50), floor(400)),
   drain: at(C(), BACK(50), floor(200)),
   floorDrain: IN_FRONT,
@@ -97,8 +101,8 @@ export const PROFILES: Readonly<Record<ProfileId, Readonly<Record<Trade, PointPl
   tableTop: {
     electric: at(C(), BACK(0), bottom(250)),
     gas: at(L(150), BACK(50), bottom(-300)),
-    coldWater: at(C(-100), BACK(50), bottom(-300)),
-    hotWater: at(C(100), BACK(50), bottom(-300)),
+    coldWater: at(C(100), BACK(50), bottom(-300)),
+    hotWater: at(C(-100), BACK(50), bottom(-300)),
     softWater: at(C(0), BACK(50), bottom(-300)),
     drain: at(C(), BACK(50), bottom(-400)),
     floorDrain: IN_FRONT,
@@ -110,8 +114,8 @@ export const PROFILES: Readonly<Record<ProfileId, Readonly<Record<Trade, PointPl
   // Water under the bowl (the rules know where the bowl is; the centre until then).
   sink: {
     ...BACK_PROFILE,
-    coldWater: at(C(-100), BACK(50), floor(550)),
-    hotWater: at(C(100), BACK(50), floor(550)),
+    coldWater: at(C(100), BACK(50), floor(550)),
+    hotWater: at(C(-100), BACK(50), floor(550)),
     softWater: at(C(0), BACK(50), floor(550)),
     drain: at(C(), BACK(50), floor(400)),
     steam: at(L(300), BACK(50), floor(550)),
@@ -119,24 +123,24 @@ export const PROFILES: Readonly<Record<ProfileId, Readonly<Record<Trade, PointPl
   // Dish machines: water higher up behind the machine, the drain low.
   dish: {
     ...BACK_PROFILE,
-    coldWater: at(C(-100), BACK(50), floor(500)),
-    hotWater: at(C(100), BACK(50), floor(500)),
+    coldWater: at(C(100), BACK(50), floor(500)),
+    hotWater: at(C(-100), BACK(50), floor(500)),
     softWater: at(C(0), BACK(50), floor(500)),
     steam: at(L(300), BACK(50), floor(500)),
   },
   // Tilting pans and kettles: the filling tap's water high on the right, a floor drain in front.
   tilt: {
     ...BACK_PROFILE,
-    coldWater: at(R(300), BACK(50), floor(900)),
-    hotWater: at(R(200), BACK(50), floor(900)),
-    softWater: at(R(400), BACK(50), floor(900)),
+    coldWater: at(R(200), BACK(50), floor(900)),
+    hotWater: at(R(400), BACK(50), floor(900)),
+    softWater: at(R(300), BACK(50), floor(900)),
   },
   // Hand wash basins, water heaters: hung on the wall, connections just above and below.
   wallHung: {
     electric: at(R(150), BACK(0), top(100)),
     gas: at(L(150), BACK(0), bottom(-100)),
-    coldWater: at(C(-100), BACK(0), bottom(-100)),
-    hotWater: at(C(100), BACK(0), bottom(-100)),
+    coldWater: at(C(100), BACK(0), bottom(-100)),
+    hotWater: at(C(-100), BACK(0), bottom(-100)),
     softWater: at(C(0), BACK(0), bottom(-100)),
     drain: at(C(), BACK(0), bottom(-150)),
     floorDrain: IN_FRONT,
@@ -149,8 +153,8 @@ export const PROFILES: Readonly<Record<ProfileId, Readonly<Record<Trade, PointPl
   overhead: {
     electric: at(R(150), C(), top(0)),
     gas: at(L(150), C(), top(0)),
-    coldWater: at(C(-100), C(), top(0)),
-    hotWater: at(C(100), C(), top(0)),
+    coldWater: at(C(100), C(), top(0)),
+    hotWater: at(C(-100), C(), top(0)),
     softWater: at(C(0), C(), top(0)),
     drain: at(C(), C(), bottom(0)),
     floorDrain: IN_FRONT,
@@ -213,11 +217,14 @@ export interface PointRuleResult {
 /** A source of defaults after the placement: nothing (undefined) when it has no say on the unit. */
 export type PointRule = (ctx: PointContext) => PointRuleResult | undefined;
 
-const rules: PointRule[] = [];
+// The catalog's own rules are registered here rather than by importing `pointRules.ts` for its
+// side effect: registry.ts and this file import each other, so a registration from the other
+// side could run before `rules` exists, depending on which module is loaded first.
+const rules: PointRule[] = [...POINT_RULES];
 
 /**
- * Adds a source of defaults; later ones win. `pointRules.ts` registers its rules by category or
- * group, by kind and by entry, in that order. Registering the same function twice has no effect.
+ * Adds a source of defaults after the catalog's own (`POINT_RULES`: by category or group, by
+ * kind, by entry); later ones win. Registering the same function twice has no effect.
  */
 export function registerPointRule(rule: PointRule): void {
   if (!rules.includes(rule)) rules.push(rule);

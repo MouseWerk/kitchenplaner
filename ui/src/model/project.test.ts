@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG } from "../kinds/registry";
-import { cleanSpec, DEFAULT_SETTINGS, itemFromCatalog, newProject, nextPos, numberNew, positions, renumberPositions, repairPositions } from "./project";
+import { CATALOG, catalogEntry, variantConnections } from "../kinds/registry";
+import { cleanSpec, DEFAULT_SETTINGS, itemFromCatalog, newProject, nextPos, numberNew, positions, renumberPositions, repairPositions, variantPatch } from "./project";
 import { testItem, testProject } from "./testProject";
 
 describe("stable position numbers", () => {
@@ -68,5 +68,34 @@ describe("cleanSpec", () => {
     expect(cleanSpec({ manufacturer: "  Muster GmbH ", model: "", article: " ", price: 0 })).toEqual({ manufacturer: "Muster GmbH" });
     expect(cleanSpec({ price: 12.5 })).toEqual({ price: 12.5 });
     expect(cleanSpec({ model: "  " })).toBeUndefined();
+  });
+});
+
+describe("variantPatch", () => {
+  const range = catalogEntry("range-6")!;
+  const gasRange = () => testItem("r", "range-6", 2000, 450, 0, { energy: "gas", connections: variantConnections(range, { width: 1200, energy: "gas" }), points: { gas: { dn: 25, note: "Stutzen links" }, electric: { z: 500 } } });
+
+  it("drops the gas override when a unit switches from gas to electric", () => {
+    const item = gasRange();
+    expect(item.connections.gasKw).toBeGreaterThan(0);
+    const patch = variantPatch(item, range, { energy: "electric" });
+    expect(patch.energy).toBe("electric");
+    expect(patch.connections?.gasKw ?? 0).toBe(0);
+    // The gas variant has no electric point, so its override was not in effect; the electric
+    // variant has one, and it comes back where the planner put it.
+    expect(patch.points).toEqual({ electric: { z: 500 } });
+  });
+
+  it("keeps the overrides when the connections stay", () => {
+    const item = gasRange();
+    const patch = variantPatch(item, range, { width: 1200 });
+    // The range gives its connections per width, so they are set again; the gas point stays.
+    expect(patch.connections).toEqual({ gasKw: 43 });
+    expect(patch.points).toEqual({ gas: { dn: 25, note: "Stutzen links" } });
+  });
+
+  it("leaves units without overrides alone", () => {
+    const item = testItem("r", "range-6", 2000, 450, 0, { energy: "gas", connections: variantConnections(range, { width: 1200, energy: "gas" }) });
+    expect(variantPatch(item, range, { energy: "electric" })).not.toHaveProperty("points");
   });
 });

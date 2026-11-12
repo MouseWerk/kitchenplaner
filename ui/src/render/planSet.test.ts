@@ -192,7 +192,8 @@ describe("plan set PDF", () => {
     }
     const lastList = titles[4 + check.listPages];
     expect(lastList).toContain("Summe");
-    expect(project.items.filter((it) => lastList.includes(String(it.pos))).length).toBeGreaterThanOrEqual(2);
+    // planSet.ts promises that at least one row moves with the totals, never the totals alone.
+    expect(project.items.filter((it) => lastList.includes(String(it.pos))).length).toBeGreaterThanOrEqual(1);
     // The 3D view as the last page, as an image.
     expect(titles[m - 1]).toContain("3D");
     expect(pdf.pages[m - 1].content).toContain("/Im1 Do");

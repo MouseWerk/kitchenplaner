@@ -56,7 +56,8 @@ describe("itemPoints", () => {
     expect(e.at).toEqual({ x: 2000 + 275, y: 2000 - 375 });
     expect(e.set.size).toBe(0);
     expect(byTrade(pts, "coldWater").values.dn).toBe(15);
-    expect(byTrade(pts, "drain").values).toEqual({ dn: 50, greasy: false });
+    // A cooking unit's drain is greasy (kinds/parts/pointRules.ts).
+    expect(byTrade(pts, "drain").values).toEqual({ dn: 50, greasy: true });
   });
 
   it("gives a gas variant a sized gas point and an electric one none", () => {
@@ -130,8 +131,8 @@ describe("defaults", () => {
 describe("projectPoints and labels", () => {
   it("lists the points by position number and filters by group", () => {
     const items = [testItem("b", "microwave", 0, 0, 0, { pos: 7 }), testItem("a", "combi-10", 0, 0, 0, { pos: 3 })];
-    expect(projectPoints(items).map((p) => pointLabel(p, "de"))).toEqual(["3.E", "3.KW", "3.AW", "7.E"]);
-    expect(projectPoints(items, "sanitary").map((p) => pointLabel(p, "en"))).toEqual(["3.CW", "3.WD"]);
+    expect(projectPoints(items).map((p) => pointLabel(p, "de"))).toEqual(["3.E", "3.KW", "3.EW", "3.AW", "7.E"]);
+    expect(projectPoints(items, "sanitary").map((p) => pointLabel(p, "en"))).toEqual(["3.CW", "3.SW", "3.WD"]);
     expect(projectPoints(items, "gas")).toEqual([]);
   });
 });
