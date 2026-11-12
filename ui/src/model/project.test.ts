@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CATALOG, catalogEntry, variantConnections } from "../kinds/registry";
 import { cleanSpec, DEFAULT_SETTINGS, itemFromCatalog, newProject, nextPos, numberNew, positions, renumberPositions, repairPositions, variantPatch } from "./project";
+import { serializeProject } from "./serialize";
 import { testItem, testProject } from "./testProject";
+import { useStore } from "../store/store";
 
 describe("stable position numbers", () => {
   it("are the items' own numbers, not their place in the list", () => {
@@ -92,6 +94,22 @@ describe("variantPatch", () => {
     // The range gives its connections per width, so they are set again; the gas point stays.
     expect(patch.connections).toEqual({ gasKw: 43 });
     expect(patch.points).toEqual({ gas: { dn: 25, note: "Stutzen links" } });
+  });
+
+  it("drops the planner's heat values when the energy changes, keeps them for another width, and undo brings them back", () => {
+    const item = { ...gasRange(), heat: { sensibleKw: 20, latentKw: 4 } };
+    const patch = variantPatch(item, range, { energy: "electric" });
+    expect(patch).toHaveProperty("heat", undefined);
+    expect(variantPatch(item, range, { width: 1200 })).not.toHaveProperty("heat");
+    expect(variantPatch(item, range, { energy: "gas" })).not.toHaveProperty("heat");
+
+    const st = useStore.getState;
+    st().load(testProject([item]), "/a.kplan");
+    st().updateItems([item.id], (it) => variantPatch(it, range, { energy: "electric" }));
+    expect(st().project.items[0].heat).toBeUndefined();
+    expect(serializeProject(st().project)).not.toContain('"heat"');
+    st().undo();
+    expect(st().project.items[0].heat).toEqual({ sensibleKw: 20, latentKw: 4 });
   });
 
   it("leaves units without overrides alone", () => {

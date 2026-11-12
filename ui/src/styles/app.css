@@ -1023,10 +1023,10 @@
 .disclosure-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
   min-height: 24px;
-  padding: 0 4px;
-  margin: 0 -4px;
+  padding: 0 var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-1));
   border-radius: var(--r-sm);
   color: var(--text-muted);
   font-size: var(--fs-sm);

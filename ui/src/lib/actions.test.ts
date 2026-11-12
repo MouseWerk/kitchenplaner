@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serializeProject, parseProject } from "../model/serialize";
 import { testItem, testProject } from "../model/testProject";
+import { inserts, readDxf } from "../render/testDxf";
 import { useStore } from "../store/store";
 import { setLang } from "./i18n";
 import { applyTransform, beginTransform, cancelTransform, registerOperator } from "./commands";
@@ -193,6 +194,15 @@ describe("the installation exports", () => {
     f = only();
     expect(f.name).toBe("/Testküche - Installationsplan.png");
     expect(f.text).toContain("12.AW");
+  });
+
+  it("write the DXF's point ids in the export's language, as its labels", async () => {
+    setLang("en");
+    await runExport("installation-dxf", "north");
+    const f = only();
+    const ids = inserts(readDxf(f.text)).map((i) => i.attribs.get("NR"));
+    expect(ids).toContain("12.CW");
+    expect(ids).not.toContain("12.KW");
   });
 
   it("follow the trade filter", async () => {

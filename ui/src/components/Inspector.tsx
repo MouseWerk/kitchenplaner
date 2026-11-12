@@ -222,7 +222,8 @@ function MoreConnections({ c, setConn }: { c: Connections; setConn: (patch: Part
   const [open, setOpen] = useState(() => (c.supplyM3h ?? 0) > 0 || (c.steamKgH ?? 0) > 0 || (c.refrigerationKw ?? 0) > 0);
   return (
     <div className="disclosure">
-      <button type="button" className="disclosure-btn" aria-expanded={open} aria-controls={panel} onClick={() => setOpen(!open)}>
+      {/* The panel exists only while open, so it is named only then. */}
+      <button type="button" className="disclosure-btn" aria-expanded={open} aria-controls={open ? panel : undefined} onClick={() => setOpen(!open)}>
         <ChevronRight className="disclosure-chevron" size={14} strokeWidth={1.75} aria-hidden />
         {t("inspector.moreConnections")}
       </button>

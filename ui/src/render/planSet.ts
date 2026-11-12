@@ -8,11 +8,11 @@ import { elevationDrawing, slantedWalls, wallElevation, WALL_CUT_DEPTH, type Ele
 import { elevationTitle } from "../model/elevationNames";
 import { walls } from "../model/geometry";
 import { dimensionsText, drainText, equipmentRows, equipmentTotals, formatNumber, waterText, withSimultaneity, type EquipmentRow } from "../model/equipment";
-import { heightText, installationDrawing } from "../model/installationPlan";
+import { installationDrawing } from "../model/installationPlan";
 import { planDrawing } from "../model/plan";
-import { pointRows, wallRefName, type PointRow } from "../model/pointList";
-import { projectPoints, type ConnectionPoint } from "../model/points";
-import { plugName, TRADE_GROUPS, tradeGroupName, type TradeGroup } from "../model/trades";
+import { heightText, pointRows, pointValuesText, wallRefName, type PointRow } from "../model/pointList";
+import { projectPoints } from "../model/points";
+import { TRADE_GROUPS, tradeGroupName, type TradeGroup } from "../model/trades";
 import { FACINGS, type Facing, type Item, type Project, type ProjectInfo, type Vec2 } from "../model/types";
 import type { Box } from "../model/geometry";
 import { formatDate, t, type Lang, type TKey } from "../lib/i18n";
@@ -569,30 +569,6 @@ function drawListPage(page: PdfPage, area: Box, rows: ListRow[], all: ListRow[],
 }
 
 // ---- Connection tables
-
-/** A duct's size is its diameter, a pipe's its DN. */
-const DUCT_TRADES: ReadonlySet<ConnectionPoint["trade"]> = new Set(["exhaust", "supply"]);
-
-/**
- * The values of a point in one line, as the connection table prints them: an electric one
- * „15,9 kW · 400 V 3N~ · 22,9 A · 25 A · Festanschluss“ (load, supply, current, fuse, connection
- * type), a pipe „DN 50 · fetthaltig“, a duct „1200 m³/h · Ø 250“.
- */
-export function pointValuesText(p: Pick<ConnectionPoint, "trade" | "values">, lang: Lang): string {
-  const v = p.values;
-  const n = (x: number) => formatNumber(x, lang);
-  const parts: string[] = [];
-  if (v.kw) parts.push(`${n(v.kw)} kW`);
-  if (v.voltage) parts.push(`${n(v.voltage)} V ${v.phases === 3 ? "3N~" : "1N~"}`);
-  if (v.currentA !== undefined) parts.push(`${n(v.currentA)} A`);
-  if (v.fuseA !== undefined) parts.push(`${n(v.fuseA)} A`);
-  if (v.plug) parts.push(plugName(v.plug, lang));
-  if (v.m3h) parts.push(`${n(v.m3h)} m³/h`);
-  if (v.kgH) parts.push(`${n(v.kgH)} kg/h`);
-  if (v.dn) parts.push(DUCT_TRADES.has(p.trade) ? `Ø ${mm(v.dn)}` : `DN ${mm(v.dn)}`);
-  if (v.greasy) parts.push(t("pointList.greasy", undefined, lang));
-  return parts.join(" · ");
-}
 
 /** The connected electric load of the rows (kW), without float noise. */
 export function electricSum(rows: readonly Pick<PointRow, "point">[]): number {

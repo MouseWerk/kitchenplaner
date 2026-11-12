@@ -7,60 +7,21 @@
 import { useId, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { MAX_LENGTH } from "../model/geometry";
+import { currentText, heightText, pointValuesText, sizeText } from "../model/pointList";
 import { itemPoints, pointLabel, setPoint, type ConnectionPoint } from "../model/points";
 import { DN_SERIES, FUSE_SERIES, PLUGS, plugName, tradeName } from "../model/trades";
 import type { Item, PointOverride, Trade } from "../model/types";
 import { useStore } from "../store/store";
-import { num, useT } from "../lib/i18n";
+import { currentLang, useT } from "../lib/i18n";
 import { CheckField, OptionalNumberField, OptionalSelectField, Section, TextField } from "./Fields";
 
 /** The highest current, fuse or nominal size a file accepts (`serialize.ts`). */
 const MAX_RATING = 2000;
 
-/**
- * A current as the inspector shows it. A load too small for one decimal (an exit sign's 10 W)
- * reads „< 0,1 A“, not „0 A“, which would look like no load at all.
- */
-export function formatCurrent(currentA: number, kw: number | undefined): string {
-  return currentA < 0.05 && (kw ?? 0) > 0 ? `< ${num(0.1, 1)} A` : `${num(currentA, 1)} A`;
-}
-
-/** The point's values in one line: „400 V 3N~ · 22,9 A · 25 A · Festanschluss“, „DN 50 · fetthaltig“. */
-export function pointSummary(p: ConnectionPoint, t: ReturnType<typeof useT>): string {
-  const v = p.values;
-  const dn = v.dn !== undefined ? `DN ${v.dn}` : undefined;
-  const parts: (string | undefined)[] = [];
-  switch (p.trade) {
-    case "electric":
-      parts.push(`${v.voltage} V ${v.phases === 3 ? "3N~" : "1N~"}`, formatCurrent(v.currentA ?? 0, v.kw), `${v.fuseA} A`, v.plug && plugName(v.plug));
-      break;
-    case "gas":
-    case "refrigeration":
-      parts.push(`${num(v.kw ?? 0, 1)} kW`, dn);
-      break;
-    case "exhaust":
-    case "supply":
-      parts.push(`${num(v.m3h ?? 0)} m³/h`, dn);
-      break;
-    case "steam":
-      parts.push(`${num(v.kgH ?? 0, 1)} kg/h`, dn);
-      break;
-    case "drain":
-    case "floorDrain":
-      parts.push(dn, v.greasy ? t("point.greasy") : undefined);
-      break;
-    default:
-      parts.push(dn);
-  }
-  return parts.filter((s): s is string => !!s).join(" · ");
-}
-
-/** A height above the finished floor as plans label it: „+300“. */
-const heightText = (z: number) => `${z >= 0 ? "+" : ""}${num(z)}`;
-
 export function PointsSection({ item }: { item: Item }) {
   // Re-renders on a language switch, which changes the codes in the point ids.
   const t = useT();
+  const lang = currentLang();
   const base = useId();
   const points = useMemo(() => itemPoints(item), [item]);
   const [open, setOpen] = useState<ReadonlySet<Trade>>(new Set());
@@ -92,7 +53,8 @@ export function PointsSection({ item }: { item: Item }) {
                 id={rowId(p.trade)}
                 className={p.set.size > 0 ? "list-row point-row has-set" : "list-row point-row"}
                 aria-expanded={expanded}
-                aria-controls={panel}
+                // The panel exists only while open, so it is named only then.
+                aria-controls={expanded ? panel : undefined}
                 onClick={() => toggle(p.trade)}
               >
                 <ChevronRight className="point-chevron" size={14} strokeWidth={1.75} aria-hidden />
@@ -100,7 +62,7 @@ export function PointsSection({ item }: { item: Item }) {
                   <span className="point-head">
                     <span className="point-code">{pointLabel(p)}</span> {name}
                   </span>
-                  <span className="point-summary">{pointSummary(p, t)}</span>
+                  <span className="point-summary">{pointValuesText(p, lang, { withKw: false })}</span>
                 </span>
                 <span className="muted" title={t("point.height")}>
                   {heightText(p.z)}
@@ -163,7 +125,7 @@ function PointFields({ item, point, onReset }: { item: Item; point: ConnectionPo
               max={MAX_RATING}
               value={o.currentA}
               derived={dCurrent}
-              placeholder={formatCurrent(dCurrent, v.kw).replace(/ A$/, "")}
+              placeholder={currentText(dCurrent, v.kw, currentLang()).replace(/ A$/, "")}
               onChange={(currentA) => edit({ currentA })}
             />
             <OptionalSelectField
@@ -188,9 +150,9 @@ function PointFields({ item, point, onReset }: { item: Item; point: ConnectionPo
           <OptionalSelectField
             label={t("point.dn")}
             value={o.dn}
-            derivedLabel={dDn !== undefined ? `DN ${dDn}` : "–"}
-            options={series.map((d) => ({ value: d, label: `DN ${d}` }))}
-            format={(d) => `DN ${d}`}
+            derivedLabel={dDn !== undefined ? sizeText(trade, dDn) : "–"}
+            options={series.map((d) => ({ value: d, label: sizeText(trade, d) }))}
+            format={(d) => sizeText(trade, d)}
             onChange={(dn) => edit({ dn })}
           />
         )}

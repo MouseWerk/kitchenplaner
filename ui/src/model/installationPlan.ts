@@ -8,6 +8,7 @@
 
 import { EPS, type Box } from "./geometry";
 import { around, BoxGrid, boxesMeet, planDrawing, TEXT_ASCENT, TEXT_DESCENT } from "./plan";
+import { heightText } from "./pointList";
 import { pointLabel, projectPoints, wallRefs, type ConnectionPoint } from "./points";
 import { plugName, tradeCode, tradeName, type PointFilter } from "./trades";
 import type { Plug, Project, Vec2 } from "./types";
@@ -64,12 +65,6 @@ const LABEL_CLEAR = 0.4;
 const LABEL_LINE = 1.2;
 /** Rings of places a label tries around its symbol before it gives up and stays beside it. */
 const LABEL_RINGS = 80;
-
-/** The height of a point as plans write it: „+300“, „±0“. */
-export function heightText(z: number): string {
-  const r = Math.round(z);
-  return r === 0 ? "±0" : r > 0 ? `+${mm(r)}` : mm(r);
-}
 
 /**
  * The symbols and labels of the points the filter lets through. `avoid` lists boxes (plan mm)

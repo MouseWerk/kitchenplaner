@@ -121,6 +121,8 @@ export function View3D(props: { className?: string; fitSignal?: number }) {
   useEffect(() => engineRef.current?.setProject(project), [project]);
   useEffect(() => engineRef.current?.setSelection(selectedIds), [selectedIds]);
   useEffect(() => engineRef.current?.setMode(mode), [mode]);
+  const pointFilter = useStore((s) => s.prefs.points);
+  useEffect(() => engineRef.current?.setPoints(pointFilter), [pointFilter]);
   useEffect(() => engineRef.current?.setCutaway(cutaway), [cutaway]);
   useEffect(() => {
     engineRef.current?.setQuality(quality);

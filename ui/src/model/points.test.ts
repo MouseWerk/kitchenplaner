@@ -160,6 +160,14 @@ describe("setPoint and cleanPoints", () => {
     expect(cleanPoints({ ...item, points: { gas: { dn: 20 } } })).toBeUndefined();
     expect(cleanPoints(item)).toBeUndefined();
   });
+
+  it("drops a blank note, so it is no override", () => {
+    expect(cleanPoints({ ...item, points: { electric: { note: "" } } })).toBeUndefined();
+    expect(cleanPoints({ ...item, points: { electric: { note: "  " } } })).toBeUndefined();
+    expect(cleanPoints({ ...item, points: { electric: { z: 400, note: " " } } })).toEqual({ electric: { z: 400 } });
+    // setPoint keeps the other fields of the point.
+    expect(setPoint({ points: { electric: { z: 400, note: "Kreis 3" } } }, "electric", { note: "   " }).points).toEqual({ electric: { z: 400 } });
+  });
 });
 
 describe("wallRefs", () => {

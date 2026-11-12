@@ -8,7 +8,8 @@ import { exampleKitchen } from "../examples/exampleKitchen";
 import { elevationDrawing } from "../model/elevation";
 import { footprint, lRoom } from "../model/geometry";
 import { itemHeat } from "../model/heat";
-import { heightText, installationDrawing, pointDims } from "../model/installationPlan";
+import { installationDrawing, pointDims } from "../model/installationPlan";
+import { heightText } from "../model/pointList";
 import { planDrawing } from "../model/plan";
 import { pointLabel, projectPoints, type ConnectionPoint } from "../model/points";
 import { testItem, testProject } from "../model/testProject";
@@ -362,6 +363,24 @@ describe("drawingToDxf connection points", () => {
         expect(val(ents[j].tags, 70)).toBe("1");
       }
     }
+  });
+
+  it("writes the point id in the export's language, like the label beside it; tags and trade names stay German", () => {
+    const p = allTrades();
+    const drawing = installationDrawing(p, { filter: "all", paperScale: 50, dims: true, legend: true, lang: "en" });
+    const doc = readDxf(drawingToDxf(drawing, 50, { items: p.items, view: "plan", lang: "en" }));
+    const texts = entities(doc, "TEXT").map((t) => undxf(val(t, 1)!));
+    const byNr = new Map(pointInserts(doc).map((i) => [i.attribs.get("NR"), i]));
+    for (const q of projectPoints(p.items)) {
+      const nr = pointLabel(q, "en");
+      expect(byNr.has(nr)).toBe(true);
+      expect(texts).toContain(nr);
+    }
+    expect(byNr.get("1.CW")!.attribs.get("GEWERK")).toBe("Kaltwasser");
+    expect(byNr.has("1.KW")).toBe(false);
+    // Without a language the ids are German, as before.
+    const de = readDxf(drawingToDxf(drawing, 50, { items: p.items, view: "plan" }));
+    expect(pointInserts(de).some((i) => i.attribs.get("NR") === "1.KW")).toBe(true);
   });
 
   it("adds the steam and refrigeration layers with their own colours", () => {

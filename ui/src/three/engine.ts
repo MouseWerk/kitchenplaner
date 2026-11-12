@@ -34,6 +34,8 @@ import { EYE_HEIGHT, intentOf, isWalkKey, look, startWalk, stepWalk, walkSpace, 
 import { canStartItemDrag, ItemDragSession } from "./dragSession";
 import { captureSize, encodePng, PostChain } from "./post";
 import { CUBE_FACE_NAMES, cubeFaces, type CubeFace } from "./viewCube";
+import { PointStubs } from "./points";
+import type { PointsPref } from "../store/store";
 
 /** Pointer movement (px) up to which a press and release counts as a click, not a drag. */
 const CLICK_TOLERANCE = 4;
@@ -125,6 +127,8 @@ export class Engine {
   private readonly items = new Map<string, { item: Item; object: THREE.Group }>();
   /** Draws the items' opaque parts, one draw call per material (batch.ts). */
   private readonly batches = new ItemBatches();
+  /** The connection points of the plan's trade filter (`points.ts`); not picked, no shadows. */
+  private readonly points = new PointStubs();
   /** Items whose model is still to be built, latest version by id; built a slice per frame. */
   private readonly pending = new Map<string, Item>();
   private buildFrame = 0;
@@ -236,7 +240,7 @@ export class Engine {
     this.sun.shadow.radius = 4;
     this.sun.shadow.bias = -0.0003;
     this.sun.shadow.normalBias = 0.015;
-    this.scene.add(hemi, this.sun, this.sun.target, this.itemsRoot, this.batches.root, this.overlayRoot);
+    this.scene.add(hemi, this.sun, this.sun.target, this.itemsRoot, this.batches.root, this.points.root, this.overlayRoot);
     // The box only gives the edges their shape: dispose it once they are taken.
     const box = new THREE.BoxGeometry(1, 1, 1);
     this.outlineBox = new THREE.EdgesGeometry(box);
@@ -322,6 +326,8 @@ export class Engine {
       removed = true;
     }
     for (const id of this.pending.keys()) if (!seen.has(id)) this.pending.delete(id);
+    // The points follow the units at once, also those whose model is still to be built.
+    this.points.setItems(p.items);
     this.walkSpace = null;
     if (this.pending.size > 0) this.buildSlice();
     else if (removed || !this.contact) this.refreshShadows();
@@ -428,6 +434,11 @@ export class Engine {
     if (mode !== this.mode) this.cancelDrag();
     this.mode = mode;
     if (mode !== "arrange") this.setHover(null);
+  }
+
+  /** Shows the connection points of the plan's trade filter (`Prefs.points`), none when off. */
+  setPoints(filter: PointsPref): void {
+    if (this.points.setFilter(filter)) this.requestRender();
   }
 
   setCutaway(on: boolean): void {
@@ -684,6 +695,7 @@ export class Engine {
     for (const { object } of this.items.values()) disposeMerged(object);
     this.itemsRoot.clear();
     this.batches.dispose();
+    this.points.dispose();
     this.items.clear();
     this.disposeComposer();
     releaseShared();

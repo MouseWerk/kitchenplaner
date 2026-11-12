@@ -64,7 +64,12 @@ const GAS_DN_ABOVE = 25;
 /** The largest plug a socket default grows to by itself; a bigger one is a catalog decision. */
 const AUTO_PLUG_MAX_A = 32;
 
-/** The current of a load (A, one decimal): P/U at 230 V, P/(√3·U) on three phases; cos φ = 1. */
+/**
+ * The current of a load (A, one decimal): P/U at 230 V, P/(√3·U) on three phases; cos φ = 1.
+ * Right for heating loads, which most kitchen units are; for motor loads (dishwasher pumps,
+ * mixers, compressors) a cos φ of 0.8 to 0.85 means about 15–25 % more current. A typical value:
+ * the planner sets the data sheet's current where it matters.
+ */
 export function currentOf(kw: number, voltage: number): number {
   if (!(kw > 0) || !(voltage > 0)) return 0;
   const i = (kw * 1000) / (phasesOf(voltage) === 3 ? Math.sqrt(3) * voltage : voltage);
@@ -215,9 +220,9 @@ export function setPoint(item: Pick<Item, "points">, trade: Trade, patch: Partia
 }
 
 /**
- * The overrides worth keeping: those of active trades, without empty fields or empty overrides,
- * in `TRADES` and file order; undefined when none is left. Run after the connections change, so
- * switching a unit from gas to electric drops its gas override.
+ * The overrides worth keeping: those of active trades, without empty fields, blank notes or empty
+ * overrides, in `TRADES` and file order; undefined when none is left. Run after the connections
+ * change, so switching a unit from gas to electric drops its gas override.
  */
 export function cleanPoints(item: Pick<Item, "points" | "connections">): ItemPoints | undefined {
   if (!item.points) return undefined;
@@ -234,6 +239,8 @@ function tidy(points: ItemPoints): ItemPoints | undefined {
     if (!o) continue;
     const clean: Record<string, unknown> = {};
     for (const k of OVERRIDE_KEYS) if (o[k] !== undefined) clean[k] = o[k];
+    // A blank note is no note: kept, it would read as an override with nothing to reset.
+    if (typeof clean.note === "string" && clean.note.trim() === "") delete clean.note;
     if (Object.keys(clean).length > 0) out[tr] = clean as PointOverride;
   }
   return Object.keys(out).length > 0 ? out : undefined;

@@ -616,3 +616,89 @@ H needs no keys: the DXF tags and prompts are German and fixed, like the existin
   with the smallest fuse. Showing "< 0.1 A" would be wave 0/E's call.
 - **Touched outside A:** `model/points.test.ts` (wave 0) expects the combi's drain greasy and its
   softened water point in the label list.
+
+## Wave 2 notes
+
+### E, inspector
+
+- **Fields.** `Fields.tsx` gained `OptionalNumberField`, `OptionalSelectField` and `NumberInput`
+  with a derived value: left empty, a field shows what the point or the estimate derives to as its
+  placeholder (a select as its first option); a typed value is the planner's and shows in a
+  heavier weight (`is-set`, no colour, no border). `CheckField` takes `set` the same way. A tick
+  back to what the catalog says (greasy) is no override.
+- **„Anschlusspunkte“** (`PointsSection.tsx`): one row per point in `TRADES` order; the row is
+  the disclosure button (`aria-expanded`), its panel exists only while open (`aria-controls`
+  only then), and the point's id is heavier while any field of it is set. „Zurücksetzen“ resets one point, „Alle Anschlusspunkte
+  zurücksetzen“ all of them; the focus goes back to the row, since the button goes away. Every
+  edit and reset is one `updateItems`, so one undo step. A field's placeholder is the value it
+  derives to without the planner's value of that field (`derived`), so an overridden current
+  still shows the derived current while the derived fuse follows the planner's current.
+- **Connection values.** „Enthärtetes Wasser“ is a check like the other waters; supply air, steam
+  and remote refrigeration wait behind „Weitere Anschlüsse“, open from the start when the unit has
+  one of them (the same disclosure pattern). „Wärmeabgabe sensibel / latent (kW)“ are two optional fields with `estimateHeat`
+  as placeholders; each set value replaces only its own half.
+- **Language.** The inspector's and the plan view's plan check memoize on the language too, so the
+  point ids in findings follow a language switch (the open point of wave 1-D). The status bar
+  only counts findings and needs no language.
+
+### F, plan view, filter and exports
+
+- **Filter.** `Prefs.points` is `"off"`, `"all"` or a trade group, chosen under „Darstellung“ and
+  remembered per computer (`localStorage`, `kitchenplaner.points.v1`), never in the file or the
+  undo history; an unknown stored value reads as off.
+- **Plan view.** With a filter set the plan is drawn quietly and `pointsDrawing` lays symbols and
+  labels (no point dimensions, no legend) on top at the screen's paper scale, clear of the
+  position numbers. The layer is built from a deferred copy of the project, so a drag renders
+  first and the labels follow.
+- **Exports.** „Installationsplan als SVG / DXF / PNG…“ and „Anschlussliste als CSV…“ follow the
+  filter; off exports all trades. The file names carry the group („Installationsplan Elektro“).
+  The e2e test `22-installation` places a combi oven, raises its electric point, turns the filter
+  on and checks the plan, the CSV, the SVG and the DXF.
+
+### G, PDF
+
+- **Sheets.** After the floor plan, one „Installationsplan <Gewerk>“ per chosen group that has
+  points, each followed by its „Anschlusstabelle <Gewerk>“ when tables are on. Groups without
+  points get no sheet (the dialog says so). The choices are remembered with the other plan set
+  options; old remembered options get all groups and tables.
+- **Tables.** Both tables (equipment and connections) are drawn by one `drawTable` and paginated by
+  one rule: a foot never stands on a page without rows. The electric table ends with „Summe (kW)“
+  and „Mit Gleichzeitigkeit {f} (kW)“.
+
+### H, DXF
+
+- **Blocks.** One block per symbol (`KP_<symbol>`), defined once at the export's paper scale on
+  layer 0; each point is an upright INSERT on its trade layer with invisible attributes on that
+  layer. The attribute definitions of a trade are fixed, since a symbol stands for one trade.
+- **Attributes.** Tags and prompts are German and fixed, like the unit attributes. NR carries the
+  point id in the export's language (`DxfOptions.lang`), the same as the label beside it, the
+  connection list and the plan set; GEWERK stays German.
+- **Units.** The unit attributes gained softened water, supply air, steam, remote refrigeration and
+  heat (sensible, latent) after the existing ones, which extraction templates read in order.
+- **Layers.** `ANSCHLUSS_DAMPF` and `ANSCHLUSS_KAELTE` are new; symbol, label, leader and
+  dimensions of a point lie on its trade layer, so hiding a layer hides that trade.
+
+### After the review
+
+- **One text form of a point's values** (`model/pointList.ts`): `pointValuesText(p, lang,
+  { withKw })`, `heightText`, `sizeText` and `currentText`, used by the inspector, the
+  connection tables, the plan labels and the lists. Numbers through `formatNumber` (no grouping),
+  „Ø“ for ducts, „DN“ for pipes, „< 0,1 A“ for a load too small for one decimal. The inspector
+  leaves out an electric point's kW (`withKw: false`), shown just above; gas and refrigeration
+  keep theirs. The CSV and the DXF keep numeric columns and attributes.
+- **Gas lines under small hoods are flagged.** A catalog 900 gas line (range 43 kW, fryer 18 kW,
+  griddle 14 kW) under the catalog's 2400 mm wall hood (2600 m³/h) asks for about 3460 m³/h and
+  gets `check.hoodAirflow`; the same line in electric passes. That is intended: gas puts more
+  heat into the kitchen, and a wall hood over a full gas line usually runs at about 1400 to
+  1500 m³/h per metre. `HOOD_AIR_PER_KW` stays 90, and the catalog default stays 2600 m³/h for
+  2400 mm, sized for an electric line, the more common case; the finding asks the planner to size
+  the hood up. A test pins it. For the release notes: gas lines under small hoods are flagged.
+- **New checks.** `check.pointOffUnit`: a point more than `POINT_OFF_UNIT` (50 mm) past its unit's
+  outline, seen from above in the unit's axes, mostly one set before the unit was made smaller;
+  a floor drain point may lie `FLOOR_DRAIN_FRONT` (600 mm) in front, heights are not checked
+  (wall-hung and overhead units), and a point already reported outside the room is not reported
+  again. `check.fuseLow`: a fuse the planner set below the derived or set current, measured
+  against required. `currentOf` keeps cos φ = 1 (a typical value; motor loads draw about 15 to
+  25 % more).
+- **Small fixes.** A blank note is no override (read, cleaned and written without it); switching
+  a unit's energy drops the planner's heat values (undo brings them back).

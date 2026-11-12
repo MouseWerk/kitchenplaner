@@ -1,13 +1,15 @@
 // The plan check of the connection points (`model/points.ts`) and of the heat under each hood:
-// points outside the room or in a partition, water, drain and gas points standing free in the
-// room with nothing to bring the pipe up, floor drain points without a drain, a plan with gas but
-// no gas emergency shut-off, and hoods extracting less air than the heat under them asks for. The
+// points outside the room or in a partition, points the planner moved off their unit, water,
+// drain and gas points standing free in the room with nothing to bring the pipe up, floor drain
+// points without a drain, fuses set below the current, a plan with gas but no gas emergency
+// shut-off, and hoods extracting less air than the heat under them asks for. The
 // thresholds and the kinds they name are in `checkRules.ts`; the gas unit without a hood is part
 // of the hood rule in `clearances.ts`, so a unit is not reported twice for one hood.
 
 import { kindOf } from "../kinds/registry";
 import {
   AIRFLOW_STEP,
+  FLOOR_DRAIN_FRONT,
   FLOOR_DRAIN_KINDS,
   FLOOR_DRAIN_REACH,
   GAS_SHUTOFF_KIND,
@@ -15,6 +17,7 @@ import {
   HOOD_KINDS,
   ISLAND_REACH,
   ISLAND_SUPPLY_KINDS,
+  POINT_OFF_UNIT,
   TOLERANCE,
   WALL_REACH,
 } from "./checkRules";
@@ -43,9 +46,10 @@ interface Spot {
 
 /**
  * The findings about connection points and heat, in this order: points outside the room or in a
- * partition, points standing free in the room, floor drain points without a drain, the missing
- * gas shut-off, hood airflow. `skip` holds the items already reported for standing outside the
- * room or in a partition: their points are not reported again, as outside or as standing free.
+ * partition, points off their unit, points standing free in the room, floor drain points without
+ * a drain, fuses below the current, the missing gas shut-off, hood airflow. `skip` holds the items
+ * already reported for standing outside the room or in a partition: their points are not
+ * reported again, as outside, off the unit or as standing free.
  */
 export function pointIssues(project: Project, prep: Prepared, skip: ReadonlySet<string>): Issue[] {
   const items = project.items;
@@ -54,10 +58,15 @@ export function pointIssues(project: Project, prep: Prepared, skip: ReadonlySet<
   const points = items.map((it) => itemPoints(it));
   const label = (p: ConnectionPoint) => pointLabel({ pos: prep.posOf(p.itemId), trade: p.trade });
   const parts = project.room.partitions.filter((p) => partitionLength(p) >= EPS);
+  const outside = outsideIssues(project, parts, points, skip, label);
+  // A point already reported outside the room is not reported again as off its unit.
+  const reported = new Set(outside.flatMap((i) => String(i.vars.point).split(", ")));
   return [
-    ...outsideIssues(project, parts, points, skip, label),
+    ...outside,
+    ...offUnitIssues(project, prep, points, skip, label, reported),
     ...islandIssues(project, parts, spots, points, prep, skip, label),
     ...floorDrainIssues(spots, points, label),
+    ...fuseIssues(points, label),
     ...gasShutoffIssues(spots),
     ...airflowIssues(project, spots, prep),
   ];
@@ -89,6 +98,30 @@ function insidePartition(p: Vec2, w: Partition): boolean {
   const along = dot(rel, dir);
   const across = Math.abs(cross(dir, rel));
   return along > TOLERANCE && along < partitionLength(w) - TOLERANCE && across < w.thickness / 2 - TOLERANCE;
+}
+
+// --- Points off their unit -------------------------------------------------------------------
+
+/**
+ * A point more than `POINT_OFF_UNIT` past its unit's outline (seen from above, in the unit's own
+ * axes) has lost its unit: mostly a position the planner set before making the unit smaller (an
+ * x of 1100 on a sink cut down to 800). A floor drain point may lie `FLOOR_DRAIN_FRONT` in front,
+ * where the pan pours. Heights are not checked: a basin's pipes leave the wall below it, a hood's
+ * duct leaves at its top, as the catalog contract allows. One finding per unit, naming its points.
+ */
+function offUnitIssues(project: Project, prep: Prepared, points: ConnectionPoint[][], skip: ReadonlySet<string>, label: (p: ConnectionPoint) => string, reported: ReadonlySet<string>): Issue[] {
+  const issues: Issue[] = [];
+  points.forEach((list, i) => {
+    const it = project.items[i];
+    if (list.length === 0 || skip.has(it.id)) return;
+    const m = POINT_OFF_UNIT + TOLERANCE;
+    const bad = list.filter((p) => {
+      const front = it.depth + (p.trade === "floorDrain" ? FLOOR_DRAIN_FRONT : 0);
+      return (p.fromLeft < -m || p.fromLeft > it.width + m || p.fromBack < -m || p.fromBack > front + m) && !reported.has(label(p));
+    });
+    if (bad.length > 0) issues.push({ key: "check.pointOffUnit", vars: { point: bad.map(label).join(", "), pos: prep.posOf(it.id) }, itemIds: [it.id] });
+  });
+  return issues;
 }
 
 // --- Points standing free in the room ---------------------------------------------------------
@@ -161,6 +194,24 @@ function floorDrainIssues(spots: Spot[], points: ConnectionPoint[][], label: (p:
     for (const p of list) {
       if (p.trade !== "floorDrain" || withinReach(p.at, drains, FLOOR_DRAIN_REACH)) continue;
       issues.push({ key: "check.floorDrainMissing", vars: { point: label(p), required: FLOOR_DRAIN_REACH }, itemIds: [p.itemId] });
+    }
+  }
+  return issues;
+}
+
+// --- Fuses below the current -----------------------------------------------------------------
+
+/**
+ * A fuse the planner set must carry the point's current, derived or set: one below it trips (or
+ * the cable is sized for less than the unit draws). A derived fuse always carries it (`fuseFor`).
+ */
+function fuseIssues(points: ConnectionPoint[][], label: (p: ConnectionPoint) => string): Issue[] {
+  const issues: Issue[] = [];
+  for (const list of points) {
+    for (const p of list) {
+      const { fuseA, currentA } = p.values;
+      if (!p.set.has("fuseA") || fuseA === undefined || currentA === undefined || fuseA >= currentA) continue;
+      issues.push({ key: "check.fuseLow", vars: { point: label(p), measured: fuseA, required: currentA }, itemIds: [p.itemId] });
     }
   }
   return issues;

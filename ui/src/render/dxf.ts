@@ -21,6 +21,7 @@ import { itemHeat } from "../model/heat";
 import { itemPoints, pointLabel, type ConnectionPoint } from "../model/points";
 import { plugName, tradeName } from "../model/trades";
 import type { Item, Trade, Vec2 } from "../model/types";
+import type { Lang } from "../lib/i18n";
 
 export { dxfText } from "./dxfWriter";
 
@@ -120,6 +121,11 @@ export interface DxfOptions {
    * the lower left corner of what the drawing shows of it, unturned.
    */
   view?: "plan" | "elevation";
+  /**
+   * The language of the point ids in the NR attribute („7.KW“ or “7.CW”), the same as the labels
+   * of the drawing; German when left out. Tags, prompts and the trade names stay German.
+   */
+  lang?: Lang;
 }
 
 /**
@@ -165,7 +171,7 @@ export function drawingToDxf(drawing: Drawing, paperScale: number, opts: DxfOpti
       const key = pointKey(point);
       if (!inserted.has(key)) {
         inserted.add(key);
-        entities.push(pointInsert(point, ps, blocks));
+        entities.push(pointInsert(point, ps, blocks, opts.lang ?? "de"));
       }
       continue;
     }
@@ -318,7 +324,6 @@ class BlockSet {
   private readonly bySignature = new Map<string, string>();
   private readonly names = new Set<string>();
 
-  /** The name of the block with these entities and attributes, defining it on first use. */
   /** The block of a fixed name (a symbol's), defined on first use from what `make` returns. */
   named(name: string, make: () => Omit<DxfBlock, "name">): string {
     if (this.names.has(name)) return name;
@@ -327,6 +332,7 @@ class BlockSet {
     return name;
   }
 
+  /** The name of the block with these entities and attributes, defining it on first use. */
   use(base: string, entities: DxfEntity[], attdefs: DxfAttDef[]): string {
     const sig = signature(entities);
     const known = this.bySignature.get(`${base}\n${sig}`);
@@ -453,11 +459,13 @@ const pointKey = (p: { itemId: string; trade: Trade }) => `${p.itemId}\n${p.trad
 interface PointAttrSpec {
   tag: string;
   prompt: string;
-  value: (p: ConnectionPoint) => string;
+  value: (p: ConnectionPoint, lang: Lang) => string;
 }
 
-// German and fixed, like the layers and the unit attributes, whatever the UI language.
-const NR: PointAttrSpec = { tag: "NR", prompt: "Nr.", value: (p) => pointLabel(p, "de") };
+// Tags and prompts are German and fixed, like the layers and the unit attributes, whatever the UI
+// language. The point id in NR follows the export's language, so it matches the label beside the
+// symbol, the connection list and the plan set.
+const NR: PointAttrSpec = { tag: "NR", prompt: "Nr.", value: (p, lang) => pointLabel(p, lang) };
 const POS: PointAttrSpec = { tag: "POS", prompt: "Pos.", value: (p) => String(p.pos) };
 const GEWERK: PointAttrSpec = { tag: "GEWERK", prompt: "Gewerk", value: (p) => tradeName(p.trade, "de") };
 const HOEHE: PointAttrSpec = { tag: "HOEHE_FFB_MM", prompt: "Höhe ü. FFB (mm)", value: (p) => whole(p.z) };
@@ -522,7 +530,7 @@ function symbolBlock(id: SymbolId, ps: number): Omit<DxfBlock, "name"> {
 }
 
 /** A point as a reference of its symbol's block: at the point, upright, on its trade's layer. */
-function pointInsert(p: ConnectionPoint, ps: number, blocks: BlockSet): DxfEntity {
+function pointInsert(p: ConnectionPoint, ps: number, blocks: BlockSet, lang: Lang): DxfEntity {
   const id = symbolOf(p.trade, p.values.plug);
   const block = blocks.named(`KP_${id}`, () => symbolBlock(id, ps));
   const layer = TRADE_LAYER[p.trade];
@@ -530,7 +538,7 @@ function pointInsert(p: ConnectionPoint, ps: number, blocks: BlockSet): DxfEntit
   const defs = pointAttdefs(p.trade, ps);
   const attribs: DxfAttrib[] = POINT_ATTRIBUTES[p.trade].map((a, i) => ({
     tag: a.tag,
-    value: a.value(p),
+    value: a.value(p, lang),
     layer,
     p: place(defs[i].p, 0, at),
     height: defs[i].height,

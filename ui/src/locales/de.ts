@@ -1194,8 +1194,8 @@ export const de = {
   "crash.reload": "Fenster neu laden",
   "crash.unexpected": "Ein unerwarteter Fehler ist aufgetreten. Meldung: {message}",
 
-  // Connection points (0.3): trades with their codes, the groups of the installation plan, plugs
-  // (model/trades.ts). The keys planned for the other parts are listed in docs/design/connections-0.3.md.
+  // Connection points: trades with their codes, the groups of the installation plan, plugs
+  // (model/trades.ts).
   "trade.electric": "Elektro",
   "trade.electric.code": "E",
   "trade.gas": "Gas",
@@ -1229,10 +1229,7 @@ export const de = {
   "plug.cee32": "CEE 32 A",
   "plug.cee63": "CEE 63 A",
 
-  // Each part of 0.3 adds its keys only inside its own block, in both catalogs.
-  // ---- 0.3 A catalog
-
-  // ---- 0.3 B files
+  // The connection list (model/pointList.ts) and the new columns of the equipment list.
   "list.soft": "EW",
   "list.supply": "Zuluft (m³/h)",
   "list.heat": "Wärme sensibel/latent (kW)",
@@ -1257,19 +1254,21 @@ export const de = {
   "pointList.greasy": "fetthaltig",
   "pointList.note": "Bemerkung",
 
-  // ---- 0.3 C drawing
+  // The legend of the installation plan (model/installationPlan.ts).
   "legend.title": "Legende",
   "legend.heights": "Höhen in mm über Fertigfußboden (FFB)",
 
-  // ---- 0.3 D checks
+  // The plan check of connection points, gas units and hood airflow (model/pointChecks.ts).
   "check.gasNoHood": "Über dem Gasgerät Pos. {pos} hängt keine Abzugshaube oder Lüftungsdecke.",
   "check.gasShutoffMissing": "Im Plan fehlt eine Gas-Notabsperrung.",
   "check.islandSupply": "Der Anschluss {point} liegt {measured} mm von der nächsten Wand, ohne Bodentank, Versorgungssäule oder Schacht in Reichweite.",
   "check.floorDrainMissing": "Im Umkreis von {required} mm um den Bodenablauf {point} liegt kein Ablauf und keine Rinne.",
   "check.hoodAirflow": "Die Haube Pos. {hood} saugt {measured} m³/h ab, nötig sind etwa {required} m³/h (Richtwert).",
   "check.pointOutside": "Der Anschluss {point} liegt außerhalb des Raums oder in einer Trennwand.",
+  "check.pointOffUnit": "Der Anschlusspunkt {point} liegt außerhalb von Pos. {pos}.",
+  "check.fuseLow": "Der Anschluss {point} ist mit {measured} A abgesichert, zieht aber {required} A.",
 
-  // ---- 0.3 E inspector
+  // The inspector: further connection values, heat release and the connection points.
   "inspector.softWater": "Enthärtetes Wasser",
   "inspector.moreConnections": "Weitere Anschlüsse",
   "inspector.supplyM3h": "Zuluft (m³/h)",
@@ -1291,7 +1290,7 @@ export const de = {
   "point.reset": "Zurücksetzen",
   "point.resetAll": "Alle Anschlusspunkte zurücksetzen",
 
-  // ---- 0.3 F plan
+  // The trade filter of the plan view and the installation exports.
   "points.off": "Anschlüsse aus",
   "points.all": "Alle Anschlüsse",
   "points.electric": "Nur Elektro",
@@ -1307,7 +1306,7 @@ export const de = {
   "installation.titleOf": "Installationsplan {group}",
   "pointList.title": "Anschlussliste",
 
-  // ---- 0.3 G pdf
+  // The installation sheets and connection tables of the PDF plan set.
   "planSet.installation": "Installationsplan {group}",
   "planSet.pointTable": "Anschlusstabelle {group}",
   "planSet.installationSheets": "Installationspläne",
@@ -1317,7 +1316,4 @@ export const de = {
   "planSet.col.values": "Werte",
   "planSet.sumKw": "Summe (kW)",
   "planSet.sumKwFactored": "Mit Gleichzeitigkeit {f} (kW)",
-
-  // ---- 0.3 H dxf
-
 } satisfies Record<string, Msg>;

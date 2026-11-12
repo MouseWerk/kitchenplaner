@@ -78,7 +78,8 @@ export function itemFromCatalog(entry: CatalogEntry, x: number, y: number, rotat
  * The change of an item switched to another variant of its entry (a width step or an energy).
  * The connection values follow the variant when the entry gives them per variant, or when the
  * energy changes; otherwise the item keeps its own (possibly edited) values. Point overrides of
- * trades the new values switch off are dropped (`cleanPoints`).
+ * trades the new values switch off are dropped (`cleanPoints`), and so are heat values the planner
+ * set when the energy changes.
  */
 export function variantPatch(item: Item, entry: CatalogEntry, change: Partial<Variant>): Partial<Item> {
   const current = item.energy ?? entry.energy?.[0];
@@ -91,6 +92,9 @@ export function variantPatch(item: Item, entry: CatalogEntry, change: Partial<Va
     // point); undo brings them back with the old variant.
     if (item.points) patch.points = cleanPoints({ points: item.points, connections: patch.connections });
   }
+  // Heat values set for one energy do not hold for the other (a gas range gives off more than
+  // an electric one): back to the estimate. Undo brings them back with the old energy.
+  if (v.energy !== current) patch.heat = undefined;
   return patch;
 }
 

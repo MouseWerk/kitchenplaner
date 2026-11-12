@@ -2,18 +2,21 @@ import { describe, expect, it } from "vitest";
 import { checkProject } from "./checks";
 import {
   AIRFLOW_STEP,
+  FLOOR_DRAIN_FRONT,
   FLOOR_DRAIN_KINDS,
   FLOOR_DRAIN_REACH,
   GAS_SHUTOFF_KIND,
   HOOD_AIR_PER_KW,
   ISLAND_SUPPLY_KINDS,
   NO_HOOD_KINDS,
+  POINT_OFF_UNIT,
   WALL_REACH,
 } from "./checkRules";
 import { itemHeat } from "./heat";
 import { itemPoints } from "./points";
 import { testItem, testProject } from "./testProject";
-import { catalogEntry, kindOf, KINDS, variantConnections } from "../kinds/registry";
+import { CATALOG, catalogEntry, kindOf, KINDS, variantConnections } from "../kinds/registry";
+import { t } from "../lib/i18n";
 import type { Item, Project } from "./types";
 
 /** The findings with one of `keys`. */
@@ -197,5 +200,77 @@ describe("points outside the room", () => {
   it("leaves the points of a unit already reported outside the room alone", () => {
     const p = testProject([testItem("s", "sink-1", 4000, -1000)]);
     expect(only(p, "check.outside", "check.pointOutside").map((i) => i.key)).toEqual(["check.outside"]);
+  });
+});
+
+describe("a gas line under the catalog's wall hood", () => {
+  // Deliberate: a full 900 gas line (range 43 kW, fryer 18 kW, griddle 14 kW) gives off about
+  // 38.4 kW, which at HOOD_AIR_PER_KW asks for about 3460 m³/h; the catalog's 2400 mm wall hood
+  // extracts 2600 m³/h, sized for an electric line. Gas puts more heat into the kitchen, so the
+  // check asks the planner to size the hood up (docs/design/connections-0.3.md, wave 2 notes).
+  const line = (energy: "gas" | "electric") => {
+    const unit = (id: string, catalogId: string, x: number) => (energy === "gas" ? gasItem(id, catalogId, x, 450) : testItem(id, catalogId, x, 450, 0, { energy: "electric" }));
+    return testProject([unit("r", "range-6", 3400), unit("f", "fryer-2", 4200), unit("g", "griddle", 4800), testItem("h", "hood-wall", 4000, 550)]);
+  };
+
+  it("is flagged as needing about 3460 m³/h against the hood's 2600", () => {
+    expect(HOOD_AIR_PER_KW).toBe(90);
+    expect(only(line("gas"), "check.hoodAirflow")).toEqual([{ key: "check.hoodAirflow", vars: { hood: 4, measured: 2600, required: 3460 }, itemIds: ["h", "r", "f", "g"] }]);
+  });
+
+  it("passes as an electric line under the same hood", () => {
+    expect(only(line("electric"), "check.hoodAirflow")).toEqual([]);
+  });
+});
+
+describe("points off their unit", () => {
+  it("reports a point set before the unit was made smaller", () => {
+    const sink = testItem("s", "sink-1", 4000, 350, 0, { points: { coldWater: { x: 1100 } } });
+    expect(only(testProject([sink]), "check.pointOffUnit")).toEqual([]);
+    const smaller = { ...sink, width: 800 };
+    expect(only(testProject([smaller]), "check.pointOffUnit")).toEqual([{ key: "check.pointOffUnit", vars: { point: "1.KW", pos: 1 }, itemIds: ["s"] }]);
+    // Measured in the unit's own axes, whichever way it is turned.
+    expect(only(testProject([{ ...smaller, x: 350, y: 3000, rotation: 90 }]), "check.pointOffUnit")).toHaveLength(1);
+    // Within the margin past the edge (a stub on the side) it still belongs to the unit.
+    expect(only(testProject([{ ...smaller, points: { coldWater: { x: 800 + POINT_OFF_UNIT } } }]), "check.pointOffUnit")).toEqual([]);
+  });
+
+  it("lets a floor drain point lie in front of the unit, as far as the catalog allows", () => {
+    const pan = testItem("t", "tilting-pan", 4000, 450);
+    expect(only(testProject([pan]), "check.pointOffUnit")).toEqual([]);
+    const at = (y: number) => only(testProject([{ ...pan, points: { floorDrain: { y } } }]), "check.pointOffUnit");
+    expect(at(pan.depth + FLOOR_DRAIN_FRONT)).toEqual([]);
+    expect(at(pan.depth + FLOOR_DRAIN_FRONT + POINT_OFF_UNIT + 10)).toEqual([{ key: "check.pointOffUnit", vars: { point: "1.BA", pos: 1 }, itemIds: ["t"] }]);
+    // Another trade may not.
+    const drain = testItem("k", "kettle-150", 4000, 450, 0, { points: { coldWater: { y: 1500 } } });
+    expect(only(testProject([drain]), "check.pointOffUnit").map((i) => i.vars.point)).toEqual(["1.KW"]);
+  });
+
+  it("finds nothing at the catalog's own places, wall-hung and overhead units included", () => {
+    const found = CATALOG.flatMap((e) => only(testProject([testItem("u", e.id, 4000, 3000)]), "check.pointOffUnit").map(() => e.id));
+    expect(found).toEqual([]);
+  });
+
+  it("does not report a point again that lies outside the room", () => {
+    const sink = testItem("s", "sink-1", 4000, 350, 0, { points: { coldWater: { y: -200 } } });
+    expect(only(testProject([sink]), "check.pointOutside", "check.pointOffUnit").map((i) => i.key)).toEqual(["check.pointOutside"]);
+  });
+});
+
+describe("fuses below the current", () => {
+  const combi = (points: Item["points"]) => testItem("c", "combi-10", 4000, 450, 0, { energy: "electric", connections: { electricKw: 18.9, voltage: 400 }, points });
+
+  it("reports a fuse the planner set below the derived current, measured against required", () => {
+    expect(itemPoints(combi(undefined))[0].values.currentA).toBe(27.3);
+    expect(only(testProject([combi({ electric: { fuseA: 25 } })]), "check.fuseLow")).toEqual([{ key: "check.fuseLow", vars: { point: "1.E", measured: 25, required: 27.3 }, itemIds: ["c"] }]);
+    expect(t("check.fuseLow", { point: "1.E", measured: 25, required: 27.3 }, "de")).toBe("Der Anschluss 1.E ist mit 25 A abgesichert, zieht aber 27,3 A.");
+    expect(only(testProject([combi({ electric: { fuseA: 32 } })]), "check.fuseLow")).toEqual([]);
+  });
+
+  it("compares with the current the planner set, and never with a derived fuse", () => {
+    expect(only(testProject([combi({ electric: { currentA: 40, fuseA: 32 } })]), "check.fuseLow")).toEqual([{ key: "check.fuseLow", vars: { point: "1.E", measured: 32, required: 40 }, itemIds: ["c"] }]);
+    // The derived fuse follows the planner's current.
+    expect(only(testProject([combi({ electric: { currentA: 40 } })]), "check.fuseLow")).toEqual([]);
+    expect(only(testProject([combi(undefined)]), "check.fuseLow")).toEqual([]);
   });
 });

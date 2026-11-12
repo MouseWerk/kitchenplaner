@@ -156,7 +156,7 @@ export async function runExport(kind: ExportKind, view: ElevationId) {
       }
       case "plan-dxf": {
         const s = sheetDrawing((paperScale) => planDrawing(project, { showNames: prefs.showNames, showDims: true, paperScale }), project.info, t("view.plan"), lang);
-        written = await saveText(null, `${base} - ${t("view.plan")}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "plan" }));
+        written = await saveText(null, `${base} - ${t("view.plan")}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "plan", lang }));
         break;
       }
       case "plan-png": {
@@ -195,7 +195,7 @@ export async function runExport(kind: ExportKind, view: ElevationId) {
       }
       case "installation-dxf": {
         const s = installationSheet();
-        written = await saveText(null, `${base} - ${installation}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "plan" }));
+        written = await saveText(null, `${base} - ${installation}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "plan", lang }));
         break;
       }
       case "installation-png": {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { heightText, installationDrawing, legendText, pointDims, pointsDrawing, pointSymbol, usedSymbols, type InstallationOptions } from "./installationPlan";
+import { installationDrawing, legendText, pointDims, pointsDrawing, pointSymbol, usedSymbols, type InstallationOptions } from "./installationPlan";
 import { planDrawing, TEXT_ASCENT, TEXT_DESCENT } from "./plan";
+import { heightText } from "./pointList";
 import { pointLabel, projectPoints, type ConnectionPoint } from "./points";
 import { distToSegment, roomFaces, type Box } from "./geometry";
 import { TRADE_GROUP, TRADE_GROUPS, type PointFilter } from "./trades";
@@ -96,9 +97,6 @@ describe("installation plan points", () => {
     const { project } = setOut();
     const en = texts(pointsDrawing(project, "sanitary", 50, { lang: "en" }).shapes).map((s) => s.text);
     expect(en).toEqual(["2.CW", "+550", "2.WD", "±0"]);
-    expect(heightText(300)).toBe("+300");
-    expect(heightText(0.3)).toBe("±0");
-    expect(heightText(-20)).toBe("-20");
   });
 
   it("draws symbols upright, whatever way the unit is turned", () => {

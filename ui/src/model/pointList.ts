@@ -2,11 +2,12 @@
 // its distances from the two wall faces a fitter measures from (`wallRefs`), its height above the
 // finished floor and its values, and the CSV export for spreadsheets. It follows the equipment
 // list's CSV rules: BOM, separator and decimal mark per language, the typical-values note last.
+// Also the one text form of a point's values and height that every view and output uses.
 
 import { csvDocument, csvText, formatNumber } from "./equipment";
 import { pointLabel, projectPoints, wallRefs, type ConnectionPoint, type WallRef } from "./points";
 import { plugName, tradeName, type PointFilter } from "./trades";
-import type { Project } from "./types";
+import type { Project, Trade } from "./types";
 import { t, type Lang, type TKey } from "../lib/i18n";
 
 export interface PointRow {
@@ -30,6 +31,58 @@ export function pointRows(project: Pick<Project, "items" | "room">, filter: Poin
     point: p,
     walls: wallRefs(project.room, p.at),
   }));
+}
+
+// ---- Point values as text ----
+//
+// One wording for the inspector, the connection table of the plan set, the plan labels and the
+// lists, so a point reads the same everywhere. Numbers go through `formatNumber` (decimal comma in
+// German, no thousands grouping), as in the CSV.
+
+/** The height of a point as plans and tables write it: „+300“, „±0“, „-20“ (whole mm). */
+export function heightText(z: number): string {
+  const r = Math.round(z);
+  return r === 0 ? "±0" : r > 0 ? `+${r}` : String(r);
+}
+
+/** A duct's size is its diameter, a pipe's its DN. */
+const DUCT_TRADES: ReadonlySet<Trade> = new Set(["exhaust", "supply"]);
+
+/** The nominal size of a point: „Ø 280“ for a duct, „DN 50“ for a pipe. */
+export function sizeText(trade: Trade, dn: number): string {
+  return `${DUCT_TRADES.has(trade) ? "Ø" : "DN"} ${Math.round(dn)}`;
+}
+
+/**
+ * A current: „22,9 A“. A load too small for one decimal (an exit sign's 10 W) reads „< 0,1 A“,
+ * not „0 A“, which would look like no load at all.
+ */
+export function currentText(currentA: number, kw: number | undefined, lang: Lang): string {
+  return currentA < 0.05 && (kw ?? 0) > 0 ? `< ${formatNumber(0.1, lang)} A` : `${formatNumber(currentA, lang)} A`;
+}
+
+/**
+ * The values of a point in one line: an electric one „15,9 kW · 400 V 3N~ · 22,9 A · 25 A ·
+ * Festanschluss“ (load, supply, current, fuse, connection type), gas „43 kW · DN 25“, a duct
+ * „1200 m³/h · Ø 280“, a drain „DN 50 · fetthaltig“. `withKw: false` leaves out an electric
+ * point's load where the unit's connection values already show it (the inspector); the load of a
+ * gas or refrigeration point is its main value and always shown.
+ */
+export function pointValuesText(p: Pick<ConnectionPoint, "trade" | "values">, lang: Lang, opts: { withKw?: boolean } = {}): string {
+  const v = p.values;
+  const n = (x: number) => formatNumber(x, lang);
+  const parts: string[] = [];
+  const kw = p.trade === "electric" ? opts.withKw !== false : true;
+  if (kw && v.kw) parts.push(`${n(v.kw)} kW`);
+  if (v.voltage) parts.push(`${n(v.voltage)} V ${v.phases === 3 ? "3N~" : "1N~"}`);
+  if (v.currentA !== undefined) parts.push(currentText(v.currentA, v.kw, lang));
+  if (v.fuseA !== undefined) parts.push(`${n(v.fuseA)} A`);
+  if (v.plug) parts.push(plugName(v.plug, lang));
+  if (v.m3h) parts.push(`${n(v.m3h)} m³/h`);
+  if (v.kgH) parts.push(`${n(v.kgH)} kg/h`);
+  if (v.dn) parts.push(sizeText(p.trade, v.dn));
+  if (v.greasy) parts.push(t("pointList.greasy", undefined, lang));
+  return parts.join(" · ");
 }
 
 /** „Wand 3“ or „Trennwand 2“, numbered as the inspector counts them. */

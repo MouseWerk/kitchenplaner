@@ -410,7 +410,11 @@ function parseOverride(v: unknown, path: string): PointOverride {
     if (typeof v.greasy !== "boolean") invalid(`${path}.greasy`, v.greasy);
     o.greasy = v.greasy;
   }
-  if (v.note !== undefined) o.note = str(v.note, `${path}.note`);
+  if (v.note !== undefined) {
+    // A blank note is dropped, so it never reads as an override (`cleanPoints` drops it too).
+    const note = str(v.note, `${path}.note`);
+    if (note.trim() !== "") o.note = note;
+  }
   return o;
 }
 

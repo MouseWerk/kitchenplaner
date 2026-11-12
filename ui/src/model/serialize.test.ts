@@ -592,6 +592,15 @@ describe("format version 4", () => {
     expect(Object.keys(empty.items[0].points ?? {})).not.toContain("electric");
   });
 
+  it("reads a blank note as no note, not as an override", () => {
+    const blank = parseProject(withPoints((points) => (points.electric = { note: "" })));
+    expect(Object.keys(blank.items[0].points ?? {})).not.toContain("electric");
+    const spaces = parseProject(withPoints((points) => (points.electric = { z: 400, note: "   " })));
+    expect(spaces.items[0].points?.electric).toEqual({ z: 400 });
+    // What is read writes back without it.
+    expect(serializeProject(blank)).not.toContain('"note": ""');
+  });
+
   it("accepts the limits of the values", () => {
     const p = parseProject(
       withPoints((points) => {

@@ -265,6 +265,18 @@ export const FLOOR_DRAIN_KINDS: ReadonlySet<string> = new Set(["floorDrain", "fl
 export const FLOOR_DRAIN_REACH = 600;
 
 /**
+ * A point the planner moved may lie this far past its unit's outline (mm) before it counts as off
+ * the unit: a connection stub on the back or side, a pipe into the wall a basin hangs on. Units
+ * that were made smaller after a point was placed are what this finds. UNSURE: own value.
+ */
+export const POINT_OFF_UNIT = 50;
+/**
+ * A floor drain point may lie this far in front of its unit (mm): a tilting pan or kettle pours
+ * forward. The catalog contract allows the same (kinds/contract.test.ts).
+ */
+export const FLOOR_DRAIN_FRONT = 600;
+
+/**
  * Exhaust air a hood needs per kW of heat (sensible plus latent, `model/heat.ts`) released by the
  * units under it, after the project's simultaneity factor (m³/h per kW). UNSURE: own value, not
  * from the VDI 2052 tables; calibrated on the example kitchen (examples/README.md) so that it

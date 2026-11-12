@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Inspector } from "./Inspector";
-import { formatCurrent } from "./PointsSection";
 import { num, setLang } from "../lib/i18n";
 import { estimateHeat } from "../model/heat";
+import { heightText } from "../model/pointList";
 import { itemPoints, setPoint } from "../model/points";
 import { testItem, testProject } from "../model/testProject";
 import type { Connections, Item } from "../model/types";
@@ -76,12 +76,29 @@ describe("connection points in the inspector", () => {
     expect(e.textContent).toContain("Elektro");
     expect(e.querySelector(".point-summary")!.textContent).toBe("400 V 3N~ · 27,3 A · 32 A · Festanschluss");
     const z = itemPoints(item()).find((p) => p.trade === "electric")!.z;
-    expect(e.querySelector(".muted")!.textContent).toBe(`+${num(z)}`);
+    expect(e.querySelector(".muted")!.textContent).toBe(heightText(z));
     expect(row("1.AW").querySelector(".point-summary")!.textContent).toMatch(/^DN \d+/);
 
     setLang("en");
     act(() => root!.render(createElement(Inspector)));
     expect(codes()).toEqual(["1.E", "1.CW", "1.SW", "1.WD"]);
+  });
+
+  it("writes a duct as „Ø“ with its air ungrouped, in the row and in the size choice", () => {
+    mountWith(testItem("h", "hood-wall", 1000, 550));
+    expect(row("1.AB").querySelector(".point-summary")!.textContent).toMatch(/^2600 m³\/h · Ø \d+$/);
+    act(() => row("1.AB").click());
+    const size = control<HTMLSelectElement>("Nennweite", panelOf(row("1.AB")));
+    expect([...size.options].every((o) => o.textContent!.startsWith("Ø "))).toBe(true);
+  });
+
+  it("names the panel a row controls only while it is open", () => {
+    mountWith(combi());
+    expect(row("1.E").hasAttribute("aria-controls")).toBe(false);
+    act(() => row("1.E").click());
+    expect(document.getElementById(row("1.E").getAttribute("aria-controls")!)).not.toBeNull();
+    act(() => row("1.E").click());
+    expect(row("1.E").hasAttribute("aria-controls")).toBe(false);
   });
 
   it("shows no section for a unit without connections", () => {
@@ -239,9 +256,12 @@ describe("connection values in the inspector", () => {
     mountWith(combi());
     const more = button("Weitere Anschlüsse")!;
     expect(more.getAttribute("aria-expanded")).toBe("false");
+    // A closed disclosure names no panel: it does not exist.
+    expect(more.hasAttribute("aria-controls")).toBe(false);
     expect(() => control("Dampf (kg/h)")).toThrow();
     act(() => more.click());
     expect(more.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(more.getAttribute("aria-controls")!)).not.toBeNull();
     enter(control("Dampf (kg/h)"), "12");
     expect(item().connections.steamKgH).toBe(12);
     expect(codes()).toContain("1.D");
@@ -272,14 +292,6 @@ describe("connection values in the inspector", () => {
 });
 
 describe("tiny loads", () => {
-  it("reads „< 0,1 A“, not „0 A“", () => {
-    expect(formatCurrent(0, 0.01)).toBe("< 0,1 A");
-    expect(formatCurrent(0, 0)).toBe("0,0 A");
-    expect(formatCurrent(22.9, 15.9)).toBe("22,9 A");
-    setLang("en");
-    expect(formatCurrent(0, 0.01)).toBe("< 0.1 A");
-  });
-
   it("shows the exit sign's 10 W as „< 0,1 A“ in its row and its current field", () => {
     mountWith(testItem("x", "exit-sign", 1000, 240));
     expect(row("1.E").querySelector(".point-summary")!.textContent).toBe("230 V 1N~ · < 0,1 A · 10 A · Festanschluss");

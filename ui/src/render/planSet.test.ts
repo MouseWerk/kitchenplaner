@@ -4,8 +4,7 @@ import { resolve } from "node:path";
 import { deflateSync } from "node:zlib";
 import { t } from "../lib/i18n";
 import { equipmentRows, equipmentTotals, formatNumber, withSimultaneity } from "../model/equipment";
-import { heightText } from "../model/installationPlan";
-import { pointRows, wallRefName } from "../model/pointList";
+import { heightText, pointRows, pointValuesText, wallRefName } from "../model/pointList";
 import { projectPoints } from "../model/points";
 import { parseProject } from "../model/serialize";
 import { TRADE_GROUPS, tradeGroupName } from "../model/trades";
@@ -20,7 +19,6 @@ import {
   installationGroups,
   PAPER_SIZES,
   planSetPdf,
-  pointValuesText,
   sanitizePlanSetOptions,
   scaleDrawing,
   sheetFrame,
@@ -414,17 +412,6 @@ describe("installation plans and connection tables", () => {
     expect(enTexts).toContain("Connection table Electric");
     expect(enTexts).toContain("With simultaneity 0.65 (kW)");
     expect(enTexts).toContain(String(withSimultaneity(sum, 0.65)));
-  });
-
-  it("writes a point's values in one line", () => {
-    expect(pointValuesText({ trade: "electric", values: { kw: 15.9, voltage: 400, phases: 3, currentA: 22.9, fuseA: 25, plug: "fixed" } }, "de")).toBe("15,9 kW · 400 V 3N~ · 22,9 A · 25 A · Festanschluss");
-    expect(pointValuesText({ trade: "electric", values: { kw: 2.5, voltage: 230, phases: 1, currentA: 10.9, fuseA: 13, plug: "schuko" } }, "en")).toBe("2.5 kW · 230 V 1N~ · 10.9 A · 13 A · Schuko");
-    expect(pointValuesText({ trade: "drain", values: { dn: 50, greasy: true } }, "de")).toBe("DN 50 · fetthaltig");
-    expect(pointValuesText({ trade: "coldWater", values: { dn: 15 } }, "de")).toBe("DN 15");
-    expect(pointValuesText({ trade: "exhaust", values: { m3h: 1200, dn: 280 } }, "de")).toBe("1200 m³/h · Ø 280");
-    expect(pointValuesText({ trade: "gas", values: { kw: 12, dn: 15 } }, "de")).toBe("12 kW · DN 15");
-    expect(pointValuesText({ trade: "steam", values: { kgH: 25.5, dn: 20 } }, "de")).toBe("25,5 kg/h · DN 20");
-    expect(pointValuesText({ trade: "refrigeration", values: { kw: 3.2 } }, "en")).toBe("3.2 kW");
   });
 
   it("refuses an installation plan that does not fit, like any other sheet", async () => {

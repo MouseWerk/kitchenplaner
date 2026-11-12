@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pointRows, pointsCsv, wallRefName } from "./pointList";
+import { currentText, heightText, pointRows, pointsCsv, pointValuesText, sizeText, wallRefName } from "./pointList";
 import { projectPoints, wallRefs } from "./points";
 import { testItem, testProject } from "./testProject";
 
@@ -107,5 +107,52 @@ describe("pointsCsv", () => {
     const lines = pointsCsv(testProject([testItem("t", "table", 2000, 350)]), "de").slice(1).split("\r\n");
     expect(lines.length).toBe(3);
     expect(lines[2]).toBe("");
+  });
+});
+
+describe("point values as text", () => {
+  it("writes a point's values in one line", () => {
+    expect(pointValuesText({ trade: "electric", values: { kw: 15.9, voltage: 400, phases: 3, currentA: 22.9, fuseA: 25, plug: "fixed" } }, "de")).toBe("15,9 kW · 400 V 3N~ · 22,9 A · 25 A · Festanschluss");
+    expect(pointValuesText({ trade: "electric", values: { kw: 2.5, voltage: 230, phases: 1, currentA: 10.9, fuseA: 13, plug: "schuko" } }, "en")).toBe("2.5 kW · 230 V 1N~ · 10.9 A · 13 A · Schuko");
+    expect(pointValuesText({ trade: "drain", values: { dn: 50, greasy: true } }, "de")).toBe("DN 50 · fetthaltig");
+    expect(pointValuesText({ trade: "coldWater", values: { dn: 15 } }, "de")).toBe("DN 15");
+    expect(pointValuesText({ trade: "exhaust", values: { m3h: 1200, dn: 280 } }, "de")).toBe("1200 m³/h · Ø 280");
+    expect(pointValuesText({ trade: "supply", values: { m3h: 1820, dn: 450 } }, "en")).toBe("1820 m³/h · Ø 450");
+    expect(pointValuesText({ trade: "gas", values: { kw: 12.5, dn: 15 } }, "de")).toBe("12,5 kW · DN 15");
+    expect(pointValuesText({ trade: "steam", values: { kgH: 25.5, dn: 20 } }, "de")).toBe("25,5 kg/h · DN 20");
+    expect(pointValuesText({ trade: "refrigeration", values: { kw: 3.2 } }, "en")).toBe("3.2 kW");
+  });
+
+  it("leaves out only the electric load without kW, never a gas or refrigeration load", () => {
+    const electric = { trade: "electric" as const, values: { kw: 15.9, voltage: 400, phases: 3 as const, currentA: 22.9, fuseA: 25, plug: "fixed" as const } };
+    expect(pointValuesText(electric, "de", { withKw: false })).toBe("400 V 3N~ · 22,9 A · 25 A · Festanschluss");
+    expect(pointValuesText({ trade: "gas", values: { kw: 43, dn: 25 } }, "de", { withKw: false })).toBe("43 kW · DN 25");
+    expect(pointValuesText({ trade: "refrigeration", values: { kw: 1.2 } }, "de", { withKw: false })).toBe("1,2 kW");
+  });
+
+  it("does not group thousands", () => {
+    expect(pointValuesText({ trade: "exhaust", values: { m3h: 12600, dn: 630 } }, "de")).toBe("12600 m³/h · Ø 630");
+    expect(heightText(1200)).toBe("+1200");
+  });
+
+  it("writes a tiny load's current as „< 0,1 A“, not as no load", () => {
+    expect(currentText(0, 0.01, "de")).toBe("< 0,1 A");
+    expect(currentText(0, 0.01, "en")).toBe("< 0.1 A");
+    expect(currentText(0, 0, "de")).toBe("0 A");
+    expect(currentText(22.9, 15.9, "de")).toBe("22,9 A");
+    expect(pointValuesText({ trade: "electric", values: { kw: 0.01, voltage: 230, phases: 1, currentA: 0, fuseA: 10, plug: "schuko" } }, "de")).toBe("0,01 kW · 230 V 1N~ · < 0,1 A · 10 A · Schuko");
+  });
+
+  it("sizes a duct by its diameter and a pipe by its DN", () => {
+    expect(sizeText("exhaust", 280)).toBe("Ø 280");
+    expect(sizeText("supply", 315)).toBe("Ø 315");
+    expect(sizeText("gas", 20)).toBe("DN 20");
+    expect(sizeText("drain", 50)).toBe("DN 50");
+  });
+
+  it("writes heights as plans do: signed whole mm, the floor as ±0", () => {
+    expect(heightText(300)).toBe("+300");
+    expect(heightText(0.3)).toBe("±0");
+    expect(heightText(-20)).toBe("-20");
   });
 });

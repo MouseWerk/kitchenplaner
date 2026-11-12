@@ -1180,8 +1180,8 @@ export const en: Record<keyof typeof de, Msg> = {
   "crash.reload": "Reload window",
   "crash.unexpected": "An unexpected error occurred. Message: {message}",
 
-  // Connection points (0.3): trades with their codes, the groups of the installation plan, plugs
-  // (model/trades.ts). The keys planned for the other parts are listed in docs/design/connections-0.3.md.
+  // Connection points: trades with their codes, the groups of the installation plan, plugs
+  // (model/trades.ts).
   "trade.electric": "Electric",
   "trade.electric.code": "E",
   "trade.gas": "Gas",
@@ -1215,10 +1215,7 @@ export const en: Record<keyof typeof de, Msg> = {
   "plug.cee32": "CEE 32 A",
   "plug.cee63": "CEE 63 A",
 
-  // Each part of 0.3 adds its keys only inside its own block, in both catalogs.
-  // ---- 0.3 A catalog
-
-  // ---- 0.3 B files
+  // The connection list (model/pointList.ts) and the new columns of the equipment list.
   "list.soft": "Soft",
   "list.supply": "Supply air (m³/h)",
   "list.heat": "Heat sensible/latent (kW)",
@@ -1243,19 +1240,21 @@ export const en: Record<keyof typeof de, Msg> = {
   "pointList.greasy": "greasy",
   "pointList.note": "Note",
 
-  // ---- 0.3 C drawing
+  // The legend of the installation plan (model/installationPlan.ts).
   "legend.title": "Legend",
   "legend.heights": "Heights in mm above finished floor level (FFL)",
 
-  // ---- 0.3 D checks
+  // The plan check of connection points, gas units and hood airflow (model/pointChecks.ts).
   "check.gasNoHood": "No extraction hood or ventilated ceiling hangs above the gas unit pos. {pos}.",
   "check.gasShutoffMissing": "The plan has no gas emergency shut-off.",
   "check.islandSupply": "The connection {point} is {measured} mm from the nearest wall, with no floor box, service column or shaft within reach.",
   "check.floorDrainMissing": "No drain or channel lies within {required} mm of the floor drain point {point}.",
   "check.hoodAirflow": "Hood pos. {hood} extracts {measured} m³/h; about {required} m³/h are needed (typical value).",
   "check.pointOutside": "The connection {point} lies outside the room or inside a partition.",
+  "check.pointOffUnit": "The connection point {point} lies outside pos. {pos}.",
+  "check.fuseLow": "The connection {point} has a {measured} A fuse but draws {required} A.",
 
-  // ---- 0.3 E inspector
+  // The inspector: further connection values, heat release and the connection points.
   "inspector.softWater": "Softened water",
   "inspector.moreConnections": "More connections",
   "inspector.supplyM3h": "Supply air (m³/h)",
@@ -1277,7 +1276,7 @@ export const en: Record<keyof typeof de, Msg> = {
   "point.reset": "Reset",
   "point.resetAll": "Reset all connection points",
 
-  // ---- 0.3 F plan
+  // The trade filter of the plan view and the installation exports.
   "points.off": "Connections off",
   "points.all": "All connections",
   "points.electric": "Electric only",
@@ -1293,7 +1292,7 @@ export const en: Record<keyof typeof de, Msg> = {
   "installation.titleOf": "Installation plan {group}",
   "pointList.title": "Connection list",
 
-  // ---- 0.3 G pdf
+  // The installation sheets and connection tables of the PDF plan set.
   "planSet.installation": "Installation plan {group}",
   "planSet.pointTable": "Connection table {group}",
   "planSet.installationSheets": "Installation plans",
@@ -1303,7 +1302,4 @@ export const en: Record<keyof typeof de, Msg> = {
   "planSet.col.values": "Values",
   "planSet.sumKw": "Total (kW)",
   "planSet.sumKwFactored": "With simultaneity {f} (kW)",
-
-  // ---- 0.3 H dxf
-
 };
