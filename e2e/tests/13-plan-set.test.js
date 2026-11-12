@@ -65,8 +65,10 @@ appTest("the plan set exports as PDF with the sheets the dialog counts", async (
   assert.match(text, new RegExp(`/Count ${sheets}\\b`));
   // The title blocks name the project and each sheet.
   assert.ok(text.includes(`(${pdfLiteral(PROJECT)})`), "the project name is not in the PDF");
+  // The shown strings, for the message when a title is missing.
+  const shown = () => [...text.matchAll(/\(((?:[^()\\]|\\.)*)\) Tj/g)].map((m) => m[1]).filter((s) => /plan|tabelle|liste|Grundriss/i.test(s));
   for (const title of ["Grundriss", "Installationsplan Sanitär", "Anschlusstabelle Sanitär", "Geräteliste"]) {
-    assert.ok(text.includes(`(${pdfLiteral(title)})`), `no sheet „${title}“ in the PDF`);
+    assert.ok(text.includes(`(${pdfLiteral(title)})`), `no sheet „${title}“ in the PDF; titles found: ${JSON.stringify([...new Set(shown())].slice(0, 20))}`);
   }
   assert.ok(!text.includes("(Installationsplan Elektro)"), "the PDF has an electric sheet without electric points");
 });
