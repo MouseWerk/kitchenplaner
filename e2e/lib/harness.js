@@ -254,7 +254,8 @@ export async function launch({ width = 1440, height = 900, reuse = null } = {}) 
     /** Ids of the items drawn in the plan (`data-item` of the plan pane's shapes). */
     async planItems() {
       return browser.execute(() => {
-        const pane = document.querySelector("section[aria-label='Grundriss']");
+        // Named by the UI language; 16-english reads the plan in English.
+        const pane = document.querySelector("section[aria-label='Grundriss'], section[aria-label='Floor plan']");
         return [...new Set([...(pane?.querySelectorAll("[data-item]") ?? [])].map((e) => e.getAttribute("data-item")).filter(Boolean))].sort();
       });
     },
