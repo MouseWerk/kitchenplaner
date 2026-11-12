@@ -39,8 +39,11 @@ on:
 permissions:
   contents: read
 
+# A queued run replaces a pending one of the same group, even without cancel-in-progress. A
+# workflow_run after a release that did not succeed (Auto release skips when there is nothing to
+# release) builds nothing, so it gets a group of its own and cannot push out a real build.
 concurrency:
-  group: website-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'main' }}${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'success' && format('-idle-{0}', github.run_id) || '' }}
   cancel-in-progress: false
 
 jobs:
