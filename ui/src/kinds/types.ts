@@ -7,6 +7,7 @@ import type { Connections, Energy, Item, Vec2 } from "../model/types";
 import type { TKey } from "../lib/i18n";
 import type { Front } from "./parts/elevation";
 import type { Parts, Size } from "./parts/mesh";
+import type { PointLayout } from "./parts/points";
 import type { PlanSketch } from "./parts/plan";
 
 /** The groups of the catalog sidebar, in their order there; each has a `category.<id>` text. */
@@ -93,6 +94,11 @@ export interface CatalogEntry {
    * `connections` for the default variant.
    */
   variantConnections?: (v: Variant) => Connections;
+  /**
+   * Connection point defaults of this entry, on top of the profile and the rules
+   * (`parts/points.ts`); only for the few entries that need their own.
+   */
+  points?: PointLayout;
 }
 
 /**

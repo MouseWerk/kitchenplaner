@@ -1193,4 +1193,57 @@ export const de = {
   "crash.message": "Meldung: {message}",
   "crash.reload": "Fenster neu laden",
   "crash.unexpected": "Ein unerwarteter Fehler ist aufgetreten. Meldung: {message}",
+
+  // Connection points (0.3): trades with their codes, the groups of the installation plan, plugs
+  // (model/trades.ts). The keys planned for the other parts are listed in docs/design/connections-0.3.md.
+  "trade.electric": "Elektro",
+  "trade.electric.code": "E",
+  "trade.gas": "Gas",
+  "trade.gas.code": "G",
+  "trade.coldWater": "Kaltwasser",
+  "trade.coldWater.code": "KW",
+  "trade.hotWater": "Warmwasser",
+  "trade.hotWater.code": "WW",
+  "trade.softWater": "Enthärtetes Wasser",
+  "trade.softWater.code": "EW",
+  "trade.drain": "Abwasser",
+  "trade.drain.code": "AW",
+  "trade.floorDrain": "Bodenablauf",
+  "trade.floorDrain.code": "BA",
+  "trade.exhaust": "Abluft",
+  "trade.exhaust.code": "AB",
+  "trade.supply": "Zuluft",
+  "trade.supply.code": "ZU",
+  "trade.steam": "Dampf",
+  "trade.steam.code": "D",
+  "trade.refrigeration": "Kälte (Verbund)",
+  "trade.refrigeration.code": "K",
+  "tradeGroup.electric": "Elektro",
+  "tradeGroup.sanitary": "Sanitär",
+  "tradeGroup.gas": "Gas",
+  "tradeGroup.ventilation": "Lüftung",
+  "tradeGroup.special": "Kälte und Dampf",
+  "plug.fixed": "Festanschluss",
+  "plug.schuko": "Schuko",
+  "plug.cee16": "CEE 16 A",
+  "plug.cee32": "CEE 32 A",
+  "plug.cee63": "CEE 63 A",
+
+  // Each part of 0.3 adds its keys only inside its own block, in both catalogs.
+  // ---- 0.3 A catalog
+
+  // ---- 0.3 B files
+
+  // ---- 0.3 C drawing
+
+  // ---- 0.3 D checks
+
+  // ---- 0.3 E inspector
+
+  // ---- 0.3 F plan
+
+  // ---- 0.3 G pdf
+
+  // ---- 0.3 H dxf
+
 } satisfies Record<string, Msg>;

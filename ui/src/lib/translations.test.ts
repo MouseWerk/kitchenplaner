@@ -16,6 +16,8 @@ type Text = { key: string; where: string; lang: Lang; text: string };
 /** A finding of `rule` at `where` (a key, or `key.one`/`key.other`) that is accepted. */
 const ALLOWED: { rule: string; where: string; reason: string }[] = [
   { rule: "one-term", where: "view3d.face.back", reason: "„Hinten“, the back face of the view cube, and „Zurück“, going back, are both “Back” in English." },
+  { rule: "one-term", where: "list.cold", reason: "The equipment list’s water cell says „KW“ and “Cold”; the code of a cold water point is „KW“ and “CW”." },
+  { rule: "one-term", where: "list.hot", reason: "The equipment list’s water cell says „WW“ and “Hot”; the code of a hot water point is „WW“ and “HW”." },
   { rule: "glossary", where: "catDesc.donerGrill", reason: "A „senkrechter Drehspieß“ is the vertical spit itself, not a direction on the drawing." },
 ];
 const allowed = (rule: string, where: string) => ALLOWED.some((a) => a.rule === rule && (a.where === where || where.startsWith(`${a.where}.`)));

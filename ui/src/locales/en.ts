@@ -1179,4 +1179,57 @@ export const en: Record<keyof typeof de, Msg> = {
   "crash.message": "Message: {message}",
   "crash.reload": "Reload window",
   "crash.unexpected": "An unexpected error occurred. Message: {message}",
+
+  // Connection points (0.3): trades with their codes, the groups of the installation plan, plugs
+  // (model/trades.ts). The keys planned for the other parts are listed in docs/design/connections-0.3.md.
+  "trade.electric": "Electric",
+  "trade.electric.code": "E",
+  "trade.gas": "Gas",
+  "trade.gas.code": "G",
+  "trade.coldWater": "Cold water",
+  "trade.coldWater.code": "CW",
+  "trade.hotWater": "Hot water",
+  "trade.hotWater.code": "HW",
+  "trade.softWater": "Softened water",
+  "trade.softWater.code": "SW",
+  "trade.drain": "Drain",
+  "trade.drain.code": "WD",
+  "trade.floorDrain": "Floor drain",
+  "trade.floorDrain.code": "FD",
+  "trade.exhaust": "Exhaust air",
+  "trade.exhaust.code": "EX",
+  "trade.supply": "Supply air",
+  "trade.supply.code": "SA",
+  "trade.steam": "Steam",
+  "trade.steam.code": "ST",
+  "trade.refrigeration": "Remote refrigeration",
+  "trade.refrigeration.code": "RF",
+  "tradeGroup.electric": "Electric",
+  "tradeGroup.sanitary": "Plumbing",
+  "tradeGroup.gas": "Gas",
+  "tradeGroup.ventilation": "Ventilation",
+  "tradeGroup.special": "Refrigeration and steam",
+  "plug.fixed": "Fixed connection",
+  "plug.schuko": "Schuko",
+  "plug.cee16": "CEE 16 A",
+  "plug.cee32": "CEE 32 A",
+  "plug.cee63": "CEE 63 A",
+
+  // Each part of 0.3 adds its keys only inside its own block, in both catalogs.
+  // ---- 0.3 A catalog
+
+  // ---- 0.3 B files
+
+  // ---- 0.3 C drawing
+
+  // ---- 0.3 D checks
+
+  // ---- 0.3 E inspector
+
+  // ---- 0.3 F plan
+
+  // ---- 0.3 G pdf
+
+  // ---- 0.3 H dxf
+
 };

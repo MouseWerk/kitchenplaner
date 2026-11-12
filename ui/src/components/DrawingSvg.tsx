@@ -21,8 +21,24 @@ const FILL_VAR: Record<Fill, string> = {
   warning: "var(--draw-warning-fill)",
 };
 
+// Every pen listed, so a new one has to choose its colour. Connection points are drawn black on
+// paper and in the line colour on screen.
+const STROKE_VAR: Record<Pen, string> = {
+  wall: "var(--draw-line)",
+  opening: "var(--draw-line)",
+  swing: "var(--draw-detail)",
+  item: "var(--draw-line)",
+  overhead: "var(--draw-line)",
+  detail: "var(--draw-detail)",
+  hidden: "var(--draw-detail)",
+  floor: "var(--draw-line)",
+  dim: "var(--draw-dim)",
+  frame: "var(--draw-line)",
+  connection: "var(--draw-line)",
+};
+
 function strokeOf(pen: Pen): string {
-  return pen === "dim" ? "var(--draw-dim)" : pen === "detail" || pen === "hidden" || pen === "swing" ? "var(--draw-detail)" : "var(--draw-line)";
+  return STROKE_VAR[pen];
 }
 
 function penProps(pen: Pen, ps: number) {

@@ -82,6 +82,65 @@ export interface Connections {
   floorDrain?: boolean;
   /** Exhaust air in m³/h (hoods). */
   exhaustM3h?: number;
+  /** Softened water (combi ovens, steamers, coffee machines). */
+  softWater?: boolean;
+  /** Supply air in m³/h (hoods and ceilings with make-up air). */
+  supplyM3h?: number;
+  /** Steam from a central supply in kg/h. */
+  steamKgH?: number;
+  /** Cooling load on a remote refrigeration system in kW (the planner switches it on). */
+  refrigerationKw?: number;
+}
+
+/**
+ * Trades of connection points, in the order of lists, files, layers and the inspector
+ * (`TRADES` in trades.ts). German codes in the comments.
+ */
+export type Trade =
+  | "electric" // E  Elektro
+  | "gas" // G  Gas
+  | "coldWater" // KW Kaltwasser
+  | "hotWater" // WW Warmwasser
+  | "softWater" // EW enthärtetes Wasser
+  | "drain" // AW Abwasser (Geräteablauf)
+  | "floorDrain" // BA Bodenablauf
+  | "exhaust" // AB Abluft
+  | "supply" // ZU Zuluft
+  | "steam" // D  Dampf
+  | "refrigeration"; // K  Kälte (Verbund)
+
+/** How an electric point is connected: hard-wired or a plug with its rating. */
+export type Plug = "fixed" | "schuko" | "cee16" | "cee32" | "cee63";
+
+/**
+ * What the planner changed of one connection point; what is left out follows the catalog. Positions
+ * are measured from the left and back edges, as data sheets give them, so they stay right when the
+ * unit is resized.
+ */
+export interface PointOverride {
+  /** Distance from the unit's left edge, seen from the front (mm). */
+  x?: number;
+  /** Distance from the unit's back edge (mm); more than the depth lies in front of the unit. */
+  y?: number;
+  /** Height above the finished floor („ü. FFB“, mm). */
+  z?: number;
+  currentA?: number;
+  fuseA?: number;
+  plug?: Plug;
+  /** Nominal size: DN of a pipe, diameter of a duct (mm). */
+  dn?: number;
+  /** The drain carries greasy water (to the grease separator). */
+  greasy?: boolean;
+  note?: string;
+}
+
+/** The overrides of an item's connection points, one per trade at most. */
+export type ItemPoints = Partial<Record<Trade, PointOverride>>;
+
+/** Heat a unit gives off into the kitchen (kW); replaces the estimate of `model/heat.ts`. */
+export interface HeatRelease {
+  sensibleKw?: number;
+  latentKw?: number;
 }
 
 /** How an appliance is heated, for units offered in an electric and a gas version. */
@@ -104,6 +163,13 @@ export interface Item {
   connections: Connections;
   /** The energy variant of a unit offered in several (absent for all others). */
   energy?: Energy;
+  /**
+   * What the planner changed of the connection points; the points themselves are derived from
+   * `connections` and the catalog (`model/points.ts`). Absent when nothing was changed.
+   */
+  points?: ItemPoints;
+  /** The planner's heat release values; absent means the estimate. */
+  heat?: HeatRelease;
   /**
    * The position number („Pos.“) in plans, elevations and lists. Stable: it stays when other
    * items are deleted or reordered, so plans already sent out keep their numbers. Unique, >= 1.

@@ -30,6 +30,9 @@ export const PEN_STYLE: Record<Pen, PenStyle> = {
   floor: { width: 0.7 },
   dim: { width: 0.13 },
   frame: { width: 0.5 },
+  // Point symbols are told apart by shape, not weight: solid and medium, so they read over the
+  // quietly drawn equipment of an installation plan.
+  connection: { width: 0.25 },
 };
 
 /** Colors of printed and exported drawings (SVG, PNG): black lines on white paper. */

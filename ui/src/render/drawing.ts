@@ -6,7 +6,7 @@
 // offsets and arrow lengths are given in millimetres on paper; a renderer multiplies them with
 // its `paperScale` (drawing units per paper millimetre, 50 for 1:50).
 
-import type { Vec2 } from "../model/types";
+import type { Trade, Vec2 } from "../model/types";
 import { add, bounds, len, norm, scale, sub, type Box } from "../model/geometry";
 
 /** What a line or area stands for; renderers map it to a pen and a fill. */
@@ -20,7 +20,8 @@ export type Pen =
   | "hidden" // edges behind other parts: dashed
   | "floor" // floor line of an elevation
   | "dim" // dimension lines
-  | "frame"; // drawing frame and title block
+  | "frame" // drawing frame and title block
+  | "connection"; // connection point symbols, their labels and dimensions
 
 export type Fill = "none" | "wall" | "item" | "item-dark" | "glass" | "warning";
 
@@ -36,6 +37,9 @@ export const LAYER_OF: Record<Pen, string> = {
   floor: "WAENDE",
   dim: "BEMASSUNG",
   frame: "RAHMEN",
+  // Each point goes on its trade's layer by the shape's `trade` (the DXF export maps it); this is
+  // only the layer of a connection shape that carries no trade, a declared one so the file stays valid.
+  connection: "BESCHRIFTUNG",
 };
 
 interface Base {
@@ -47,6 +51,16 @@ interface Base {
    * the DXF export puts it on the label layer instead of into the item's block. Texts always are.
    */
   label?: boolean;
+  /**
+   * The trade a connection shape belongs to (symbol, label, dimension, legend entry): the DXF
+   * export puts it on that trade's layer.
+   */
+  trade?: Trade;
+  /**
+   * The connection point a shape draws, for hit testing and listing. Point shapes carry this
+   * instead of `itemId`, so they never land in the unit's DXF block.
+   */
+  point?: { itemId: string; trade: Trade };
 }
 
 export interface PolyShape extends Base {

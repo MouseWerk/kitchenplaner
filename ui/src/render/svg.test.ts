@@ -45,6 +45,17 @@ describe("drawingToSvg", () => {
   });
 });
 
+describe("connection pen", () => {
+  it("draws point symbols solid and black at 0.25 mm on paper", () => {
+    const d: Drawing = {
+      shapes: [{ t: "circle", pen: "connection", c: { x: 0, y: 0 }, r: 75, trade: "electric", point: { itemId: "a", trade: "electric" } }],
+    };
+    const svg = drawingToSvg(d, { paperScale: 50 });
+    expect(svg).toContain('<circle cx="0" cy="0" r="75" fill="none" stroke="#000" stroke-width="12.5"');
+    expect(svg).not.toContain("stroke-dasharray");
+  });
+});
+
 describe("sheetDrawing", () => {
   it("puts an 8 × 6 m plan on A3 at 1:50 with a title block", () => {
     const p = testProject([testItem("a", "table", 1600, 350)]);
