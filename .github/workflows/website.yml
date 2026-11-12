@@ -47,7 +47,9 @@ jobs:
   build:
     name: Build and check
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    # Pinned: the rendered checks use the pinned Playwright, whose Chromium needs a release it
+    # supports (ubuntu-latest moved to 26.04, which Playwright 1.56 does not).
+    runs-on: ubuntu-24.04
     outputs:
       legal_ready: ${{ steps.legal.outputs.ready }}
     defaults:
