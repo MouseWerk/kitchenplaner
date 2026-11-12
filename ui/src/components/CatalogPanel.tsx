@@ -16,7 +16,7 @@ import { itemFromCatalog } from "../model/project";
 import { useStore } from "../store/store";
 import { announcePlaced, CATALOG_DRAG_TYPE } from "../views/PlanView";
 import { currentLang, num, t as translate, useT } from "../lib/i18n";
-import { prefetchThumbnails, PRIORITY, useThumbnail, type Priority } from "../three/thumbnails";
+import { PRIORITY, useThumbnail, type Priority } from "../three/thumbnails";
 
 /** Thumbnail in a row and in the hover preview (CSS pixels). */
 const ROW_THUMB = { w: 56, h: 44 } as const;
@@ -27,8 +27,6 @@ const HOVER_DELAY_MS = 350;
 const LEAVE_GRACE_MS = 120;
 /** Gap between the sidebar and the preview, and the preview's minimum distance to the window edge. */
 const PREVIEW_GAP = 8;
-/** The rest of the catalog is prefetched after the rows on screen asked for theirs. */
-const PREFETCH_DELAY_MS = 150;
 
 /** "800 × 900 × 900" */
 const dims = (e: CatalogEntry) => `${e.width} × ${e.depth} × ${e.height}`;
@@ -82,8 +80,9 @@ function useVisibilityObserver(root: RefObject<HTMLElement | null>): Observe {
         (entries) => {
           for (const e of entries) callbacks.current.get(e.target)?.(e.isIntersecting);
         },
-        // A row below the edge is about to scroll in: ask a little early.
-        { root: root.current, rootMargin: "48px 0px" },
+        // Rows a few rows beyond the edges are about to scroll in: ask for them early. The rest
+        // of the catalog is not drawn until it comes near (thumbnails.ts).
+        { root: root.current, rootMargin: "240px 0px" },
       );
       callbacks.current.set(el, onChange);
       observer.current.observe(el);
@@ -147,11 +146,6 @@ export function CatalogPanel() {
     e.stopPropagation();
     to.focus();
   };
-
-  useEffect(() => {
-    const id = setTimeout(() => prefetchThumbnails(CATALOG, ROW_THUMB.w, ROW_THUMB.h), PREFETCH_DELAY_MS);
-    return () => clearTimeout(id);
-  }, []);
 
   const open = useRef(false);
   open.current = preview !== null;
@@ -351,7 +345,7 @@ function Thumbnail({ entry, size, priority }: { entry: CatalogEntry; size: { w: 
   const thumb = useThumbnail(entry, size.w, size.h, priority);
   return (
     <span className={`cat-thumb${thumb.status === "loading" ? " is-loading" : ""}`} style={{ width: size.w, height: size.h }} aria-hidden>
-      {thumb.url ? <img src={thumb.url} alt="" width={size.w} height={size.h} draggable={false} /> : thumb.status === "unavailable" && <PlanSymbol entry={entry} size={size} />}
+      {thumb.url ? <img src={thumb.url} alt="" width={size.w} height={size.h} draggable={false} onError={thumb.onError} /> : thumb.status === "unavailable" && <PlanSymbol entry={entry} size={size} />}
     </span>
   );
 }

@@ -1,9 +1,14 @@
-// The four elevations (Ansichten) as Drawings: a section through the room looking at one wall,
-// with the equipment in front of it drawn far to near so nearer items cover farther ones.
+// The elevations (Ansichten) as Drawings: a section through the room looking at a wall, with the
+// equipment in front of it drawn far to near so nearer items cover farther ones.
 //
 // An elevation is a wall elevation (Wandabwicklung): the section plane stands a cut depth in front
 // of the walls looked at, so the units across the room (an island, the pass at the opposite wall)
 // do not hide the wall's own equipment. The cut can be widened to half the room or the whole room.
+//
+// There are two kinds (`ElevationId`). A compass view looks north, east, south or west at every
+// wall turned that way, across the whole room: the familiar four of a rectangular room, and in an
+// L-shaped room both legs at once. A wall view looks at one wall face-on, from corner to corner:
+// the only true view of a slanted wall (a 45° chamfer), which no compass view sees face-on.
 //
 // Drawing coordinates: X runs along the viewer's right axis u, Y = -height (y down on screen,
 // so higher up is further up on the sheet). The floor is Y = 0.
@@ -12,7 +17,7 @@ import { dot, EPS, footprint, frontOf, openingSpan, walls, type Wall } from "./g
 import { clampPartitionOpening, HATCH_SHELF_THICKNESS, openingSpanOnPartition, partitionAxes, partitionBand, partitionLength } from "./partitions";
 import { doorSetup, HANDLE_HEIGHT, HANDLE_LENGTH, SLIDE_OVERLAP, TRACK_HEIGHT } from "./doors";
 import { positions } from "./project";
-import type { Facing, Item, Opening, Partition, Project, Room, Vec2 } from "./types";
+import { FACINGS, type Facing, type Item, type Opening, type Partition, type Project, type Room, type Vec2 } from "./types";
 import { mm, TEXT, type Drawing, type Pen, type Shape, type Fill, type TextShape } from "../render/drawing";
 import { CIRCLE_RADIUS } from "../render/svg";
 import { Front, rect, TOP } from "../kinds/parts/elevation";
@@ -45,12 +50,131 @@ export interface ElevationOptions {
 const DEFAULT_PAPER_SCALE = 50;
 
 /**
+ * Which elevation: a compass view (`Facing`), or `wall-<i>` looking at wall i face-on, the wall
+ * from corner i to corner i + 1 (the index openings use). Not stored in the project: a view
+ * setting like the cut depth.
+ */
+export type ElevationId = Facing | `wall-${number}`;
+
+export function wallElevation(index: number): ElevationId {
+  return `wall-${index}`;
+}
+
+/** The wall index of a wall view, null for a compass view. */
+export function elevationWallIndex(id: ElevationId): number | null {
+  if (!id.startsWith("wall-")) return null;
+  const n = Number(id.slice(5));
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+/** Whether the room has this elevation: always a compass view, a wall view while the wall exists. */
+export function elevationExists(room: Pick<Room, "points">, id: ElevationId): boolean {
+  const i = elevationWallIndex(id);
+  if (i === null) return FACINGS.includes(id as Facing);
+  return i < room.points.length && room.points.length >= 3 && walls(room)[i].length >= EPS;
+}
+
+/**
+ * The elevation to show for `id`: itself while the room has it, else the north view. A wall view
+ * outlives the wall it names (corners deleted, a new room) as a choice of the pane; resolving it
+ * at the point of drawing brings it back after an undo instead of losing it.
+ */
+export function resolveElevation(room: Pick<Room, "points">, id: ElevationId): ElevationId {
+  return elevationExists(room, id) ? id : "north";
+}
+
+/**
+ * The walls no compass view sees face-on (a 45° chamfer, a wall at an angle): their openings and
+ * the true width of their units show only in a view of their own.
+ */
+export function slantedWalls(room: Pick<Room, "points">): number[] {
+  if (room.points.length < 3) return [];
+  return walls(room)
+    .filter((w) => w.length >= EPS && FACINGS.every((f) => -dot(w.inward, VIEW_DIR[f]) < WALL_FACES_VIEWER))
+    .map((w) => w.index);
+}
+
+/** The elevations that together show every wall true: the four compass views, then each slanted wall. */
+export function standardElevations(room: Pick<Room, "points">): ElevationId[] {
+  return [...FACINGS, ...slantedWalls(room).map(wallElevation)];
+}
+
+/**
  * The view direction `v` (unit vector from the viewer towards the wall looked at) and the right
  * axis `u` of the viewer, in plan coordinates (x east, y south).
  */
 export function facingAxes(facing: Facing): { v: Vec2; u: Vec2 } {
   const v = VIEW_DIR[facing];
   return { v, u: { x: -v.y, y: v.x } };
+}
+
+/** The axes of any elevation; a wall view looks against the wall's inward normal. Null when the wall does not exist. */
+export function elevationAxes(room: Pick<Room, "points">, id: ElevationId): { v: Vec2; u: Vec2 } | null {
+  const i = elevationWallIndex(id);
+  if (i === null) return facingAxes(id as Facing);
+  if (!elevationExists(room, id)) return null;
+  const n = walls(room)[i].inward;
+  const v = { x: -n.x, y: -n.y };
+  return { v, u: { x: -v.y, y: v.x } };
+}
+
+/** What an elevation shows of the room: its axes, the stretch along u and which walls count. */
+interface ElevationFrame {
+  u: Vec2;
+  v: Vec2;
+  /** The stretch along u between the cut walls, and how wide each cut wall is drawn. */
+  x0: number;
+  x1: number;
+  endLeft: number;
+  endRight: number;
+  /** The walls the cut depth is measured from. */
+  backs: (w: Wall) => boolean;
+  /** The walls seen face-on, whose openings are drawn. */
+  faced: (w: Wall) => boolean;
+  /** Only what stands in front of x0..x1 (a wall view); a compass view shows the whole room. */
+  span: boolean;
+}
+
+/**
+ * Below this |cos| between a neighbouring wall and the view direction the neighbour runs nearly
+ * along the wall looked at, and its section would grow without bound: drawn as thick as the wall.
+ */
+const MIN_END_COS = 0.2;
+
+function elevationFrame(room: Room, id: ElevationId): ElevationFrame | null {
+  const axes = elevationAxes(room, id);
+  if (!axes) return null;
+  const { u, v } = axes;
+  const t = room.wallThickness;
+  const ws = walls(room);
+  const i = elevationWallIndex(id);
+  if (i === null) {
+    const xs = room.points.map((p) => dot(p, u));
+    return {
+      u,
+      v,
+      x0: Math.min(...xs),
+      x1: Math.max(...xs),
+      endLeft: t,
+      endRight: t,
+      backs: (w) => -dot(w.inward, v) >= WALL_BACKS_VIEW,
+      faced: (w) => -dot(w.inward, v) >= WALL_FACES_VIEWER,
+      span: false,
+    };
+  }
+  const w = ws[i];
+  const prev = ws[(i - 1 + ws.length) % ws.length];
+  const next = ws[(i + 1) % ws.length];
+  // The section plane parallel to the wall cuts a neighbour standing at an angle wider than it is
+  // thick: a 45° chamfer's neighbours show t·√2.
+  const endOf = (nb: Wall) => {
+    const c = Math.abs(dot(nb.dir, v));
+    return c > MIN_END_COS ? t / c : t;
+  };
+  const au = dot(w.a, u);
+  const bu = dot(w.b, u);
+  const [x0, endLeft, x1, endRight] = au <= bu ? [au, endOf(prev), bu, endOf(next)] : [bu, endOf(next), au, endOf(prev)];
+  return { u, v, x0, x1, endLeft, endRight, backs: (x) => x.index === i, faced: (x) => x.index === i, span: true };
 }
 
 const VIEW_DIR: Record<Facing, Vec2> = {
@@ -79,9 +203,11 @@ const DIM_OFFSET = 8;
 const OPENING_FRAME = 60;
 
 /**
- * The elevation looking towards `facing`: floor, the cut walls at both ends, the ceiling, the
- * openings of the wall looked at, and every item as a box from its elevation to its top with
- * front details when its front faces the viewer. Item shapes carry their `itemId`.
+ * The elevation `id` (a compass view or one wall): floor, the cut walls at both ends, the ceiling,
+ * the openings of the walls looked at, and every item as a box from its elevation to its top with
+ * front details when its front faces the viewer. Item shapes carry their `itemId`. A wall view
+ * reaches from corner to corner of its wall and shows what stands in front of it (an item whose
+ * centre does); its dimension is the wall's length. A wall that does not exist draws nothing.
  *
  * Partitions stand in the room like items and are painted in the same far-to-near order: one
  * seen face-on as a wall surface with its openings, one seen end-on as a section band (wall
@@ -91,29 +217,27 @@ const OPENING_FRAME = 60;
  * item when its centre does (so most of it), a column also when the section plane cuts it, a
  * partition with its part inside the band and a section band where the plane cuts it.
  */
-export function elevationDrawing(project: Project, facing: Facing, opts: ElevationOptions): Drawing {
+export function elevationDrawing(project: Project, id: ElevationId, opts: ElevationOptions): Drawing {
   const ps = opts.paperScale ?? DEFAULT_PAPER_SCALE;
   const shapes: Shape[] = [];
   const { room } = project;
   if (room.points.length < 3) return { shapes };
-  const { u, v } = facingAxes(facing);
+  const frame = elevationFrame(room, id);
+  if (!frame) return { shapes };
+  const { u, v, x0, x1, endLeft, endRight } = frame;
   const H = room.height;
-  const t = room.wallThickness;
-  const xs = room.points.map((p) => dot(p, u));
-  const x0 = Math.min(...xs);
-  const x1 = Math.max(...xs);
 
   // Room section.
-  shapes.push({ t: "poly", pen: "wall", fill: "wall", pts: rect(x0 - t, x0, 0, H), closed: true });
-  shapes.push({ t: "poly", pen: "wall", fill: "wall", pts: rect(x1, x1 + t, 0, H), closed: true });
+  shapes.push({ t: "poly", pen: "wall", fill: "wall", pts: rect(x0 - endLeft, x0, 0, H), closed: true });
+  shapes.push({ t: "poly", pen: "wall", fill: "wall", pts: rect(x1, x1 + endRight, 0, H), closed: true });
   shapes.push({ t: "poly", pen: "wall", pts: [{ x: x0, y: -H }, { x: x1, y: -H }], closed: false });
-  shapes.push({ t: "poly", pen: "floor", pts: [{ x: x0 - t, y: 0 }, { x: x1 + t, y: 0 }], closed: false });
+  shapes.push({ t: "poly", pen: "floor", pts: [{ x: x0 - endLeft, y: 0 }, { x: x1 + endRight, y: 0 }], closed: false });
 
   const ws = walls(room);
   for (const o of room.openings) {
     if (o.partition !== undefined) continue;
     const w = ws[o.wall];
-    if (!w || -dot(w.inward, v) < WALL_FACES_VIEWER) continue;
+    if (!w || !frame.faced(w)) continue;
     const span = openingSpan(room, o);
     // Seen from inside the room: a door opening in opens towards the viewer.
     if (span) drawOpening(o, dot(span[0], u), dot(span[1], u), doorSetup(o).swing === "in", shapes);
@@ -122,8 +246,11 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
   // Painter's order: whatever has its nearest corner farthest from the viewer first.
   const nearest = (pts: Vec2[]) => Math.min(...pts.map((p) => dot(p, v)));
   const pos = positions(project);
-  const D = cutDepth(room, facing, opts.cut ?? "wall");
-  const depthOf = (p: Vec2, l = dot(p, u), r = l) => wallDepth(ws, u, v, p, l, r);
+  const D = cutDepth(room, id, opts.cut ?? "wall");
+  const backing = ws.filter(frame.backs);
+  const depthOf = (p: Vec2, l = dot(p, u), r = l) => wallDepth(backing, u, v, p, l, r);
+  // A wall view keeps to the stretch in front of its wall.
+  const inSpan = (x: number) => !frame.span || (x >= x0 - EPS && x <= x1 + EPS);
   const scene: { depth: number; draw: () => void }[] = [];
   // The position numbers go on top of all the units: painted with its unit, a number (lifted or
   // not) is covered by any nearer unit drawn after it, such as a hood over the oven's number.
@@ -134,7 +261,10 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
     if (partitionLength(p) < EPS) continue;
     const band = partitionBand(room, p);
     // The band as a polygon: along the left face from a to b, back along the right face.
-    const outline = [band.start[0], band.end[0], band.end[1], band.start[1]];
+    let outline = [band.start[0], band.end[0], band.end[1], band.start[1]];
+    // Cut off at the ends of a wall view's stretch; only the section plane makes a section band.
+    if (frame.span) outline = clipPolygon(clipPolygon(outline, (q) => dot(q, u) - x0).pts, (q) => x1 - dot(q, u)).pts;
+    if (outline.length < 3) continue;
     const kept = D === Infinity ? { pts: outline, cut: [] } : clipPolygon(outline, (q) => D - depthOf(q));
     if (kept.pts.length < 3) continue;
     const depth = nearest(kept.pts);
@@ -144,6 +274,7 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
   }
   for (const it of project.items) {
     const fp = footprint(it);
+    if (!inSpan(dot({ x: it.x, y: it.y }, u))) continue;
     if (D !== Infinity) {
       const us = fp.map((q) => dot(q, u));
       const inBand = depthOf({ x: it.x, y: it.y }, Math.min(...us), Math.max(...us)) <= D;
@@ -172,27 +303,29 @@ export function elevationDrawing(project: Project, facing: Facing, opts: Elevati
   if (opts.showDims) {
     // Width below the floor (left of a→b is up, so a negative offset), height left of the room.
     shapes.push({ t: "dim", pen: "dim", a: { x: x0, y: 0 }, b: { x: x1, y: 0 }, offset: -DIM_OFFSET, text: mm(x1 - x0) });
-    shapes.push({ t: "dim", pen: "dim", a: { x: x0 - t, y: 0 }, b: { x: x0 - t, y: -H }, offset: DIM_OFFSET, text: mm(H) });
+    shapes.push({ t: "dim", pen: "dim", a: { x: x0 - endLeft, y: 0 }, b: { x: x0 - endLeft, y: -H }, offset: DIM_OFFSET, text: mm(H) });
   }
   return { shapes };
 }
 
 /**
  * The cut depth in mm: "wall" `WALL_CUT_DEPTH`, "half" half the room's extent along the view
- * direction, "room" no limit (Infinity).
+ * direction (for a wall view: across the room from that wall), "room" no limit (Infinity).
  */
-export function cutDepth(room: Pick<Room, "points">, facing: Facing, cut: ElevationCut): number {
+export function cutDepth(room: Pick<Room, "points">, id: ElevationId, cut: ElevationCut): number {
   if (cut === "room" || room.points.length < 3) return Infinity;
   if (cut === "wall") return WALL_CUT_DEPTH;
-  const { v } = facingAxes(facing);
-  const ds = room.points.map((p) => dot(p, v));
+  const axes = elevationAxes(room, id);
+  if (!axes) return Infinity;
+  const ds = room.points.map((p) => dot(p, axes.v));
   return (Math.max(...ds) - Math.min(...ds)) / 2;
 }
 
 /**
  * How far `p` stands in front of the nearest wall behind it, measured along the view direction,
- * among the walls turned towards the viewer. `l`..`r` is the stretch along u the thing covers: a
- * wall counts when it overlaps that stretch, at the point of it nearest to `p` along u. So in an
+ * among the walls the view measures from (`ws`: for a compass view those turned towards the
+ * viewer, for a wall view the wall). `l`..`r` is the stretch along u the thing covers: a wall
+ * counts when it overlaps that stretch, at the point of it nearest to `p` along u. So in an
  * L-shaped room a unit is measured from the near leg when it stands in front of it, from the far
  * leg elsewhere. Infinity when no wall lies behind it.
  */
@@ -201,7 +334,6 @@ function wallDepth(ws: readonly Wall[], u: Vec2, v: Vec2, p: Vec2, l: number, r:
   const pv = dot(p, v);
   let best = Infinity;
   for (const w of ws) {
-    if (-dot(w.inward, v) < WALL_BACKS_VIEW) continue;
     const au = dot(w.a, u);
     const bu = dot(w.b, u);
     const lo = Math.min(au, bu);

@@ -3,7 +3,9 @@
 // as on screen and in the other exports (`drawing.ts`), placed in paper millimetres at a true
 // scale: a sheet at 1:50 printed at 100 % measures 1:50.
 
-import { elevationDrawing, WALL_CUT_DEPTH, type ElevationCut } from "../model/elevation";
+import { elevationDrawing, slantedWalls, wallElevation, WALL_CUT_DEPTH, type ElevationCut, type ElevationId } from "../model/elevation";
+import { elevationTitle } from "../model/elevationNames";
+import { walls } from "../model/geometry";
 import { dimensionsText, drainText, equipmentRows, equipmentTotals, formatNumber, waterText, type EquipmentRow } from "../model/equipment";
 import { planDrawing } from "../model/plan";
 import { FACINGS, type Facing, type Item, type Project, type ProjectInfo, type Vec2 } from "../model/types";
@@ -31,8 +33,14 @@ export interface PlanSetOptions {
   orientation: Orientation;
   scale: ScaleChoice;
   plan: boolean;
-  /** The elevations to print, in FACINGS order. */
+  /** The compass elevations to print, in FACINGS order. */
   elevations: Facing[];
+  /**
+   * Sheets of single walls after the compass ones: none, each slanted wall (which no compass view
+   * sees face-on), or every wall. A rule rather than wall numbers, since the choice is remembered
+   * per computer and holds for every project.
+   */
+  wallSheets: WallSheets;
   list: boolean;
   /** A page with the 3D view (only when a 3D view can be captured). */
   view3d: boolean;
@@ -40,7 +48,19 @@ export interface PlanSetOptions {
   names: boolean;
 }
 
-export const DEFAULT_PLAN_SET: PlanSetOptions = { paper: "A3", orientation: "landscape", scale: "auto", plan: true, elevations: [...FACINGS], list: true, view3d: false, names: false };
+export type WallSheets = "none" | "slanted" | "all";
+export const WALL_SHEETS: readonly WallSheets[] = ["none", "slanted", "all"];
+
+export const DEFAULT_PLAN_SET: PlanSetOptions = { paper: "A3", orientation: "landscape", scale: "auto", plan: true, elevations: [...FACINGS], wallSheets: "slanted", list: true, view3d: false, names: false };
+
+/** The walls (indices) the `wallSheets` rule prints for this room. */
+export function wallSheetWalls(room: Project["room"], rule: WallSheets): number[] {
+  if (rule === "none" || room.points.length < 3) return [];
+  if (rule === "slanted") return slantedWalls(room);
+  return walls(room)
+    .filter((w) => w.length > 0)
+    .map((w) => w.index);
+}
 
 /** Options read back from storage: anything unknown falls back to the default. */
 export function sanitizePlanSetOptions(v: unknown): PlanSetOptions {
@@ -53,6 +73,7 @@ export function sanitizePlanSetOptions(v: unknown): PlanSetOptions {
     scale: o.scale === "auto" || PLAN_SCALES.includes(o.scale as never) ? (o.scale as ScaleChoice) : d.scale,
     plan: bool(o.plan, d.plan),
     elevations: Array.isArray(o.elevations) ? FACINGS.filter((f) => (o.elevations as unknown[]).includes(f)) : [...d.elevations],
+    wallSheets: WALL_SHEETS.includes(o.wallSheets as WallSheets) ? (o.wallSheets as WallSheets) : d.wallSheets,
     list: bool(o.list, d.list),
     view3d: bool(o.view3d, d.view3d),
     names: bool(o.names, d.names),
@@ -141,10 +162,10 @@ function drawingSources(project: Project, opts: PlanSetOptions, ctx: PlanSetCont
   const tr = (k: TKey, vars?: Record<string, string | number>) => t(k, vars, ctx.lang);
   if (opts.plan) out.push({ kind: "drawing", title: tr("view.plan"), at: (ps) => planDrawing(project, { showNames: opts.names, showDims: true, paperScale: ps }) });
   const cutName = tr(`view.cut.${ctx.cut}`, { mm: WALL_CUT_DEPTH });
-  for (const facing of FACINGS) {
-    if (!opts.elevations.includes(facing)) continue;
-    const view = tr("view.elevation", { facing: tr(`facing.${facing}`) });
-    out.push({ kind: "drawing", title: tr("planSet.elevationTitle", { view, cut: cutName }), at: (ps) => elevationDrawing(project, facing, { showDims: true, cut: ctx.cut, paperScale: ps }) });
+  const ids: ElevationId[] = [...FACINGS.filter((f) => opts.elevations.includes(f)), ...wallSheetWalls(project.room, opts.wallSheets).map(wallElevation)];
+  for (const id of ids) {
+    const view = elevationTitle(id, ctx.lang);
+    out.push({ kind: "drawing", title: tr("planSet.elevationTitle", { view, cut: cutName }), at: (ps) => elevationDrawing(project, id, { showDims: true, cut: ctx.cut, paperScale: ps }) });
   }
   return out;
 }

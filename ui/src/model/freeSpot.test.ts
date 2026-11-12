@@ -14,12 +14,18 @@ function draftOf(catalogId: string): Item {
   return itemFromCatalog(entry, 0, 0);
 }
 
+/**
+ * The findings that depend on where units stand: not a missing hood or hand-wash basin, which
+ * depend on what the planner adds.
+ */
+const placementIssues = (p: Project) => checkProject(p).filter((i) => !/^check\.(hood|handwash)/.test(i.key));
+
 /** The project with the draft placed at its free spot, and the findings about the new unit. */
 function place(p: Project, catalogId: string, grid = 50) {
   const draft = draftOf(catalogId);
   const spot = freeSpot(p, draft, grid);
   const item = { ...draft, ...spot };
-  const issues = checkProject({ ...p, items: [...p.items, { ...item, pos: 999 }] }).filter((i) => i.itemIds.includes(draft.id));
+  const issues = placementIssues({ ...p, items: [...p.items, { ...item, pos: 999 }] }).filter((i) => i.itemIds.includes(draft.id));
   return { spot, item, issues };
 }
 
@@ -41,18 +47,23 @@ describe("freeSpot", () => {
   );
 
   it("stands free in the room when every wall is taken, and keeps clear of the door", () => {
-    // A 4 × 3 m room with tables along all four walls.
+    // A 4.8 × 4.4 m room with tables along all four walls, facing into the room; what is left of
+    // the side walls is too short for a table. In the middle there is room for one that keeps the
+    // movement areas (1 m) and the aisle to the south row (1.2 m).
     const p = testProject([
       testItem("n1", "table", 600, 350),
       testItem("n2", "table", 1800, 350),
       testItem("n3", "table", 3000, 350),
-      testItem("s1", "table", 1000, 2650, 180),
-      testItem("s2", "table", 3000, 2650, 180),
-      testItem("w", "table", 350, 1500, 90),
-      testItem("e", "table", 3650, 1500, -90),
+      testItem("n4", "table", 4200, 350),
+      testItem("s1", "table", 600, 4050, 180),
+      testItem("s2", "table", 1800, 4050, 180),
+      testItem("s3", "table", 3000, 4050, 180),
+      testItem("s4", "table", 4200, 4050, 180),
+      testItem("w", "table", 350, 2200, -90),
+      testItem("e", "table", 4450, 2200, 90),
     ]);
-    p.room = { ...p.room, points: rectRoom(4000, 3000), openings: [] };
-    expect(checkProject(p)).toEqual([]);
+    p.room = { ...p.room, points: rectRoom(4800, 4400), openings: [] };
+    expect(placementIssues(p)).toEqual([]);
     const { spot, issues } = place(p, "prep-scale");
     expect(spot).not.toBeNull();
     expect(issues).toEqual([]);
@@ -60,7 +71,7 @@ describe("freeSpot", () => {
     // Off every wall: between the north and the south row, unturned.
     expect(table.spot?.rotation).toBe(0);
     expect(table.spot?.y).toBeGreaterThanOrEqual(700 + 350);
-    expect(table.spot?.y).toBeLessThanOrEqual(2300 - 350);
+    expect(table.spot?.y).toBeLessThanOrEqual(3700 - 350);
     expect(table.issues).toEqual([]);
   });
 

@@ -223,18 +223,18 @@
     {
       "id": "ex-05",
       "pos": 5,
-      "catalogId": "cold-room",
-      "name": "Cold room",
-      "x": 1050,
-      "y": 3750,
+      "catalogId": "cold-room-small",
+      "name": "Cold room, small",
+      "x": 750,
+      "y": 3450,
       "rotation": 270,
-      "width": 2400,
-      "depth": 2100,
+      "width": 1800,
+      "depth": 1500,
       "height": 2200,
       "elevation": 0,
       "connections": {
-        "electricKw": 1.5,
-        "voltage": 400
+        "electricKw": 1,
+        "voltage": 230
       },
       "note": "Storage"
     },
@@ -1099,7 +1099,7 @@
       "catalogId": "mop-sink",
       "name": "Cleaning sink",
       "x": 250,
-      "y": 6800,
+      "y": 8850,
       "rotation": 270,
       "width": 500,
       "depth": 500,

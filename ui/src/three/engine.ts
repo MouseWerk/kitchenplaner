@@ -27,6 +27,7 @@ import { useStore, type Mode } from "../store/store";
 import { buildItemObject, itemIdOf, MM_PER_UNIT, placeItemObject, releaseShared, retainShared, sameModel, setItemHighlight } from "./meshes";
 import { applyCutaway, buildRoomObject, disposeRoomObject } from "./room";
 import { disposeMerged, mergeItemObject } from "./merge";
+import { ItemBatches, modelKey } from "./batch";
 import { applyRoomLook, buildContactShadows, disposeContactShadows, LOOK, RoomTextures } from "./look";
 import { distanceFor, easeInOut, fitDistance, halfHeightAt, orthoHalfHeightForBox, slerpDirection, VIEW_DIRECTION, viewKeyAction, type ViewName } from "./navigation";
 import { EYE_HEIGHT, intentOf, isWalkKey, look, startWalk, stepWalk, walkSpace, type WalkSpace, type WalkState } from "./walk";
@@ -122,6 +123,8 @@ export class Engine {
   private readonly itemsRoot = new THREE.Group();
   private readonly overlayRoot = new THREE.Group();
   private readonly items = new Map<string, { item: Item; object: THREE.Group }>();
+  /** Draws the items' opaque parts, one draw call per material (batch.ts). */
+  private readonly batches = new ItemBatches();
   /** Items whose model is still to be built, latest version by id; built a slice per frame. */
   private readonly pending = new Map<string, Item>();
   private buildFrame = 0;
@@ -233,7 +236,7 @@ export class Engine {
     this.sun.shadow.radius = 4;
     this.sun.shadow.bias = -0.0003;
     this.sun.shadow.normalBias = 0.015;
-    this.scene.add(hemi, this.sun, this.sun.target, this.itemsRoot, this.overlayRoot);
+    this.scene.add(hemi, this.sun, this.sun.target, this.itemsRoot, this.batches.root, this.overlayRoot);
     // The box only gives the edges their shape: dispose it once they are taken.
     const box = new THREE.BoxGeometry(1, 1, 1);
     this.outlineBox = new THREE.EdgesGeometry(box);
@@ -304,6 +307,7 @@ export class Engine {
       }
       if (known && sameModel(known.item, item)) {
         placeItemObject(known.object, item);
+        this.batches.place(item.id);
         this.items.set(item.id, { item, object: known.object });
         this.pending.delete(item.id);
         moved = true;
@@ -337,6 +341,7 @@ export class Engine {
       if (known) this.removeItem(known.object);
       const object = mergeItemObject(buildItemObject(item));
       this.itemsRoot.add(object);
+      this.batches.add(id, object, modelKey(item));
       this.items.set(id, { item, object });
       if (performance.now() - start > budgetMs) break;
     }
@@ -678,6 +683,7 @@ export class Engine {
     if (this.contact) disposeContactShadows(this.contact);
     for (const { object } of this.items.values()) disposeMerged(object);
     this.itemsRoot.clear();
+    this.batches.dispose();
     this.items.clear();
     this.disposeComposer();
     releaseShared();
@@ -711,6 +717,7 @@ export class Engine {
   }
 
   private removeItem(object: THREE.Group): void {
+    this.batches.remove(object.userData.itemId as string);
     this.itemsRoot.remove(object);
     disposeMerged(object);
   }
@@ -900,6 +907,7 @@ export class Engine {
     for (const { object } of this.items.values()) {
       if (!object.userData.highlighted) continue;
       setItemHighlight(object, false);
+      this.batches.setDetached(object.userData.itemId as string, false);
       object.userData.highlighted = false;
     }
     this.overlayRoot.clear();
@@ -911,6 +919,8 @@ export class Engine {
     for (const id of this.selection) {
       const known = this.items.get(id);
       if (!known) continue;
+      // The highlight changes the item's material: it is drawn by its own meshes meanwhile.
+      this.batches.setDetached(id, true);
       setItemHighlight(known.object, true);
       known.object.userData.highlighted = true;
       this.addOutline(known.object, this.selectedLine);

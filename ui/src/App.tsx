@@ -22,10 +22,11 @@ import { dismissToast, useToasts } from "./lib/toast";
 import { startUpdates } from "./lib/updates";
 import { checkProject } from "./model/checks";
 import { electricStatus } from "./model/equipment";
-import { ELEVATION_CUTS, WALL_CUT_DEPTH, type ElevationCut } from "./model/elevation";
-import { FACINGS, type Facing } from "./model/types";
+import { ELEVATION_CUTS, resolveElevation, WALL_CUT_DEPTH, type ElevationCut, type ElevationId } from "./model/elevation";
+import { elevationTitle } from "./model/elevationNames";
+import { FACINGS } from "./model/types";
 import { useStore } from "./store/store";
-import { ElevationView } from "./views/ElevationView";
+import { ElevationSwitch, ElevationView } from "./views/ElevationView";
 import { PlanView } from "./views/PlanView";
 
 // three.js is the largest part of the bundle: loaded when a 3D pane is first shown.
@@ -36,7 +37,10 @@ export function App() {
   const layout = useStore((s) => s.layout);
   const facing = useStore((s) => s.facing);
   const [fitSignal, setFitSignal] = useState(0);
-  const [secondFacing, setSecondFacing] = useState<Facing>("east");
+  const room = useStore((s) => s.project.room);
+  const [secondFacing, setSecondFacing] = useState<ElevationId>("east");
+  // The four panes of the elevations layout, each switchable to another view or a single wall.
+  const [quad, setQuad] = useState<ElevationId[]>(() => [...FACINGS]);
   // The introduction waits until the question about backups is answered (or there are none).
   const [recoverySettled, setRecoverySettled] = useState(false);
 
@@ -67,18 +71,20 @@ export function App() {
       </Suspense>
     </Pane>
   );
-  const elevation = (f: Facing, onFacing: (f: Facing) => void, key: string) => (
+  const elevation = (f: ElevationId, onFacing: (f: ElevationId) => void, key: string) => (
     <Pane
-      title={t("view.elevation", { facing: t(`facing.${f}` as const) })}
+      title={elevationTitle(resolveElevation(room, f))}
+      heading={t("view.elevationHead")}
       key={key}
       controls={
         <>
+          <ElevationSwitch value={f} onChange={onFacing} />
+          <span className="pane-spacer" />
           <CutSelect />
-          <FacingSwitch value={f} onChange={onFacing} />
         </>
       }
     >
-      <ElevationView facing={f} fitSignal={fitSignal} />
+      <ElevationView view={f} fitSignal={fitSignal} />
     </Pane>
   );
 
@@ -91,11 +97,7 @@ export function App() {
       panes = three;
       break;
     case "elevations":
-      panes = FACINGS.map((f) => (
-        <Pane title={t("view.elevation", { facing: t(`facing.${f}` as const) })} key={f} controls={<CutSelect />}>
-          <ElevationView facing={f} fitSignal={fitSignal} />
-        </Pane>
-      ));
+      panes = quad.map((f, i) => elevation(f, (next) => setQuad((q) => q.map((x, j) => (j === i ? next : x))), `q${i}`));
       break;
     case "split":
       panes = [plan, three, elevation(facing, useStore.getState().setFacing, "e1"), elevation(secondFacing, setSecondFacing, "e2")];
@@ -118,30 +120,21 @@ export function App() {
   );
 }
 
-function Pane(props: { title: string; children: React.ReactNode; controls?: React.ReactNode }) {
+/**
+ * A view with its head. `heading` is a shorter visible title when the controls already say the
+ * rest (an elevation's chooser shows „Nord“ next to „Ansicht“); `title` names the pane in full.
+ */
+function Pane(props: { title: string; heading?: string; children: React.ReactNode; controls?: React.ReactNode }) {
   return (
     <section className="pane" aria-label={props.title}>
       <div className="pane-head">
         <h2 className="pane-title" title={props.title}>
-          {props.title}
+          {props.heading ?? props.title}
         </h2>
         {props.controls}
       </div>
       <div className="pane-body">{props.children}</div>
     </section>
-  );
-}
-
-function FacingSwitch(props: { value: Facing; onChange: (f: Facing) => void }) {
-  const t = useT();
-  return (
-    <div className="seg small" role="group" aria-label={t("view.facing")}>
-      {FACINGS.map((f) => (
-        <button key={f} type="button" className={props.value === f ? "seg-btn is-current" : "seg-btn"} aria-pressed={props.value === f} onClick={() => props.onChange(f)} title={t(`facing.${f}` as const)}>
-          {t(`facing.${f}` as const).slice(0, 1)}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -157,8 +150,9 @@ function CutSelect() {
   return (
     <Menu
       className="tb-btn pane-menu"
+      anchorClassName="pane-menu-shrink"
       align="end"
-      label={label(cut)}
+      label={<span className="pane-menu-label">{label(cut)}</span>}
       title={t("view.cut")}
       entries={ELEVATION_CUTS.map((c) => ({ label: label(c), checked: c === cut, radio: true, onSelect: () => useStore.getState().setPrefs({ elevationCut: c }) }))}
     />

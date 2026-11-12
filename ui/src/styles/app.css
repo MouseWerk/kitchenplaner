@@ -414,11 +414,15 @@
   white-space: nowrap;
 }
 
+/* The title keeps its width while a menu beside it can still give way (any share of the
+ * shrinking would cut it by a fraction of a pixel, and so by a letter); it never grows, so a
+ * chooser follows it directly. Alone in a tiny pane it ends with an ellipsis. */
 .pane-title,
 .pane-head > h2,
 .pane-head > h3 {
-  flex: 1 1 auto;
+  flex: none;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--fs-sm);
@@ -431,9 +435,31 @@
   flex: 1 1 0;
 }
 
-/* A compact menu button in a pane header (the elevation cut depth). */
+/* Compact menu buttons in a pane header (an elevation's view and cut depth). */
 .pane-head .menu-anchor {
   flex: none;
+}
+
+/* A menu whose long label gives way first in a narrow pane: cut with an ellipsis (the button's
+ * title names it), the chevron always shown. */
+.pane-head .menu-anchor.pane-menu-shrink {
+  flex: 0 100 auto;
+  min-width: 0;
+}
+
+.pane-menu-shrink > .pane-menu {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pane-menu-shrink > .pane-menu > svg {
+  flex: none;
+}
+
+.pane-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pane-head .pane-menu {

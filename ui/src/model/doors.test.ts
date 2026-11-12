@@ -139,35 +139,37 @@ describe("doorHand", () => {
 describe("plan check: door clearances follow the door", () => {
   // A table 700 deep with its back 50 mm off the door's wall face, or off the partition.
   const southTable = (y = 5600) => testItem("t", "table", 1200, y);
+  // The swing areas only: the approach strip and the free space in front of the table are their own findings.
+  const swingFindings = (p: Project) => checkProject(p).filter((i) => i.key === "check.doorBlocked");
 
   it("checks the side a door opens to and leaves an outer door opening out alone", () => {
-    expect(checkProject(withWallDoor({}, [southTable()])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
-    expect(checkProject(withWallDoor({ swing: "out" }, [southTable()]))).toEqual([]);
+    expect(swingFindings(withWallDoor({}, [southTable()])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
+    expect(swingFindings(withWallDoor({ swing: "out" }, [southTable()]))).toEqual([]);
     expect(doorClearances(withWallDoor({ swing: "out" }))).toEqual([]);
   });
 
   it("checks a partition door on the side it opens to, in or out", () => {
     const east = testItem("e", "table", 3700, 2000, 90);
     const west = testItem("w", "table", 2300, 2000, 90);
-    expect(checkProject(withPartitionDoor({}, [east, west])).flatMap((i) => i.itemIds)).toEqual(["e"]);
-    expect(checkProject(withPartitionDoor({ swing: "out" }, [east, west])).flatMap((i) => i.itemIds)).toEqual(["w"]);
+    expect(swingFindings(withPartitionDoor({}, [east, west])).flatMap((i) => i.itemIds)).toEqual(["e"]);
+    expect(swingFindings(withPartitionDoor({ swing: "out" }, [east, west])).flatMap((i) => i.itemIds)).toEqual(["w"]);
   });
 
   it("needs only half the depth in front of a door with two leaves", () => {
     // 700 deep, its back at y 5350: 650 mm from the wall face, beyond the 505 mm leaves.
     const t = southTable(5000);
-    expect(checkProject(withWallDoor({}, [t])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
-    expect(checkProject(withWallDoor({ leaves: 2 }, [t]))).toEqual([]);
+    expect(swingFindings(withWallDoor({}, [t])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
+    expect(swingFindings(withWallDoor({ leaves: 2 }, [t]))).toEqual([]);
   });
 
   it("keeps a sliding door's track and parking place free, but not a swing square", () => {
-    expect(checkProject(withWallDoor({ kind: "slidingDoor" }, [southTable(5000)]))).toEqual([]);
+    expect(swingFindings(withWallDoor({ kind: "slidingDoor" }, [southTable(5000)]))).toEqual([]);
     // A table against the wall beside the opening, where the leaf parks (east of x 1705).
     const parked = testItem("p", "table", 2400, 5650, 180);
-    expect(checkProject(withWallDoor({ kind: "slidingDoor", hinge: "start" }, [parked])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
-    expect(checkProject(withWallDoor({ kind: "slidingDoor", hinge: "end" }, [parked]))).toEqual([]);
+    expect(swingFindings(withWallDoor({ kind: "slidingDoor", hinge: "start" }, [parked])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
+    expect(swingFindings(withWallDoor({ kind: "slidingDoor", hinge: "end" }, [parked]))).toEqual([]);
     // Running outside: the room side of the opening stays to keep free.
-    expect(checkProject(withWallDoor({ kind: "slidingDoor", swing: "out" }, [testItem("s", "table", 1200, 5600)])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
+    expect(swingFindings(withWallDoor({ kind: "slidingDoor", swing: "out" }, [testItem("s", "table", 1200, 5600)])).map((i) => i.key)).toEqual(["check.doorBlocked"]);
   });
 });
 

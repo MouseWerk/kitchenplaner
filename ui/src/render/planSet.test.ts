@@ -8,7 +8,7 @@ import { parseProject } from "../model/serialize";
 import { FACINGS, type Project } from "../model/types";
 import type { Drawing } from "./drawing";
 import { PdfDocument, PT_PER_MM } from "./pdf";
-import { checkPlanSet, DEFAULT_PLAN_SET, drawDrawing, PAPER_SIZES, planSetPdf, sanitizePlanSetOptions, scaleDrawing, sheetFrame, SheetTooSmall, type PlanSetOptions } from "./planSet";
+import { checkPlanSet, DEFAULT_PLAN_SET, drawDrawing, PAPER_SIZES, planSetPdf, sanitizePlanSetOptions, scaleDrawing, sheetFrame, SheetTooSmall, wallSheetWalls, type PlanSetOptions } from "./planSet";
 import { pathPoints, readPdf } from "./testPdf";
 
 const DATE = new Date(Date.UTC(2026, 9, 15, 12, 0, 0));
@@ -111,8 +111,30 @@ describe("plan set check", () => {
     expect(checkPlanSet(example(), opts({ plan: false, elevations: [], list: false }), ctx).total).toBe(0);
   });
 
+  it("adds sheets of single walls by a rule: the slanted ones, every wall or none", () => {
+    // The example kitchen has only right angles: no slanted wall, so no extra sheet by default.
+    expect(checkPlanSet(example(), opts({ plan: false, list: false }), ctx).sheets).toHaveLength(4);
+    const p = example();
+    // Chamfer the north-west corner by 1 m: the chamfer runs from corner 0 to 1, „Wand 1“.
+    const [a, ...rest] = p.room.points;
+    p.room.points = [{ x: a.x, y: a.y + 1000 }, { x: a.x + 1000, y: a.y }, ...rest];
+    p.room.openings = [];
+    expect(wallSheetWalls(p.room, "slanted")).toEqual([0]);
+    expect(wallSheetWalls(p.room, "none")).toEqual([]);
+    expect(wallSheetWalls(p.room, "all")).toHaveLength(p.room.points.length);
+    const titles = (wallSheets: PlanSetOptions["wallSheets"]) => checkPlanSet(p, opts({ plan: false, list: false, wallSheets }), ctx).sheets.map((s) => s.title.split(" – ")[0]);
+    expect(titles("slanted")).toEqual(["Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West", "Ansicht Wand 1"]);
+    expect(titles("none")).toHaveLength(4);
+    expect(titles("all")).toHaveLength(4 + p.room.points.length);
+    // Only single walls, no compass view.
+    expect(titles("all").filter((x) => x.includes("Wand"))).toHaveLength(p.room.points.length);
+    expect(checkPlanSet(p, opts({ plan: false, list: false, elevations: [], wallSheets: "slanted" }), ctx).total).toBe(1);
+  });
+
   it("reads stored options defensively", () => {
     expect(sanitizePlanSetOptions(null)).toEqual(DEFAULT_PLAN_SET);
+    expect(sanitizePlanSetOptions({ wallSheets: "every" }).wallSheets).toBe("slanted");
+    expect(sanitizePlanSetOptions({ wallSheets: "all" }).wallSheets).toBe("all");
     expect(sanitizePlanSetOptions({ paper: "A7", orientation: "diagonal", scale: 33, plan: "yes", elevations: ["west", "up", "north"] })).toEqual({ ...DEFAULT_PLAN_SET, elevations: ["north", "west"] });
     expect(sanitizePlanSetOptions({ paper: "A1", orientation: "portrait", scale: 75, list: false })).toMatchObject({ paper: "A1", orientation: "portrait", scale: 75, list: false });
   });

@@ -1,11 +1,17 @@
 // Small 3D previews of catalog entries, rendered from the real item models (`buildItemObject`),
 // merged as in the 3D view (`thumbnailModel`).
 //
-// One offscreen WebGL renderer draws them one at a time in idle slices and turns each into a
-// PNG data URL, cached by catalog id, size and device pixel ratio. Requests carry a priority:
-// the hover preview first, then rows on screen, then the rest of the catalog as a prefetch, so
-// scrolling finds them ready. Every slice renders a single image (a few milliseconds), so typing
-// in the search field never waits for a batch.
+// One offscreen WebGL renderer draws them in idle slices and turns each into a PNG data URL,
+// cached by catalog id, size and device pixel ratio. Only what is asked for is drawn: the hover
+// preview first, then the rows on screen (and a few rows beyond its edges, CatalogPanel), then
+// rows that scrolled away before their turn, those only when the main thread is really idle.
+// A slice draws images while its time budget lasts (`SLICE_BUDGET_MS`, less when the browser
+// says the frame has less left), so typing in the search field never waits for a batch.
+//
+// Rendered images are kept across sessions (thumbStore.ts): a later start of the same build
+// shows them from the store and needs no renderer at all. A new renderer compiles the shaders of
+// every shared material first, in parallel off the main thread where the browser can
+// (KHR_parallel_shader_compile), so the first images do not stall on shader compilation.
 //
 // The look does not depend on the theme: the background is transparent, and the materials, the
 // tone mapping and the lights are those of the 3D view (`LOOK` in look.ts), so a thumbnail looks
@@ -19,7 +25,7 @@
 // render that throws (a lost context) costs the renderer, not the session: the next job starts
 // a fresh one, and the entry is tried once more before it keeps the fallback.
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import type { CatalogEntry } from "../kinds/registry";
@@ -27,6 +33,8 @@ import { itemFromCatalog } from "../model/project";
 import { LOOK } from "./look";
 import { disposeMerged, mergeItemObject } from "./merge";
 import { buildItemObject, releaseShared, retainShared } from "./meshes";
+import { getShared } from "./shared";
+import { buildId, indexedDbStore, type ThumbStore } from "./thumbStore";
 
 /** Direction from the model towards the camera: front right, above (a 3/4 isometric-ish view). */
 const VIEW_AZIMUTH = THREE.MathUtils.degToRad(35);
@@ -37,8 +45,12 @@ const FIT_MARGIN = 0.08;
 const KEY_LIGHT_OFFSET = new THREE.Vector3(-1.2, 2.5, 1.8);
 /** Disposes the renderer this long after the last job. */
 const DISPOSE_AFTER_MS = 5000;
-/** Idle callbacks wait at most this long, so a busy main thread still gets thumbnails. */
+/** Idle callbacks wait at most this long, so a busy main thread still gets the rows on screen. */
 const IDLE_TIMEOUT_MS = 60;
+/** Most time one slice spends drawing (ms): a frame keeps room for the page's own work. */
+const SLICE_BUDGET_MS = 8;
+/** The kept images may take this long to load; a store that does not answer is skipped. */
+const STORE_TIMEOUT_MS = 1500;
 /** Renders of one thumbnail before it keeps the fallback. */
 const MAX_ATTEMPTS = 2;
 
@@ -54,8 +66,11 @@ export type Priority = (typeof PRIORITY)[keyof typeof PRIORITY];
 
 /** Turns one catalog entry into an image URL at the given pixel size; throws when it cannot. */
 export type RenderFn = (entry: CatalogEntry, widthPx: number, heightPx: number) => string;
-/** Creates a renderer; throws when WebGL is unavailable. */
-export type RendererFactory = () => { render: RenderFn; dispose: () => void };
+/**
+ * Creates a renderer; throws when WebGL is unavailable. `prepare`, when there, readies it for
+ * drawing without blocking (compiles its shaders); no image is drawn before it settles.
+ */
+export type RendererFactory = () => { render: RenderFn; dispose: () => void; prepare?: () => Promise<unknown> };
 
 // ---------------------------------------------------------------------------------------------
 // Framing
@@ -147,6 +162,16 @@ export const webglFactory: RendererFactory = () => {
   const camera = new THREE.OrthographicCamera();
 
   return {
+    prepare() {
+      // One small mesh per shared material, compiled against this scene (its lights and
+      // environment), so the programs are those the models will use.
+      const { box, mat } = getShared();
+      const warm = new THREE.Group();
+      for (const m of Object.values(mat)) warm.add(new THREE.Mesh(box, m));
+      camera.position.set(0, 0, 5);
+      camera.updateMatrixWorld();
+      return r.compileAsync(warm, camera, scene);
+    },
     render(entry, widthPx, heightPx) {
       const model = thumbnailModel(entry);
       scene.add(model);
@@ -194,12 +219,16 @@ interface Job {
 
 type IdleHandle = { cancel: () => void };
 
-function onIdle(f: () => void): IdleHandle {
+/**
+ * Runs `f` when the main thread is idle, with the time left in that idle period (ms); after
+ * `timeout` at the latest when one is given, and then with no time left (one image only).
+ */
+function onIdle(f: (left: number) => void, timeout: number | null): IdleHandle {
   if (typeof requestIdleCallback === "function") {
-    const id = requestIdleCallback(f, { timeout: IDLE_TIMEOUT_MS });
+    const id = requestIdleCallback((d) => f(d.didTimeout ? 0 : d.timeRemaining()), timeout === null ? undefined : { timeout });
     return { cancel: () => cancelIdleCallback(id) };
   }
-  const id = setTimeout(f, 0);
+  const id = setTimeout(() => f(0), 0);
   return { cancel: () => clearTimeout(id) };
 }
 
@@ -213,22 +242,34 @@ interface Stats {
   count: number;
   max: number;
   setup: number;
+  /** Time until the renderer's shaders were compiled (off the main thread where possible). */
+  prepare: number;
 }
 
 export class ThumbnailQueue {
   private readonly cache = new Map<string, ThumbState>();
   private readonly jobs = new Map<string, Job>();
   private readonly listeners = new Set<() => void>();
+  /** Thumbnails drawn again after the page could not show them (`failed`). */
+  private readonly redrawn = new Set<string>();
   private renderer: ReturnType<RendererFactory> | null = null;
   private unavailable = false;
   private idle: IdleHandle | null = null;
   private disposeTimer: ReturnType<typeof setTimeout> | null = null;
   private seq = 0;
   private stats: Stats | null = null;
+  /** The renderer's `prepare` while it runs: no image is drawn until it settles. */
+  private preparing: Promise<void> | null = null;
+  /** The store's images while they load: nothing is rendered that the store may have. */
+  private loading: Promise<void> | null = null;
+  private loaded = false;
+  /** Running mean of the time per image (ms), to fit images into a slice's budget. */
+  private renderMs = 4;
 
   constructor(
     private readonly factory: RendererFactory,
     private readonly log: ((msg: string) => void) | null = null,
+    private readonly store: ThumbStore | null = null,
   ) {}
 
   static key(id: string, w: number, h: number, dpr: number): string {
@@ -260,10 +301,34 @@ export class ThumbnailQueue {
       }
     } else {
       this.jobs.set(key, { key, entry, w: Math.round(w * dpr), h: Math.round(h * dpr), priority, seq: this.seq++, failures: 0 });
-      if (this.log && !this.stats) this.stats = { start: performance.now(), first: null, count: 0, max: 0, setup: 0 };
+      if (this.log && !this.stats) this.stats = { start: performance.now(), first: null, count: 0, max: 0, setup: 0, prepare: 0 };
     }
+    this.load();
     this.schedule();
     return key;
+  }
+
+  /** Loads the kept images, once, on the first request; until then nothing is rendered. */
+  private load(): void {
+    if (this.loaded || this.loading || !this.store) return;
+    const none = new Map<string, Blob>();
+    const loading: Promise<void> = Promise.race([
+      this.store.load().catch(() => none),
+      new Promise<Map<string, Blob>>((ok) => setTimeout(() => ok(none), STORE_TIMEOUT_MS)),
+    ]).then((images) => {
+        // Reset meanwhile (tests): the images belong to a queue that is gone.
+        if (this.loading !== loading) return;
+        for (const [key, blob] of images) {
+          if (this.cache.has(key)) continue;
+          this.cache.set(key, { status: "ready", url: URL.createObjectURL(blob) });
+          this.jobs.delete(key);
+        }
+        this.loading = null;
+        this.loaded = true;
+        if (images.size > 0) this.emit();
+        this.schedule();
+      });
+    this.loading = loading;
   }
 
   /**
@@ -280,27 +345,46 @@ export class ThumbnailQueue {
   /** Runs one job now (tests and the idle slice). Returns false when there was nothing to do. */
   step(): boolean {
     const job = this.next();
-    if (!job || this.unavailable) return false;
+    if (!job || this.unavailable || this.loading || this.preparing) return false;
     if (!this.renderer) {
       // Creating the context and prefiltering the environment is a slice of its own, so no
       // single slice grows into a long task.
       const t0 = performance.now();
+      let renderer: ReturnType<RendererFactory>;
       try {
-        this.renderer = this.factory();
+        renderer = this.factory();
       } catch {
         this.unavailable = true;
         this.jobs.clear();
         this.emit();
         return false;
       }
+      this.renderer = renderer;
       if (this.stats) this.stats.setup = performance.now() - t0;
+      if (renderer.prepare) {
+        const p0 = performance.now();
+        const done = (): void => {
+          // A renderer dropped meanwhile (reset, a lost context) has nothing to wait for.
+          if (this.preparing !== preparing) return;
+          this.preparing = null;
+          if (this.stats) this.stats.prepare = performance.now() - p0;
+          this.schedule();
+        };
+        // A compile that fails shows up as a failed render and is handled there.
+        const preparing: Promise<void> = Promise.resolve()
+          .then(() => renderer.prepare!())
+          .then(done, done);
+        this.preparing = preparing;
+      }
       return true;
     }
     this.jobs.delete(job.key);
     const t0 = performance.now();
     let state: ThumbState;
     try {
-      state = { status: "ready", url: this.renderer.render(job.entry, job.w, job.h) };
+      const url = this.renderer.render(job.entry, job.w, job.h);
+      state = { status: "ready", url };
+      this.store?.save(job.key, url);
     } catch {
       // Most likely the context is gone: the renderer goes with it, the next job starts a fresh
       // one. The entry gets one more try; a model that fails again keeps the fallback.
@@ -319,14 +403,36 @@ export class ThumbnailQueue {
       state = UNAVAILABLE;
     }
     this.cache.set(job.key, state);
+    const ms = performance.now() - t0;
+    this.renderMs = this.renderMs * 0.8 + ms * 0.2;
     if (this.stats) {
-      const ms = performance.now() - t0;
       this.stats.count++;
       this.stats.max = Math.max(this.stats.max, ms);
       this.stats.first ??= performance.now() - this.stats.start;
     }
     this.emit();
     return true;
+  }
+
+  /**
+   * The page could not show a thumbnail (a kept image that does not decode): it is forgotten,
+   * in the store as well, and drawn again once. Failing again, it keeps the fallback.
+   */
+  failed(entry: CatalogEntry, w: number, h: number, dpr: number, priority: Priority): void {
+    const key = ThumbnailQueue.key(entry.id, w, h, dpr);
+    const state = this.cache.get(key);
+    if (state?.status !== "ready") return;
+    if (state.url?.startsWith("blob:")) URL.revokeObjectURL(state.url);
+    this.store?.drop?.(key);
+    if (this.redrawn.has(key)) {
+      this.cache.set(key, UNAVAILABLE);
+      this.emit();
+      return;
+    }
+    this.redrawn.add(key);
+    this.cache.delete(key);
+    this.emit();
+    this.request(entry, w, h, dpr, priority);
   }
 
   /** Disposes the renderer and forgets everything (tests). */
@@ -337,10 +443,15 @@ export class ThumbnailQueue {
     this.disposeTimer = null;
     this.renderer?.dispose();
     this.renderer = null;
+    this.preparing = null;
+    for (const s of this.cache.values()) if (s.url?.startsWith("blob:")) URL.revokeObjectURL(s.url);
     this.cache.clear();
     this.jobs.clear();
+    this.redrawn.clear();
     this.unavailable = false;
     this.stats = null;
+    this.loading = null;
+    this.loaded = false;
   }
 
   get hasRenderer(): boolean {
@@ -364,13 +475,28 @@ export class ThumbnailQueue {
       clearTimeout(this.disposeTimer);
       this.disposeTimer = null;
     }
-    if (this.idle || this.jobs.size === 0) return;
-    this.idle = onIdle(() => {
-      this.idle = null;
-      this.step();
-      if (this.jobs.size > 0) this.schedule();
-      else this.drained();
-    });
+    if (this.idle || this.loading || this.preparing) return;
+    if (this.jobs.size === 0) {
+      this.drained();
+      return;
+    }
+    // Rows that scrolled away wait for a truly idle main thread; what is on screen does not.
+    const urgent = this.next()!.priority < PRIORITY.prefetch;
+    this.idle = onIdle(
+      (left) => {
+        this.idle = null;
+        const start = performance.now();
+        const budget = Math.min(SLICE_BUDGET_MS, left);
+        // One step at least, then more images while the next one is likely to fit the budget.
+        // Creating a renderer ends the slice: that is a slice of its own.
+        for (;;) {
+          const creates = this.renderer === null;
+          if (!this.step() || creates || this.jobs.size === 0 || performance.now() - start + this.renderMs >= budget) break;
+        }
+        this.schedule();
+      },
+      urgent ? IDLE_TIMEOUT_MS : null,
+    );
   }
 
   private drained(): void {
@@ -380,7 +506,7 @@ export class ThumbnailQueue {
       const total = performance.now() - s.start;
       this.log(
         `catalog thumbnails: ${s.count} rendered in ${total.toFixed(0)} ms (renderer setup ${s.setup.toFixed(1)} ms, ` +
-          `first ready after ${(s.first ?? 0).toFixed(0)} ms, slowest ${s.max.toFixed(1)} ms)`,
+          `shaders ready after ${s.prepare.toFixed(0)} ms, first ready after ${(s.first ?? 0).toFixed(0)} ms, slowest ${s.max.toFixed(1)} ms)`,
       );
     }
     this.stats = null;
@@ -398,11 +524,21 @@ export class ThumbnailQueue {
   }
 }
 
-/** The app's queue. Timings are logged in development builds only. */
-export const thumbnails = new ThumbnailQueue(webglFactory, import.meta.env.DEV ? (m) => console.info(m) : null);
+/** The app's queue. Timings are logged in development builds only; images are kept in the others. */
+export const thumbnails = new ThumbnailQueue(
+  webglFactory,
+  import.meta.env.DEV ? (m) => console.info(m) : null,
+  (() => {
+    const build = buildId(import.meta.env.DEV, import.meta.url);
+    return build === null ? null : indexedDbStore(build);
+  })(),
+);
 
-/** Thumbnail of `entry` at `w` × `h` CSS pixels; requested while `priority` is not null. */
-export function useThumbnail(entry: CatalogEntry, w: number, h: number, priority: Priority | null): ThumbState {
+/**
+ * Thumbnail of `entry` at `w` × `h` CSS pixels; requested while `priority` is not null.
+ * `onError` goes on the `<img>`: an image that does not load is drawn again once.
+ */
+export function useThumbnail(entry: CatalogEntry, w: number, h: number, priority: Priority | null): ThumbState & { onError: () => void } {
   const dpr = useDevicePixelRatio();
   const key = ThumbnailQueue.key(entry.id, w, h, dpr);
   const state = useSyncExternalStore(thumbnails.subscribe, () => thumbnails.get(key));
@@ -411,13 +547,8 @@ export function useThumbnail(entry: CatalogEntry, w: number, h: number, priority
     thumbnails.request(entry, w, h, dpr, priority);
     return () => thumbnails.demote(key);
   }, [entry, w, h, dpr, priority, key]);
-  return state;
-}
-
-/** Queues every entry at prefetch priority, so scrolled-to rows find their image ready. */
-export function prefetchThumbnails(entries: readonly CatalogEntry[], w: number, h: number): void {
-  const dpr = currentDpr();
-  for (const e of entries) thumbnails.request(e, w, h, dpr, PRIORITY.prefetch);
+  const onError = useCallback(() => thumbnails.failed(entry, w, h, dpr, priority ?? PRIORITY.visible), [entry, w, h, dpr, priority]);
+  return { ...state, onError };
 }
 
 function currentDpr(): number {

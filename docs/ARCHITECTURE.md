@@ -17,7 +17,16 @@ files, keeps the autosave backups and installs updates. Every layer depends only
    - the screen (`ui/src/components/DrawingSvg.tsx`, `ui/src/views/`): SVG in the React tree,
      with the viewport transform (pan, zoom) and the selection on top;
    - SVG export: the same primitives as a standalone file;
-   - DXF export: the same primitives as DXF entities, one layer per style;
+   - DXF export (`render/dxf.ts` on the writer `render/dxfWriter.ts`, no dependency): AutoCAD
+     2000 (AC1015) in millimetres with handles, owners, block records and layouts, so CAD
+     programs open it without repair. Each unit becomes a reference to a block (one per catalog
+     variant and drawn size, units that look alike share it), in the plan at its centre and
+     turned with it, in an elevation at its lower left corner; position, name, size, product and
+     connection values ride along as invisible attributes. Layers by trade: walls, openings,
+     equipment (hanging units on their own, dashed), details, labels (position numbers, names,
+     leaders), dimensions, frame, and one layer per connection trade (electric, gas, water,
+     drain, exhaust) for the attributes. Dimensions stay lines and text, cut walls SOLID
+     triangles, both as on screen; `render/testDxf.ts` checks the structure in the tests;
    - PNG export: the SVG rendered into a canvas;
    - PDF plan set (`render/planSet.ts` on the small writer `render/pdf.ts`, no dependency): plan,
      elevations, equipment list and an optional 3D image on sheets A4 to A0 at a true scale, each
@@ -79,6 +88,14 @@ materials (`three/shared.ts`); the model's plan, elevations and plan check use t
   (`retainShared` / `releaseShared`). `shapes.ts`: the shaped parts' geometry (rounded boxes,
   lathes, rounded-rectangle pans, extrusions, bent tubes) at real size with UVs in metres.
 - `merge.ts`: merges a model into one mesh per material to keep the draw calls low.
+- `batch.ts`: draws the merged models' opaque parts as one `BatchedMesh` per material (one
+  multi-draw call for all items of that material); items of the same model (`modelKey`) share
+  one geometry, a move writes the instance matrix. Each item's own merged group stays in the
+  scene with those meshes hidden, for picking, boxes and outlines; selected items are drawn by
+  their own meshes (the highlight changes their material), glass and water always are.
+- `stress.ts`: stress projects of any size from the catalog for `scripts/bench-3d.mjs`, which
+  measures frame time, draw calls and pixel equality of the batches in Chromium, and the
+  catalog thumbnails on a first and a second start of a production build.
 - `look.ts`: room textures (tiled floor, painted walls) and soft contact shadows under the items;
   `textures.ts` generates the procedural textures (brushed steel, granite, wood, tiles, paint) as pixel data.
 - `room.ts`: floor, walls with their openings and the partitions as 3D objects; walls between
@@ -86,7 +103,11 @@ materials (`three/shared.ts`); the model's plan, elevations and plan check use t
 - `navigation.ts`: camera math and the key mapping (numpad views, framing), free of the DOM.
 - `walk.ts`: walk mode, a person at eye height moving through the kitchen.
 - `drag.ts`: moving items by dragging in 3D with the plan's snapping.
-- `thumbnails.ts`: the catalog previews, rendered from the same models in idle slices.
+- `thumbnails.ts`: the catalog previews, rendered from the same models in idle slices with a
+  time budget, only for the rows near the visible part of the list; a new renderer compiles its
+  shaders off the main thread first (`compileAsync`). `thumbStore.ts` keeps the images across
+  sessions in IndexedDB, keyed by the build (the hashed chunk URL; development builds keep none),
+  shown as `blob:` URLs: a second start renders none.
 
 ## Rust side
 
@@ -120,8 +141,9 @@ materials (`three/shared.ts`); the model's plan, elevations and plan check use t
   | `update_download` | `onProgress: Channel` (bytes downloaded, total) | nothing; downloads the found update and checks its signature |
   | `update_install` | none | nothing; installs the downloaded update and restarts into the new version |
 
-  Errors are `{ kind, path, detail }` with `kind` one of tooLarge, notUtf8, notProject, readOnly,
-  inUse, notFound, permissionDenied, badExtension, badPath, io; `path` is the file name only and
+  Errors are `{ kind, path, detail }` with `kind` one of tooLarge, notUtf8, notProject, corrupt
+  (a `.kplan` that starts like a JSON object but does not parse), readOnly, inUse, notFound,
+  permissionDenied, badExtension, badPath, io; `path` is the file name only and
   `detail` the OS error text (only for `io`). The UI shows its own translated text per `kind`
   (`ui/src/lib/errors.ts`). Paths must be absolute and carry an allowed extension.
   On macOS a `.kplan` opened while the app runs arrives as the event `open-file` (payload: the
@@ -161,6 +183,64 @@ A crash or a power cut loses at most a few seconds of work.
 - **Browser** (Vite without Tauri): the same in `localStorage`; each page load is a session
   holding a Web Lock, so open tabs are told from closed ones.
 
+## Plan check (`ui/src/model/checks.ts`, `clearances.ts`, `checkRules.ts`)
+
+`checkProject` runs on every change and lists findings in a fixed order: the layout rules
+(outline crossing itself, overlaps, units outside the room or in a partition, partitions outside,
+door swing areas, units higher than the room), then the workplace rules of `clearances.ts`. Each
+finding names its units (`itemIds`, selected when it is clicked); the workplace findings also give
+the measured value against the required one. They are advice for a planner, worded as „measured
+… needed …“, never as „norm met“. All thresholds and the lists of units they apply to are
+constants in `checkRules.ts`, each with its source:
+
+| Rule | Value | Source |
+|---|---|---|
+| Movement area in front of a workplace, somewhere along its front with its middle in front of the unit (may reach over neighbours; a dead corner beside the unit does not count) | 1000 deep, 1000 wide | DGUV Regel 110-002 3.2.1.4 („nirgends weniger als 1,00 m“), ASR A1.2 |
+| Aisle between two workplaces facing each other | 1200 | DGUV Regel 110-002 3.2.3.1 (traffic route with workplaces). **Unsure:** many planners ask 1500 where both sides work at once |
+| Free depth in front of shelving and racks, and the aisle between two of them (facing a workplace, its aisle applies) | 800 | ASR A1.8 (about 0.75 to 1.00 m between storage racks). **Unsure:** the value in that range is ours |
+| Function area of a side-hinged door (ovens, cabinets), over the unit's width | leaf width | ASR A1.2 (may overlap the operator's own movement area, 5.1.5) |
+| Door folding down (range oven, deck oven, undercounter dishwasher) | 600 | **Unsure:** own value |
+| Tilting pan or kettle | 1200 | **Unsure:** usual planning value |
+| Roll-in unit (rack trolley; also the floor-standing 20 × GN combi) | 1500 | **Unsure:** usual planning value |
+| Hood-type dishwasher | 1000 over its width | movement area |
+| Approach to a door or passage, both sides inside the room | 1000 | ASR A1.8 keeps routes to doors free; **unsure:** the depth is ours |
+| Hood overhang over cooking units, open sides | 200 | DGUV Regel 110-002 3.2.11.1 (at a lower edge of 2.10 m), VDI 2052. **Unsure:** VDI 2052 asks more for higher hoods; not scaled |
+| Hood overhang at the door of a steaming unit (combi, convection oven, steamer, deck oven, smoker) | 400 | DGUV Regel 110-002 3.2.11.1 |
+| Hand-wash basin near every production unit, same area (no partition ≥ 2000 mm between), centre to centre | 8000 | Regulation (EC) 852/2004 Annex II (no figure). **Unsure:** own value |
+
+DGUV Regel 110-002 is the former BGR 111; DGUV Regel 110-003 „Branche Küchenbetriebe“ replaced it
+in 2019, and its figures are still taken as the state of the art (**unsure** whether 110-003
+repeats each of them).
+
+How it measures: the free space in front of a unit is cut into cells along the front at every
+obstacle edge (in 50 mm steps on one grid where an obstacle stands turned against it and comes
+within the measured depth, its nearest point in each cell found from its outline, not by
+clipping); each cell holds the distance to the first floor unit, partition or outer wall. The
+movement area is slid along the front as a sliding maximum over the cells. Overhead, table-top and flat units are
+no obstacles. A workplace facing back across the gap turns the movement area into an aisle; a
+gap is reported once, naming both units. A side of a cooking unit needs only as much overhang as
+there is room before a wall or a partition at least 2000 mm high; hoods side by side count as
+one, a condensing hood on a combi or convection oven and a downdraft module beside a hob replace
+the canopy. Which units are workplaces, need a hood or count as production follows the catalog
+areas and groups, with the exceptions listed in `checkRules.ts` (a test keeps every kind named
+there in the catalog).
+
+Pallets, crates, trolleys, mobile racks and bins and dispensers on castors are no workplaces
+(`NOT_WORKPLACES`): they need no free space of their own but stay obstacles for the others. Water
+baths and closed cookers (bain-marie, sous-vide, rice cooker, egg boiler) need no hood
+(**unsure**, the ventilation planner decides); units that fry or bake on a plate still do.
+
+Cost: `checkProject` takes about 6 ms for 500 units on a desktop computer, about 7.5 ms when
+every second work table stands turned against its neighbours and about 9 ms when all do. Budget
+tests ask for less than 20 ms for the first two; run beside the whole parallel test suite both
+take about twice as long. Overlaps are only tested for units whose boxes meet (swept along x), the
+workplace rules look up obstacles in a 2 m grid.
+
+Adding a unit by click (`freeSpot.ts`) uses `freeSpotTest`, which keeps the same layout rules and
+the spot-dependent workplace rules: the new unit's own free space, door approaches, and the free
+space of the workplaces around it that is kept now. Hoods and hand-wash basins depend on what is
+added, not on where, so a range added without a hood is still reported.
+
 ## Annotations of the plan (`ui/src/model/plan.ts`)
 
 Position numbers and names are laid out for the paper scale the plan is drawn at (the screen, or
@@ -173,6 +253,31 @@ an ellipsis to the unit's width (Helvetica widths of `render/pdf.ts`), placed un
 number, else elsewhere inside the unit, else right below or above it inside the room and clear of
 other units; a name with no free place is left out instead of overlapping. Both are
 deterministic, and the tests check the example kitchen at every sheet scale for overlaps.
+
+## Elevations (`ui/src/model/elevation.ts`)
+
+An elevation is named by an `ElevationId`: a compass view (`"north"` … `"west"`) or a wall view
+(`"wall-<i>"`, the wall from corner i to i + 1, the index openings use). A compass view looks at
+every wall turned that way across the whole room (both legs of an L-shaped room at once); it is
+the familiar default and stays as it was. A wall view looks against one wall's inward normal and
+reaches from corner to corner: only that wall's openings, the units whose centre stands in front
+of it, the cut walls at its ends as wide as the section plane cuts them (t·√2 next to a 45°
+chamfer), its length as the dimension. The cut depth („Schnitttiefe“) is measured from that wall.
+For a wall of a rectangular room both kinds draw the same; a slanted wall, which no compass view
+sees face-on (`slantedWalls`), is true only in its own view. `standardElevations` (the four plus
+each slanted wall) is what „Alle Ansichten als SVG“ prints; the plan set adds single walls by a
+rule (none, slanted, every wall), since its options are remembered per computer, not per project.
+
+The choice is view state, not project data: the panes keep it, the store's `facing` holds the one
+the single exports use, and the `.kplan` format is unchanged. A wall view follows the wall index,
+not the wall: inserting or deleting a corner before it renumbers the walls, and the pane then
+shows the wall that now has that index. A wall view whose wall no longer exists (corners deleted,
+or a wall shorter than the geometry's tolerance, `elevationExists`) resolves to the north view
+where it is drawn (`resolveElevation`), so an undo brings it back. The chooser in each pane head
+is one menu („Nord ▾“, „Wand 3 ▾“) with the four compass views and every wall that
+`elevationExists` accepts, so it fits a quarter of a narrow window. Names come from
+`model/elevationNames.ts`: „Ansicht Wand 5“, and in the chooser „Wand 5 (Nordost, 1.414 mm)“
+with the inspector's numbering.
 
 ## Updates
 

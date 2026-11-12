@@ -81,11 +81,12 @@ export function bounds(points: readonly Vec2[]): Box {
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
+  // Plain comparisons: the plan check takes the bounds of every outline it looks at.
   for (const p of points) {
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x);
-    maxY = Math.max(maxY, p.y);
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
   }
   return { minX, minY, maxX, maxY };
 }
@@ -148,16 +149,32 @@ export function distToSegment(p: Vec2, a: Vec2, b: Vec2): number {
 
 /** Do two convex polygons overlap with an area (touching edges do not count)? */
 export function convexOverlap(p: readonly Vec2[], q: readonly Vec2[], tolerance = 0.5): boolean {
-  for (const poly of [p, q]) {
-    for (let i = 0; i < poly.length; i++) {
-      const e = sub(poly[(i + 1) % poly.length], poly[i]);
-      const axis = norm({ x: -e.y, y: e.x });
-      const [pMin, pMax] = project(p, axis);
-      const [qMin, qMax] = project(q, axis);
-      if (pMax - tolerance <= qMin || qMax - tolerance <= pMin) return false;
+  return !separatedBy(p, p, q, tolerance) && !separatedBy(q, p, q, tolerance);
+}
+
+/** Does an edge of `poly` give an axis on which `p` and `q` lie apart (by `tolerance`)? */
+function separatedBy(poly: readonly Vec2[], p: readonly Vec2[], q: readonly Vec2[], tolerance: number): boolean {
+  for (let i = 0; i < poly.length; i++) {
+    const e = sub(poly[(i + 1) % poly.length], poly[i]);
+    const axis = norm({ x: -e.y, y: e.x });
+    // Projected without building pairs: the plan check tests many outlines against each other.
+    let pMin = Infinity;
+    let pMax = -Infinity;
+    for (const v of p) {
+      const d = v.x * axis.x + v.y * axis.y;
+      if (d < pMin) pMin = d;
+      if (d > pMax) pMax = d;
     }
+    let qMin = Infinity;
+    let qMax = -Infinity;
+    for (const v of q) {
+      const d = v.x * axis.x + v.y * axis.y;
+      if (d < qMin) qMin = d;
+      if (d > qMax) qMax = d;
+    }
+    if (pMax - tolerance <= qMin || qMax - tolerance <= pMin) return true;
   }
-  return true;
+  return false;
 }
 
 function project(poly: readonly Vec2[], axis: Vec2): [number, number] {

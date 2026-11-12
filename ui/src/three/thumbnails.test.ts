@@ -6,6 +6,7 @@ import { itemFromCatalog } from "../model/project";
 import { buildItemObject } from "./meshes";
 import { disposeMerged } from "./merge";
 import { fitOrthoCamera, PRIORITY, thumbnailModel, ThumbnailQueue, viewDirection, type RendererFactory } from "./thumbnails";
+import { buildId, decodeDataUrl, indexedDbStore, isPng, type ThumbStore } from "./thumbStore";
 
 const entry = (id: string) => CATALOG.find((e) => e.id === id)!;
 
@@ -235,4 +236,211 @@ describe("queue", () => {
     expect(q.get(key).status).toBe("unavailable");
     err.mockRestore();
   });
+
+  it("shows the images kept by an earlier session without a renderer, and keeps what it renders", async () => {
+    const { factory, drawn } = fakeFactory();
+    let created = 0;
+    const counting: RendererFactory = () => {
+      created++;
+      return factory();
+    };
+    const kept = ThumbnailQueue.key("table", 56, 44, 1);
+    const saved: string[] = [];
+    let release!: () => void;
+    const store: ThumbStore = {
+      load: () => new Promise((ok) => (release = () => ok(new Map([[kept, new Blob([new Uint8Array([1])], { type: "image/png" })]])))),
+      save: (key) => void saved.push(key),
+    };
+    const q = new ThumbnailQueue(counting, null, store);
+    const table = q.request(entry("table"), 56, 44, 1, PRIORITY.visible);
+    const sink = q.request(entry("sink-1"), 56, 44, 1, PRIORITY.visible);
+    // Nothing is rendered while the store may still have it.
+    expect(q.step()).toBe(false);
+    expect(created).toBe(0);
+    release();
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(q.get(table).status).toBe("ready");
+    expect(q.get(table).url).toMatch(/^blob:/);
+    expect(q.pending).toBe(1);
+    drain(q);
+    expect(drawn).toEqual(["sink-1"]);
+    expect(saved).toEqual([sink]);
+    q.reset();
+  });
+
+  it("draws a kept image the page cannot show once more, and forgets it in the store", async () => {
+    const { factory, drawn } = fakeFactory();
+    const key = ThumbnailQueue.key("table", 56, 44, 1);
+    const dropped: string[] = [];
+    const q = new ThumbnailQueue(factory, null, {
+      load: async () => new Map([[key, new Blob([new Uint8Array([1])], { type: "image/png" })]]),
+      save: () => {},
+      drop: (k) => void dropped.push(k),
+    });
+    const seen: string[] = [];
+    q.subscribe(() => seen.push(q.get(key).status));
+    q.request(entry("table"), 56, 44, 1, PRIORITY.visible);
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(q.get(key).url).toMatch(/^blob:/);
+    // The <img> reports an error: the kept image goes, a new one is drawn.
+    q.failed(entry("table"), 56, 44, 1, PRIORITY.visible);
+    expect(dropped).toEqual([key]);
+    expect(q.get(key).status).toBe("loading");
+    drain(q);
+    expect(drawn).toEqual(["table"]);
+    expect(q.get(key)).toEqual({ status: "ready", url: "data:table-56x44" });
+    // Failing again, it keeps the fallback instead of drawing for ever.
+    q.failed(entry("table"), 56, 44, 1, PRIORITY.visible);
+    drain(q);
+    expect(drawn).toEqual(["table"]);
+    expect(q.get(key).status).toBe("unavailable");
+    expect(seen.at(-1)).toBe("unavailable");
+    q.reset();
+  });
+
+  it("with every image kept, creates no renderer at all", async () => {
+    const { factory } = fakeFactory();
+    let created = 0;
+    const images = new Map(["table", "sink-1"].map((id) => [ThumbnailQueue.key(id, 56, 44, 1), new Blob([new Uint8Array([1])])]));
+    const q = new ThumbnailQueue(
+      () => {
+        created++;
+        return factory();
+      },
+      null,
+      { load: async () => images, save: () => {} },
+    );
+    const keys = ["table", "sink-1"].map((id) => q.request(entry(id), 56, 44, 1, PRIORITY.visible));
+    await new Promise((ok) => setTimeout(ok, 0));
+    drain(q);
+    for (const k of keys) expect(q.get(k).status).toBe("ready");
+    expect(created).toBe(0);
+    expect(q.hasRenderer).toBe(false);
+    q.reset();
+  });
+
+  it("renders without the kept images when the store does not answer", async () => {
+    vi.useFakeTimers();
+    const { factory, drawn } = fakeFactory();
+    const q = new ThumbnailQueue(factory, null, { load: () => new Promise(() => {}), save: () => {} });
+    const key = q.request(entry("table"), 56, 44, 1, PRIORITY.visible);
+    drain(q);
+    expect(drawn).toEqual([]);
+    await vi.advanceTimersByTimeAsync(2000);
+    drain(q);
+    expect(q.get(key).status).toBe("ready");
+    q.reset();
+  });
+
+  it("draws nothing until the new renderer has its shaders ready", async () => {
+    const drawn: string[] = [];
+    let ready!: () => void;
+    const q = new ThumbnailQueue(() => ({
+      prepare: () => new Promise<void>((ok) => (ready = ok)),
+      render: (e) => {
+        drawn.push(e.id);
+        return `data:${e.id}`;
+      },
+      dispose: () => {},
+    }));
+    q.request(entry("table"), 56, 44, 1, PRIORITY.visible);
+    expect(q.step()).toBe(true);
+    await Promise.resolve();
+    expect(q.step()).toBe(false);
+    expect(drawn).toEqual([]);
+    ready();
+    await new Promise((ok) => setTimeout(ok, 0));
+    drain(q);
+    expect(drawn).toEqual(["table"]);
+    q.reset();
+  });
+
+  it("draws several images in an idle slice while its budget lasts; rows out of view wait for true idle", () => {
+    const calls: { f: IdleRequestCallback; opts?: IdleRequestOptions }[] = [];
+    vi.stubGlobal("requestIdleCallback", (f: IdleRequestCallback, opts?: IdleRequestOptions) => calls.push({ f, opts }));
+    vi.stubGlobal("cancelIdleCallback", () => {});
+    try {
+      const { factory, drawn } = fakeFactory();
+      const q = new ThumbnailQueue(factory);
+      const ids = ["table", "sink-1", "fryer-2", "column"];
+      for (const id of ids) q.request(entry(id), 56, 44, 1, PRIORITY.visible);
+      const run = (left: number, didTimeout = false) => calls.shift()!.f({ didTimeout, timeRemaining: () => left });
+      // Rows on screen: an idle callback with a deadline.
+      expect(calls[0].opts?.timeout).toBeGreaterThan(0);
+      run(50); // the renderer, a slice of its own
+      expect(drawn).toEqual([]);
+      run(50); // a long idle period: every image fits the budget
+      expect(drawn).toEqual(ids);
+      // A slice called because its deadline passed draws one image only.
+      q.request(entry("range-6"), 56, 44, 1, PRIORITY.visible);
+      q.request(entry("table"), 240, 180, 1, PRIORITY.visible);
+      run(0, true);
+      expect(drawn).toHaveLength(5);
+      run(0, true);
+      expect(drawn).toHaveLength(6);
+      q.reset();
+      // Only rows that left the view: no deadline, they wait for a truly idle main thread.
+      calls.length = 0;
+      const later = new ThumbnailQueue(factory);
+      later.request(entry("fryer-2"), 240, 180, 1, PRIORITY.prefetch);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].opts?.timeout).toBeUndefined();
+      later.reset();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
+
+describe("thumbnail store", () => {
+  it("decodes the PNG data URL of a render to its bytes", () => {
+    const img = decodeDataUrl("data:image/png;base64,iVBORw0KGgo=")!;
+    expect(img.type).toBe("image/png");
+    expect([...new Uint8Array(img.bytes)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    expect(decodeDataUrl("blob:abc")).toBeNull();
+  });
+
+  it("knows a PNG by its signature and a little more", () => {
+    const png = decodeDataUrl("data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==")!;
+    expect(isPng(png.bytes)).toBe(true);
+    // Only the signature, cut off inside it, or something else.
+    expect(isPng(decodeDataUrl("data:image/png;base64,iVBORw0KGgo=")!.bytes)).toBe(false);
+    expect(isPng(new Uint8Array([0x89, 0x50, 0x4e]).buffer)).toBe(false);
+    expect(isPng(new Uint8Array(32).buffer)).toBe(false);
+  });
+
+  it("drops kept records that are no complete PNG, and keeps the others", async () => {
+    // A minimal stand-in for IndexedDB: one database with one store, requests that succeed.
+    const rows = new Map<string, unknown>();
+    const req = <T,>(result: T) => {
+      const r: { result: T; onsuccess?: () => void; onerror?: () => void } = { result };
+      queueMicrotask(() => r.onsuccess?.());
+      return r;
+    };
+    const store = {
+      getAllKeys: () => req([...rows.keys()]),
+      getAll: () => req([...rows.values()]),
+      delete: (k: string) => rows.delete(k),
+      put: (v: unknown, k: string) => rows.set(k, v),
+    };
+    const db = { transaction: () => ({ objectStore: () => store }), createObjectStore: () => store };
+    vi.stubGlobal("indexedDB", { open: () => req(db) });
+    try {
+      const png = decodeDataUrl("data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==")!;
+      rows.set("good", { build: "b", type: "image/png", bytes: png.bytes });
+      rows.set("cut", { build: "b", type: "image/png", bytes: png.bytes.slice(0, 5) });
+      rows.set("garbled", { build: "b", type: "image/png", bytes: new Uint8Array(40).buffer });
+      const images = await indexedDbStore("b")!.load();
+      expect([...images.keys()]).toEqual(["good"]);
+      expect([...rows.keys()]).toEqual(["good"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keys images by the hashed chunk of a production build, and keeps none in development", () => {
+    expect(buildId(false, "http://tauri.localhost/assets/index-Ab12Cd34.js")).toBe("/assets/index-Ab12Cd34.js");
+    expect(buildId(true, "http://127.0.0.1:1430/src/three/thumbnails.ts")).toBeNull();
+  });
+});
+

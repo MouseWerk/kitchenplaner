@@ -5,8 +5,8 @@
 // true})` while moving, so all the moves of one drag undo together; `endGesture()` when it ends.
 
 import { create } from "zustand";
-import type { ElevationCut } from "../model/elevation";
-import type { Facing, Item, Opening, Project, Room } from "../model/types";
+import type { ElevationCut, ElevationId } from "../model/elevation";
+import type { Item, Opening, Project, Room } from "../model/types";
 import { newProject, numberNew } from "../model/project";
 
 /** How many steps undo keeps. */
@@ -65,8 +65,8 @@ export interface AppState {
   future: Project[];
   selection: Selection;
   layout: Layout;
-  /** The elevation shown where only one fits (split layout, export). */
-  facing: Facing;
+  /** The elevation shown where only one fits (split layout, export): a compass view or a wall. */
+  facing: ElevationId;
   prefs: Prefs;
   mode: Mode;
   roomTool: RoomTool;
@@ -91,7 +91,7 @@ export interface AppState {
   markSaved: (path: string, project?: Project) => void;
   select: (sel: Partial<Selection>) => void;
   setLayout: (layout: Layout) => void;
-  setFacing: (facing: Facing) => void;
+  setFacing: (facing: ElevationId) => void;
   setPrefs: (prefs: Partial<Prefs>) => void;
   /** Switches the mode; the selection of the other mode is cleared. */
   setMode: (mode: Mode) => void;

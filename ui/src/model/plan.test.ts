@@ -448,14 +448,14 @@ describe("planDrawing labels stay where they were", () => {
   const scales = [40, ...SHEET_SCALES];
   it("example kitchen", () => {
     expect(Object.fromEntries(scales.map((ps) => [ps, fingerprint(example(), ps)]))).toEqual({
-      40: "302:cc7ac8da",
-      20: "303:cdfadaac",
-      25: "303:a14b5b6f",
-      50: "299:be0cbd61",
-      75: "285:c52df227",
-      100: "263:d493af60",
-      200: "263:87628fb8",
-      500: "299:77dc3795",
+      40: "302:43deae28",
+      20: "303:e9ef3ec1",
+      25: "303:4f9dc8f9",
+      50: "298:afa8d4fe",
+      75: "284:6c016ca9",
+      100: "262:2c5ea542",
+      200: "261:b2daa9ee",
+      500: "299:e859f5e1",
     });
   });
   it("crowded plan", () => {

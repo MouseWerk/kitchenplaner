@@ -47,10 +47,11 @@ export function menuPosition(button: Rect, size: { width: number; height: number
 }
 
 /**
- * `className` replaces the button's class ("tb-btn", a toolbar button), e.g. for a pane header.
- * `ariaLabel` names a button whose label is only an icon.
+ * `className` replaces the button's class ("tb-btn", a toolbar button), e.g. for a pane header;
+ * `anchorClassName` is added to the wrapper around button and popup, which is the flex item in a
+ * header. `ariaLabel` names a button whose label is only an icon.
  */
-export function Menu(props: { label: ReactNode; title: string; entries: MenuEntry[]; align?: "start" | "end"; className?: string; ariaLabel?: string }) {
+export function Menu(props: { label: ReactNode; title: string; entries: MenuEntry[]; align?: "start" | "end"; className?: string; anchorClassName?: string; ariaLabel?: string }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -132,7 +133,7 @@ export function Menu(props: { label: ReactNode; title: string; entries: MenuEntr
   };
 
   return (
-    <div className="menu-anchor">
+    <div className={props.anchorClassName ? `menu-anchor ${props.anchorClassName}` : "menu-anchor"}>
       <button
         ref={btn}
         type="button"

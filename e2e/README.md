@@ -109,8 +109,17 @@ three hooks, all off unless the variable is set and all compiled out of release 
 | 11-editor-tools | the introduction from the view menu and the example kitchen; M measures; the context menu aligns as one undo step |
 | 12-autosave | an edit is backed up, the app is killed, the next start offers it; „Wiederherstellen“ brings it back unsaved |
 | 13-plan-set | „Plansatz als PDF…“: `%PDF-`, the page count the dialog shows, the project name in the title block |
+| 14-outline | the wall tool: typed lengths, directions snapped to the axes, closing by a click on the start point; in Raum a wall (G X 500) and a corner (G Y 500) moved, Escape cancels, deleting every corner is refused |
+| 15-positions | Pos. numbers stay after Delete (a gap) and Shift+D (the next free number), also in the saved file |
+| 16-english | the language switched to English in the view menu: toolbar, panels, status bar, digit grouping, the CSV (comma separated); and back |
+| 17-open-errors | a damaged file, one too new, one that is no project, a cut-off one and a `.txt`: each its message, the open project stays and saves to its own file |
+| 18-placing | the catalogue by keyboard (search, Tab, arrows, Enter); a drop into the plan lands on the grid, or against the wall it was dropped near, and switches to Einrichten |
+| 19-keyboard | A and Delete, nudging with the arrows (Shift: 100 mm), N/Shift+N with the announcement, Shift+F10 and its menu, F6/Shift+F6 through the regions |
+| 20-openings | „+ Tür“, „+ Fenster“, „+ Durchreiche“ on three walls; G with a typed 1000 slides the window along its wall (one undo step) |
+| 21-export-formats | the north elevation as SVG and DXF (well-formed, complete), the plan as PNG (3200 px wide, IEND) |
 
-Not covered yet: the outline (wall) tool (typed lengths, 45°/90° snapping, closing on the start
-point), selecting and moving walls and corners in Raum mode (G X 1000, Delete refused below three
-corners), Shift+D and A, snapping guides, the catalog's 3D previews, and Cmd+Q on macOS (no
+`dropFromCatalog` (`lib/kitchen.js`) dispatches the drag events in the page: WebDriver's pointer
+actions start no native HTML drag in WebKitGTK or WebView2.
+
+Not covered yet: snapping guides on screen, the catalog's 3D previews, and Cmd+Q on macOS (no
 WebDriver there).

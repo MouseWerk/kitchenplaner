@@ -9,6 +9,8 @@ import { baseName } from "../lib/platform";
 import { updateSettings, useSettings } from "../lib/settings";
 import { keyLabel } from "../lib/shortcuts";
 import { useCanCapture3d } from "../three/capture";
+import { resolveElevation } from "../model/elevation";
+import { elevationName } from "../model/elevationNames";
 import { useStore, type Layout } from "../store/store";
 import { Menu } from "./Menu";
 import { PlanSetDialog } from "./PlanSetDialog";
@@ -42,7 +44,7 @@ export function Toolbar() {
   const name = useStore((s) => s.project.info.name);
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
-  const facing = useStore((s) => s.facing);
+  const facing = useStore((s) => resolveElevation(s.project.room, s.facing));
   const prefs = useStore((s) => s.prefs);
   const mode = useStore((s) => s.mode);
   const roomTool = useStore((s) => s.roomTool);
@@ -54,7 +56,7 @@ export function Toolbar() {
   const can3d = useCanCapture3d();
   const st = useStore.getState();
   const k = (c: string) => keyLabel(c, lang);
-  const facingName = t(`facing.${facing}` as const);
+  const facingName = elevationName(facing);
   const header = useRef<HTMLElement>(null);
   // How far the bar gives way to fit the window (toolbarFit.ts); labels stay as tooltips.
   const level = useToolbarFit(header, `${mode} ${lang}`);

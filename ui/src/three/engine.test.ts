@@ -18,11 +18,13 @@ vi.mock("./post", () => ({
 }));
 
 const { Engine } = await import("./engine");
+const { ItemBatches } = await import("./batch");
 
 interface Fake {
   capture: (widthPx?: number) => Promise<Uint8Array>;
   pending: Map<string, Item>;
   items: Map<string, unknown>;
+  batches: InstanceType<typeof ItemBatches>;
   shadowTimer: number;
 }
 
@@ -39,6 +41,7 @@ function fakeEngine(pending: Item[], shadowTimer = 0): Fake {
     pending: new Map(pending.map((i) => [i.id, i])),
     items: new Map(),
     itemsRoot: new THREE.Group(),
+    batches: new ItemBatches(),
     overlayRoot: new THREE.Group(),
     buildFrame: 1,
     shadowTimer,
@@ -69,6 +72,10 @@ describe("3D capture", () => {
     engine = fakeEngine([testItem("a", "table", 1000, 1000), testItem("b", "table", 3000, 1000), testItem("c", "table", 5000, 1000)]);
     await engine.capture(400);
     expect(drawn).toEqual([{ pending: 0, built: ["a", "b", "c"], steps: ["shadows", "frame"] }]);
+    // Three tables of one model: every part an instance, each geometry once.
+    const { instances, geometries } = engine.batches.stats;
+    expect(instances).toBe(3 * geometries);
+    expect(geometries).toBeGreaterThan(0);
   });
 
   it("draws shadows that wait for their interval before the picture", async () => {
@@ -78,4 +85,29 @@ describe("3D capture", () => {
     await engine.capture(400);
     expect(drawn).toEqual([{ pending: 0, built: [], steps: ["shadows"] }]);
   });
+
+  it("draws the selected item by its own meshes (with the highlight) and the others from the batches", async () => {
+    drawn.length = 0;
+    engine = fakeEngine([testItem("a", "table", 1000, 1000), testItem("b", "table", 3000, 1000)]);
+    await engine.capture(400);
+    const e = engine as unknown as Record<string, unknown> & { updateOverlays(): void; items: Map<string, { object: THREE.Group }> };
+    Object.assign(e, {
+      hover: null,
+      outlineBox: new THREE.BufferGeometry(),
+      selectedLine: new THREE.LineBasicMaterial(),
+      selectedHidden: new THREE.LineBasicMaterial(),
+      hoverLine: new THREE.LineBasicMaterial(),
+    });
+    const shown = (id: string) => e.items.get(id)!.object.children.filter((c) => c.visible).length;
+    const parts = e.items.get("a")!.object.children.length;
+    expect(shown("a")).toBe(0);
+    e.selection = ["a"];
+    e.updateOverlays();
+    expect(shown("a")).toBe(parts);
+    expect(shown("b")).toBe(0);
+    e.selection = [];
+    e.updateOverlays();
+    expect(shown("a")).toBe(0);
+  });
 });
+

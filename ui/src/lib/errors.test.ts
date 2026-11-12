@@ -30,6 +30,11 @@ describe("errorText", () => {
     }
   });
 
+  it("calls a project file that does not parse damaged", () => {
+    expect(errorText(cmd("corrupt", "halb.kplan"))).toBe(t("error.invalid"));
+    expect(errorText(cmd("corrupt", "halb.kplan"))).toContain("beschädigt");
+  });
+
   it("uses the language the user chose", () => {
     setLang("en");
     expect(errorText(cmd("readOnly"))).toBe("“Küche.kplan” is read-only. Save it under a different name.");

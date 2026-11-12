@@ -1,8 +1,9 @@
 // Plausibility checks of a plan: what a planner would otherwise notice only on site.
 
 import { collides, kindOf, placementOf, type Placement } from "../kinds/registry";
+import { clearanceIssues, clearanceSpotTest } from "./clearances";
 import { across, doorLeaves, doorSetup, isDoor, leafRect, openingFrame, SLIDE_CLEAR, swingFrame } from "./doors";
-import { convexOverlap, cross, EPS, footprint, pointInPolygon, sub } from "./geometry";
+import { bounds, convexOverlap, cross, EPS, footprint, pointInPolygon, sub } from "./geometry";
 import { bandPiece, partitionBand, partitionLength, partitionOutline } from "./partitions";
 import { positions } from "./project";
 import { selfIntersects } from "./roomEdit";
@@ -22,7 +23,10 @@ export interface Issue {
  * All problems of a project, in a stable order: a room outline crossing itself, overlaps (by position pairs), items outside the
  * room, items standing in a partition, partitions reaching outside the room, items blocking a
  * door on the side it opens to (in an outer wall or a partition), items higher than the room
- * (each by position).
+ * (each by position), then the workplace checks of `clearances.ts`: free space in front of
+ * units (movement area, aisles, function areas of doors and pans), in front of the room's doors,
+ * hood overhang over cooking units, hand-wash basins near production (thresholds in
+ * `checkRules.ts`).
  *
  * Items only collide with items of the same placement (`collides`): a hood above a range or a
  * slicer on a table is the normal case, and flat ones (drains, platforms) collide with nothing.
@@ -43,13 +47,11 @@ export function checkProject(project: Project): Issue[] {
   // The room mode never makes one, but a file may bring one: it opens, so it can be repaired.
   if (selfIntersects(project.room.points)) issues.push({ key: "check.outlineInvalid", vars: {}, itemIds: [] });
 
-  for (let i = 0; i < items.length; i++) {
-    for (let j = i + 1; j < items.length; j++) {
-      if (!inEachOthersWay(items[i], items[j], placement[i], placement[j], fps[i], fps[j])) continue;
-      // The lower number first, whatever the list order: "Pos. 3 und Pos. 12".
-      const [pa, pb] = [posOf(items[i].id), posOf(items[j].id)].sort((x, y) => x - y);
-      issues.push({ key: "check.overlap", vars: { a: pa, b: pb }, itemIds: [items[i].id, items[j].id] });
-    }
+  for (const [i, j] of nearPairs(fps)) {
+    if (!inEachOthersWay(items[i], items[j], placement[i], placement[j], fps[i], fps[j])) continue;
+    // The lower number first, whatever the list order: "Pos. 3 und Pos. 12".
+    const [pa, pb] = [posOf(items[i].id), posOf(items[j].id)].sort((x, y) => x - y);
+    issues.push({ key: "check.overlap", vars: { a: pa, b: pb }, itemIds: [items[i].id, items[j].id] });
   }
 
   const roomPoly = project.room.points;
@@ -73,8 +75,11 @@ export function checkProject(project: Project): Issue[] {
   }
 
   const doorAreas = doorClearances(project);
+  const inDoor = new Set<string>();
   items.forEach((it, i) => {
-    if (blocksDoor(placement[i], fps[i], doorAreas)) issues.push({ key: "check.doorBlocked", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
+    if (!blocksDoor(placement[i], fps[i], doorAreas)) return;
+    inDoor.add(it.id);
+    issues.push({ key: "check.doorBlocked", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
   });
 
   items.forEach((it) => {
@@ -82,13 +87,16 @@ export function checkProject(project: Project): Issue[] {
     if (it.elevation + it.height > project.room.height + 0.1) issues.push({ key: "check.tooHigh", vars: { pos: posOf(it.id) }, itemIds: [it.id] });
   });
 
+  issues.push(...clearanceIssues(project, { fps, placement, posOf }, inDoor));
   return issues;
 }
 
 /**
  * A test whether a unit would stand in the project without a finding of its own: no overlap, inside
- * the room, clear of partitions and doors (the rules of `checkProject`; its height does not depend
- * on where it stands). Prepared once for the project, for trying many spots for a new unit.
+ * the room, clear of partitions and doors, with its own free space in front and without taking
+ * the free space of a door or of a workplace near it (the rules of `checkProject` that depend on
+ * where it stands; not its height, and not hoods and hand-wash basins, which depend on what is
+ * added). Prepared once for the project, for trying many spots for a new unit.
  */
 export function freeSpotTest(project: Project): (item: Item) => boolean {
   const others = project.items.map((it) => ({ it, placement: placementOf(kindOf(it.catalogId)), fp: footprint(it) }));
@@ -96,14 +104,38 @@ export function freeSpotTest(project: Project): (item: Item) => boolean {
   const parts = project.room.partitions.filter((p) => partitionLength(p) >= EPS);
   const outlines = parts.map((p) => partitionOutline(p));
   const doorAreas = doorClearances(project);
+  const keepsClearances = clearanceSpotTest(project, { fps: others.map((o) => o.fp), placement: others.map((o) => o.placement) });
   return (item) => {
     const placement = placementOf(kindOf(item.catalogId));
     const fp = footprint(item);
     if (roomPoly.length >= 3 && !footprintInside(fp, roomPoly)) return false;
     if (blocksDoor(placement, fp, doorAreas)) return false;
     if (partitionsHit(item, placement, fp, parts, outlines).length > 0) return false;
-    return !others.some((o) => o.it.id !== item.id && inEachOthersWay(item, o.it, placement, o.placement, fp, o.fp));
+    if (others.some((o) => o.it.id !== item.id && inEachOthersWay(item, o.it, placement, o.placement, fp, o.fp))) return false;
+    // The most work last: only a spot that passes the rest is measured.
+    return keepsClearances(item, placement, fp);
   };
+}
+
+/**
+ * The index pairs [i, j], i < j, of the outlines whose bounding boxes meet (touching counts), in
+ * list order: only these can overlap. Swept along x, so a large plan does not test every pair.
+ */
+function nearPairs(fps: Vec2[][]): [number, number][] {
+  const boxes = fps.map((fp) => bounds(fp));
+  const order = boxes.map((_, i) => i).sort((a, b) => boxes[a].minX - boxes[b].minX);
+  const pairs: [number, number][] = [];
+  for (let k = 0; k < order.length; k++) {
+    const a = boxes[order[k]];
+    for (let l = k + 1; l < order.length; l++) {
+      const b = boxes[order[l]];
+      if (b.minX > a.maxX) break;
+      if (b.minY > a.maxY || a.minY > b.maxY) continue;
+      const [i, j] = order[k] < order[l] ? [order[k], order[l]] : [order[l], order[k]];
+      pairs.push([i, j]);
+    }
+  }
+  return pairs.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
 }
 
 /** Do two items stand in each other's way (the overlap finding)? */

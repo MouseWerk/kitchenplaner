@@ -50,9 +50,9 @@ auf eigenem Weg zurück.
   Gastraum.
 - **Spülküche (Südwest-Flügel, durch eine Trennwand abgeteilt):** Geschirrrückgabe direkt vom
   Gastraum, Vorspül- und Sortiertisch mit Abfallschacht, Korbtransportspülmaschine,
-  Ablauftisch, Regale für sauberes Geschirr. An der Trennwand die Topfspüle mit Abstelltisch,
-  Topfregal und Wandbord, ein Handwaschbecken und der Ausgussbecken für die Reinigung. Eine Tür
-  verbindet Spülküche und Küche.
+  Ablauftisch, Regale für sauberes Geschirr, zwischen ihnen der Ausgussbecken für die Reinigung.
+  An der Trennwand die Topfspüle mit Abstelltisch, Topfregal und Wandbord und ein
+  Handwaschbecken. Eine Tür verbindet Spülküche und Küche.
 - **Hygiene:** Handwaschbecken an jedem Zugang: Vorbereitung, Kochwand, Personaleingang
   (Ostwand), Spülküche.
 - **Gebäude:** eine Stütze an der Nordwand, ein Fenster in der Ostwand.

@@ -1,4 +1,5 @@
-// The plan set dialog („Plansatz als PDF…“): paper, orientation, scale and the sheets to print.
+// The plan set dialog („Plansatz als PDF…“): paper, orientation, scale and the sheets to print,
+// the four compass elevations and, by a rule, those of single walls.
 // It checks before exporting that every drawing fits its sheet at the chosen scale and offers the
 // next scale or paper that fits, since a sheet never clips a drawing. The choices are remembered
 // per computer.
@@ -10,7 +11,7 @@ import { currentLang, useT } from "../lib/i18n";
 import { loadPlanSetOptions, savePlanSetOptions } from "../lib/planSetSettings";
 import { WALL_CUT_DEPTH } from "../model/elevation";
 import { FACINGS, type Facing } from "../model/types";
-import { checkPlanSet, PAPER_SIZES, PLAN_SCALES, type Orientation, type PaperSize, type PlanSetOptions, type ScaleChoice } from "../render/planSet";
+import { checkPlanSet, PAPER_SIZES, PLAN_SCALES, WALL_SHEETS, wallSheetWalls, type Orientation, type PaperSize, type PlanSetOptions, type ScaleChoice, type WallSheets } from "../render/planSet";
 import { useStore } from "../store/store";
 import { useCanCapture3d } from "../three/capture";
 import { CheckField, SelectField } from "./Fields";
@@ -76,6 +77,9 @@ export function PlanSetDialog(props: { onClose: () => void }) {
   };
 
   const cutName = t(`view.cut.${cut}` as const, { mm: WALL_CUT_DEPTH });
+  const slanted = wallSheetWalls(project.room, "slanted").length;
+  const wallOptions = WALL_SHEETS.map((w: WallSheets) => ({ value: w, label: w === "none" ? t("planSet.wallSheets.none") : t(`planSet.wallSheets.${w}` as const, { n: wallSheetWalls(project.room, w).length }) }));
+  const elevationSheets = opts.elevations.length + wallSheetWalls(project.room, opts.wallSheets).length;
   const scaleOptions: { value: ScaleChoice; label: string }[] = [{ value: "auto", label: t("planSet.scaleAuto") }, ...PLAN_SCALES.map((s) => ({ value: s, label: `1:${s}` }))];
 
   return createPortal(
@@ -112,8 +116,10 @@ export function PlanSetDialog(props: { onClose: () => void }) {
             </label>
           </div>
           {opts.plan && <CheckField label={t("planSet.names")} checked={opts.names} onChange={(names) => set({ names })} />}
+          <SelectField<WallSheets> label={t("planSet.wallSheets")} value={opts.wallSheets} options={wallOptions} onChange={(wallSheets) => set({ wallSheets })} />
+          {slanted > 0 && <p className="hint">{t("planSet.wallSheetsHint")}</p>}
           {!can3d && <p className="hint">{t("planSet.view3dHint")}</p>}
-          {opts.elevations.length > 0 && <p className="hint">{t("planSet.cutHint", { cut: cutName })}</p>}
+          {elevationSheets > 0 && <p className="hint">{t("planSet.cutHint", { cut: cutName })}</p>}
         </fieldset>
 
         <div className="plan-set-status" aria-live="polite">

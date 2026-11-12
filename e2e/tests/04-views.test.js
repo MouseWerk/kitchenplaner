@@ -31,8 +31,8 @@ appTest("the layout buttons switch the views", async (app) => {
   await waitPanes(app, (p) => p.length === 4 && p.every((x) => x.startsWith("Ansicht ")), "the elevations button");
 
   // The cut depth of the elevations: the app's own menu (inside the window, the current choice
-  // checked), one setting for all four panes.
-  const cutLabels = () => app.exec(() => [...document.querySelectorAll("section[aria-label^='Ansicht '] .pane-head [aria-haspopup=menu]")].map((b) => b.innerText.trim()));
+  // checked), one setting for all four panes. Each pane head also has the view chooser's menu.
+  const cutLabels = () => app.exec(() => [...document.querySelectorAll("section[aria-label^='Ansicht '] .pane-head [aria-haspopup=menu][title='Schnitttiefe der Ansicht']")].map((b) => b.innerText.trim()));
   assert.deepEqual(await cutLabels(), Array(4).fill("1.500 mm vor der Wand"));
   await app.click("1.500 mm vor der Wand", "section[aria-label='Ansicht Nord'] .pane-head");
   await app.waitFor("[role=menu]");
@@ -63,6 +63,23 @@ appTest("the layout buttons switch the views", async (app) => {
   await waitPanes(app, (p) => p.length === 1 && p[0] === "Grundriss", "the plan button");
 });
 
+appTest("each elevation pane chooses its view from one menu: a compass view or a single wall", async (app) => {
+  await app.click("Ansichten", "header [role=group][aria-label='Aufteilung wählen']");
+  await waitPanes(app, (p) => JSON.stringify(p) === JSON.stringify(ELEVATIONS), "the elevations button");
+  const chooser = "section[aria-label='Ansicht Ost'] .pane-head";
+  assert.equal(await app.exec((s) => document.querySelector(`${s} [aria-haspopup=menu][title=Blickrichtung]`)?.innerText.trim(), chooser), "Ost");
+  await app.click("Ost", chooser);
+  await app.waitFor("[role=menu]");
+  const entries = await app.exec(() => [...document.querySelectorAll("[role=menu] [role=menuitemradio] .menu-label")].map((e) => e.textContent));
+  assert.deepEqual(entries.slice(0, 4), ["Nord", "Ost", "Süd", "West"]);
+  assert.deepEqual(entries.slice(4).map((e) => e.split(" (")[0]), ["Wand 1", "Wand 2", "Wand 3", "Wand 4"]);
+  await app.click("Wand 3", "[role=menu]");
+  await waitPanes(app, (p) => p[1] === "Ansicht Wand 3", "the second pane did not switch to wall 3");
+  await app.click("Wand 3", "section[aria-label='Ansicht Wand 3'] .pane-head");
+  await app.click("West", "[role=menu]");
+  await waitPanes(app, (p) => p[1] === "Ansicht West", "the second pane did not switch to the west view");
+});
+
 appTest("Tab switches between Einrichten and Raum, shown in the status bar", async (app) => {
   const modeCell = () => app.exec(() => document.querySelector("footer .mode")?.innerText.trim() ?? document.querySelector("footer")?.innerText ?? "");
   assert.equal(await pressed(app, "Modus"), "Einrichten");
@@ -81,7 +98,7 @@ appTest("Tab switches between Einrichten and Raum, shown in the status bar", asy
   // On a button inside the views (an elevation's cut depth) Tab moves the focus and keeps the mode.
   await pressOnViews(app, "2");
   await app.waitUntil(async () => (await panes(app)).length === 4, "2 did not show the elevations");
-  const cut = await app.exec(() => document.querySelector("main .pane-head button"));
+  const cut = await app.exec(() => document.querySelector("main .pane-head button[title='Schnitttiefe der Ansicht']"));
   await app.exec((e) => e.focus(), cut);
   await app.keys(Key.Tab);
   assert.equal(await pressed(app, "Modus"), "Einrichten");

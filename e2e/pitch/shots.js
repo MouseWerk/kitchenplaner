@@ -246,21 +246,19 @@ async function layout(name) {
   await app.waitUntil(() => app.exec(current, name), `layout ${name} not shown`);
 }
 
-/** Sets the facing of the `index`-th elevation pane of the split layout. */
+/** Sets the facing of the `index`-th elevation pane of the split layout, from its view chooser. */
 async function facing(index, name) {
   const ref = await app.waitUntil(
-    () =>
-      app.exec(
-        (i, n) => {
-          const groups = document.querySelectorAll("main [role=group][aria-label='Blickrichtung']");
-          return [...(groups[i]?.querySelectorAll("button") ?? [])].find((x) => x.title === n) ?? null;
-        },
-        index,
-        name,
-      ),
+    () => app.exec((i) => document.querySelectorAll("main .pane-head [aria-haspopup=menu][title='Blickrichtung']")[i] ?? null, index),
+    `no view chooser in pane ${index}`,
+  );
+  if ((await app.exec((e) => e.innerText.trim(), ref)) === name) return;
+  await (await b.$(ref)).click();
+  const entry = await app.waitUntil(
+    () => app.exec((n) => [...document.querySelectorAll("[role=menu] [role=menuitemradio]")].find((x) => x.querySelector(".menu-label")?.textContent === n) ?? null, name),
     `no facing ${name} in pane ${index}`,
   );
-  await (await b.$(ref)).click();
+  await (await b.$(entry)).click();
 }
 
 async function fit() {

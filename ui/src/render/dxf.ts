@@ -1,63 +1,66 @@
-// DXF export (AutoCAD R12, ASCII): the oldest widely read CAD format, so every CAD program a
-// kitchen planner or architect uses can open the plan. One layer per kind of line (LAYER_OF),
-// y flipped (DXF y points up), dimensions as plain lines and text.
+// DXF export (AutoCAD 2000, AC1015, ASCII, millimetres): the plan and the elevations for a
+// planner who goes on in CAD. Each unit is a block reference with its data as attributes, so it
+// can be picked, moved and listed there; the layers follow the trades, so the walls, the
+// equipment or the electrical data can be shown and hidden on their own. y is flipped (DXF y
+// points up). The file format itself is `dxfWriter.ts`; this module maps a Drawing onto it.
+//
+// Dimensions stay plain lines and text on BEMASSUNG, cut walls stay SOLID triangles: both look
+// in every reader exactly as in the app.
 
-import { drawingBounds, expandDim, LAYER_OF, type Drawing, type Pen, type Shape, type TextShape } from "./drawing";
+import { drawingBounds, expandDim, LAYER_OF, TEXT, type Drawing, type Pen, type Shape, type TextShape } from "./drawing";
+import { dxfNumber, writeDxf, type DxfAttDef, type DxfAttrib, type DxfBlock, type DxfEntity, type DxfLayer, type DxfLinetype, type Pt } from "./dxfWriter";
 import { PEN_STYLE } from "./style";
 import { CIRCLE_CENTER_RISE, CIRCLE_RADIUS } from "./svg";
-import type { Vec2 } from "../model/types";
+import type { Item, Vec2 } from "../model/types";
 
-/** CRLF throughout, as AutoCAD writes it. */
-const EOL = "\r\n";
+export { dxfText } from "./dxfWriter";
 
-/** $INSUNITS value for millimetres. */
-const INSUNITS_MM = 4;
+/** Position numbers, names and their leaders. */
+export const LABEL_LAYER = "BESCHRIFTUNG";
 
-/** AutoCAD color index of each layer (7 = black/white, 8 = grey, 4 = cyan, 6 = magenta, 3 = green). */
-const LAYER_COLOR: Record<string, number> = {
-  WAENDE: 7,
-  OEFFNUNGEN: 4,
-  AUSSTATTUNG: 7,
-  AUSSTATTUNG_OBEN: 6,
-  DETAILS: 8,
-  BEMASSUNG: 3,
-  RAHMEN: 7,
-};
-const DEFAULT_COLOR = 7;
+/** One layer per trade for the connection values of the units (their attributes). */
+export const CONNECTION_LAYER = {
+  electric: "ANSCHLUSS_ELEKTRO",
+  gas: "ANSCHLUSS_GAS",
+  water: "ANSCHLUSS_WASSER",
+  drain: "ANSCHLUSS_ABWASSER",
+  exhaust: "ANSCHLUSS_LUEFTUNG",
+} as const;
+
+/**
+ * Every layer of the export: AutoCAD colour index (7 black/white, 8 grey, 4 cyan, 6 magenta,
+ * 3 green, 1 red, 30 orange, 5 blue, 34 brown, 140 blue-cyan), line type and lineweight in
+ * 1/100 mm. Entities carry their pen's own lineweight; the layer's is the one new lines get.
+ */
+const LAYERS: DxfLayer[] = [
+  { name: "WAENDE", color: 7, ltype: "CONTINUOUS", lineweight: 50 },
+  { name: "OEFFNUNGEN", color: 4, ltype: "CONTINUOUS", lineweight: 25 },
+  { name: "AUSSTATTUNG", color: 7, ltype: "CONTINUOUS", lineweight: 35 },
+  { name: "AUSSTATTUNG_OBEN", color: 6, ltype: "DASHED", lineweight: 18 },
+  { name: "DETAILS", color: 8, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: LABEL_LAYER, color: 7, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: "BEMASSUNG", color: 3, ltype: "CONTINUOUS", lineweight: 13 },
+  { name: "RAHMEN", color: 7, ltype: "CONTINUOUS", lineweight: 50 },
+  { name: CONNECTION_LAYER.electric, color: 1, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: CONNECTION_LAYER.gas, color: 30, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: CONNECTION_LAYER.water, color: 5, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: CONNECTION_LAYER.drain, color: 34, ltype: "CONTINUOUS", lineweight: 18 },
+  { name: CONNECTION_LAYER.exhaust, color: 140, ltype: "CONTINUOUS", lineweight: 18 },
+];
 
 /** Line type per pen: the dashed pens get their own DXF line type, the rest CONTINUOUS. */
 const LTYPE_OF: Partial<Record<Pen, string>> = { overhead: "DASHED", hidden: "HIDDEN" };
 
-/** DXF TEXT horizontal justification (group 72): 0 left, 1 center, 2 right, 4 middle (both axes). */
+/** DXF TEXT horizontal justification (group 72): 0 left, 1 centre, 2 right; 4 middle (both axes). */
 const JUSTIFY = { start: 0, middle: 1, end: 2 } as const;
-const JUSTIFY_MIDDLE = 4;
 
-/** A number for DXF: four decimals at most, no exponent, no "-0". */
-function n(v: number): string {
-  const r = Math.round(v * 10000) / 10000;
-  return r === 0 ? "0" : r.toFixed(4).replace(/\.?0+$/, "");
-}
+/** Cap height of the SVG and screen fonts per em: DXF text height is the cap height. */
+const CAP_HEIGHT_PER_EM = 0.7;
 
 /** Normalizes an angle in degrees to [0, 360). */
 function deg360(a: number): number {
   const r = ((a % 360) + 360) % 360;
   return Math.abs(r - 360) < 1e-9 ? 0 : r;
-}
-
-/**
- * Text for an R12 file: characters above ASCII as \U+XXXX (R12 has no UTF-8), line breaks as
- * spaces. Characters outside the Basic Multilingual Plane cannot be written and become "?".
- */
-export function dxfText(s: string): string {
-  let out = "";
-  for (const ch of s.replace(/[\r\n\t]+/g, " ")) {
-    const cp = ch.codePointAt(0) ?? 0;
-    if (cp < 32) continue;
-    if (cp <= 127) out += ch;
-    else if (cp <= 0xffff) out += `\\U+${cp.toString(16).toUpperCase().padStart(4, "0")}`;
-    else out += "?";
-  }
-  return out;
 }
 
 /**
@@ -69,208 +72,305 @@ export function dxfArcAngles(a0: number, a1: number): { start: number; end: numb
   return { start: deg360(-a1), end: deg360(-a0) };
 }
 
-class Writer {
-  private readonly lines: string[] = [];
+/** The layer names in a stable order, without duplicates (layer 0 not included). */
+export function dxfLayers(): string[] {
+  return LAYERS.map((l) => l.name);
+}
 
-  pair(code: number, value: string | number) {
-    this.lines.push(String(code), typeof value === "number" ? n(value) : value);
-  }
-
-  /** A point: x at `code`, y at `code + 10`, z at `code + 20`, y flipped. */
-  point(code: number, p: Vec2) {
-    this.pair(code, p.x);
-    this.pair(code + 10, -p.y);
-    this.pair(code + 20, 0);
-  }
-
-  toString(): string {
-    return this.lines.join(EOL) + EOL;
-  }
+export interface DxfOptions {
+  /**
+   * The items the drawing shows. Each one's shapes (those with its `itemId`, except texts and
+   * labels) become one block reference carrying its data as attributes; without items every
+   * shape is written as plain geometry.
+   */
+  items?: readonly Item[];
+  /**
+   * Where a block's base point lies. "plan": at the item's centre, the reference turned with
+   * the item, so a unit turns about its middle in CAD as in the app. Otherwise (elevations): at
+   * the lower left corner of what the drawing shows of it, unturned.
+   */
+  view?: "plan" | "elevation";
 }
 
 /**
- * The drawing as an ASCII DXF R12 file (AC1009) in millimetres. Text heights and dash lengths
- * are paper sizes times `paperScale`, so the file plots at that scale like the SVG.
+ * The drawing as an ASCII DXF file (AutoCAD 2000, AC1015) in millimetres. Text heights and dash
+ * lengths are paper sizes times `paperScale`, so the file plots at that scale like the SVG.
  */
-export function drawingToDxf(drawing: Drawing, paperScale: number): string {
-  const w = new Writer();
-  const box = drawingBounds(drawing, paperScale);
+export function drawingToDxf(drawing: Drawing, paperScale: number, opts: DxfOptions = {}): string {
+  const ps = paperScale;
+  const box = drawingBounds(drawing, ps);
+  const items = new Map((opts.items ?? []).map((it) => [it.id, it]));
 
-  w.pair(0, "SECTION");
-  w.pair(2, "HEADER");
-  w.pair(9, "$ACADVER");
-  w.pair(1, "AC1009");
-  w.pair(9, "$INSUNITS");
-  w.pair(70, String(INSUNITS_MM));
-  // Flipping y swaps which corner is the minimum.
-  w.pair(9, "$EXTMIN");
-  w.point(10, { x: box.minX, y: box.maxY });
-  w.pair(9, "$EXTMAX");
-  w.point(10, { x: box.maxX, y: box.minY });
-  w.pair(0, "ENDSEC");
+  // The shapes of each known item that go into its block, in drawing order.
+  const parts = new Map<string, Shape[]>();
+  for (const s of drawing.shapes) {
+    if (!s.itemId || !items.has(s.itemId) || isLabel(s)) continue;
+    const list = parts.get(s.itemId);
+    if (list) list.push(s);
+    else parts.set(s.itemId, [s]);
+  }
 
-  w.pair(0, "SECTION");
-  w.pair(2, "TABLES");
-  writeLtypes(w, paperScale);
-  writeLayers(w);
-  w.pair(0, "ENDSEC");
+  const blocks = new BlockSet();
+  const entities: DxfEntity[] = [];
+  const inserted = new Set<string>();
+  for (const s of drawing.shapes) {
+    const own = s.itemId !== undefined ? parts.get(s.itemId) : undefined;
+    if (own && !isLabel(s)) {
+      // The reference goes where the item's first shape was, keeping the drawing order.
+      if (!inserted.has(s.itemId!)) {
+        inserted.add(s.itemId!);
+        entities.push(itemInsert(items.get(s.itemId!)!, own, opts.view, ps, blocks));
+      }
+      continue;
+    }
+    entities.push(...shapeEntities(s, MODEL, ps));
+  }
 
-  w.pair(0, "SECTION");
-  w.pair(2, "ENTITIES");
-  for (const s of drawing.shapes) writeShape(w, s, paperScale);
-  w.pair(0, "ENDSEC");
-  w.pair(0, "EOF");
-  return w.toString();
+  return writeDxf({
+    // Flipping y swaps which corner is the minimum.
+    extents: { minX: box.minX, minY: -box.maxY, maxX: box.maxX, maxY: -box.minY },
+    linetypes: linetypes(ps),
+    layers: LAYERS,
+    blocks: blocks.list,
+    entities,
+  });
 }
 
-function writeLtypes(w: Writer, ps: number) {
-  const dashed = (Object.entries(LTYPE_OF) as [Pen, string][]).map(([pen, name]) => ({ name, dash: PEN_STYLE[pen].dash ?? [] }));
-  w.pair(0, "TABLE");
-  w.pair(2, "LTYPE");
-  w.pair(70, String(1 + dashed.length));
-  w.pair(0, "LTYPE");
-  w.pair(2, "CONTINUOUS");
-  w.pair(70, "0");
-  w.pair(3, "Solid line");
-  w.pair(72, "65");
-  w.pair(73, "0");
-  w.pair(40, 0);
-  for (const lt of dashed) {
+/** Texts and leaders annotate an item; they stay loose on the label layer. */
+function isLabel(s: Shape): boolean {
+  return s.t === "text" || s.label === true;
+}
+
+function linetypes(ps: number): DxfLinetype[] {
+  return (Object.entries(LTYPE_OF) as [Pen, string][]).map(([pen, name]) => ({
+    name,
+    description: "__ __ __",
     // Alternating dash (positive) and gap (negative) lengths in drawing units.
-    const elems = lt.dash.map((d, i) => (i % 2 === 0 ? d : -d) * ps);
-    w.pair(0, "LTYPE");
-    w.pair(2, lt.name);
-    w.pair(70, "0");
-    w.pair(3, "__ __ __");
-    w.pair(72, "65");
-    w.pair(73, String(elems.length));
-    w.pair(40, elems.reduce((s, e) => s + Math.abs(e), 0));
-    for (const e of elems) w.pair(49, e);
-  }
-  w.pair(0, "ENDTAB");
+    pattern: (PEN_STYLE[pen].dash ?? []).map((d, i) => (i % 2 === 0 ? d : -d) * ps),
+  }));
 }
 
-/** The layer names in a stable order, without duplicates. */
-export function dxfLayers(): string[] {
-  return [...new Set(Object.values(LAYER_OF))];
+// ---- Frames ----
+
+/**
+ * Maps drawing coordinates (y down) into the coordinates an entity is written in: the model
+ * space, or a block's own frame. `turn` is the frame's rotation in screen degrees (clockwise),
+ * subtracted from every screen angle.
+ */
+interface Frame {
+  map(p: Vec2): Pt;
+  turn: number;
 }
 
-function writeLayers(w: Writer) {
-  const layers = dxfLayers();
-  w.pair(0, "TABLE");
-  w.pair(2, "LAYER");
-  w.pair(70, String(layers.length));
-  for (const name of layers) {
-    w.pair(0, "LAYER");
-    w.pair(2, name);
-    w.pair(70, "0");
-    w.pair(62, String(LAYER_COLOR[name] ?? DEFAULT_COLOR));
-    w.pair(6, "CONTINUOUS");
-  }
-  w.pair(0, "ENDTAB");
+const MODEL: Frame = { map: (p) => ({ x: p.x, y: -p.y }), turn: 0 };
+
+/** The frame of a unit in the plan: its centre at the origin, turned back by its rotation. */
+function itemFrame(it: Item): Frame {
+  const a = (-it.rotation * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return {
+    map: (p) => {
+      const dx = p.x - it.x;
+      const dy = p.y - it.y;
+      return { x: dx * c - dy * s, y: -(dx * s + dy * c) };
+    },
+    turn: it.rotation,
+  };
 }
 
-function entity(w: Writer, type: string, pen: Pen) {
-  w.pair(0, type);
-  w.pair(8, LAYER_OF[pen]);
-  const lt = LTYPE_OF[pen];
-  if (lt) w.pair(6, lt);
+/** A frame with its origin at `o` (drawing coordinates), unturned. */
+function offsetFrame(o: Vec2): Frame {
+  return { map: (p) => ({ x: p.x - o.x, y: o.y - p.y }), turn: 0 };
 }
 
-function writeLine(w: Writer, pen: Pen, a: Vec2, b: Vec2) {
-  entity(w, "LINE", pen);
-  w.point(10, a);
-  w.point(11, b);
+/** Rotates a DXF point counter-clockwise by `deg` degrees and moves it by `by`. */
+function place(p: Pt, deg: number, by: Pt): Pt {
+  const a = (deg * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { x: by.x + p.x * c - p.y * s, y: by.y + p.x * s + p.y * c };
 }
 
-/** Cap height of the SVG and screen fonts per em: DXF text height is the cap height. */
-const CAP_HEIGHT_PER_EM = 0.7;
+// ---- Shapes ----
 
-function writeText(w: Writer, s: TextShape, ps: number) {
-  const em = s.size * ps;
-  const h = em * CAP_HEIGHT_PER_EM;
-  if (s.circled) {
-    const c = { x: s.p.x, y: s.p.y - em * CIRCLE_CENTER_RISE };
-    entity(w, "CIRCLE", "detail");
-    w.point(10, c);
-    w.pair(40, em * CIRCLE_RADIUS);
-    entity(w, "TEXT", s.pen);
-    w.point(10, c);
-    w.pair(40, h);
-    w.pair(1, dxfText(s.text));
-    w.pair(72, String(JUSTIFY_MIDDLE));
-    w.point(11, c);
-    return;
-  }
-  entity(w, "TEXT", s.pen);
-  w.point(10, s.p);
-  w.pair(40, h);
-  w.pair(1, dxfText(s.text));
-  // Screen angles turn clockwise, DXF angles counter-clockwise.
-  if (s.angle) w.pair(50, deg360(-s.angle));
-  const just = JUSTIFY[s.anchor];
-  if (just !== 0) {
-    w.pair(72, String(just));
-    w.point(11, s.p);
-  }
+function layerOf(s: Shape): string {
+  return s.itemId !== undefined && isLabel(s) ? LABEL_LAYER : LAYER_OF[s.pen];
 }
 
-function writeShape(w: Writer, s: Shape, ps: number) {
+/** Line type and lineweight of a pen, as the SVG draws it. */
+function penStyle(pen: Pen): { ltype?: string; lineweight: number } {
+  return { ltype: LTYPE_OF[pen], lineweight: Math.round(PEN_STYLE[pen].width * 100) };
+}
+
+/** The entities of one shape, in `frame`, on `layer` (its pen's layer unless given). */
+function shapeEntities(s: Shape, frame: Frame, ps: number, layer = layerOf(s)): DxfEntity[] {
+  const style = { layer, ...penStyle(s.pen) };
+  const m = frame.map;
   switch (s.t) {
     case "poly": {
-      if (s.pts.length < 2) return;
-      // Cut walls and columns are filled: R12 has no hatch, so as SOLID triangles.
+      if (s.pts.length < 2) return [];
+      const out: DxfEntity[] = [];
+      // Cut walls and columns are filled, as SOLID triangles (every reader fills them alike).
       if (s.closed && s.fill === "wall") {
-        for (const [a, b, c] of triangulate(s.pts)) {
-          entity(w, "SOLID", s.pen);
-          w.point(10, a);
-          w.point(11, b);
-          w.point(12, c);
-          // A triangle repeats its last corner as the fourth.
-          w.point(13, c);
-        }
+        for (const [a, b, c] of triangulate(s.pts)) out.push({ type: "SOLID", ...style, ltype: undefined, pts: [m(a), m(b), m(c)] });
       }
-      if (s.pts.length === 2 && !s.closed) {
-        writeLine(w, s.pen, s.pts[0], s.pts[1]);
-        return;
-      }
-      entity(w, "POLYLINE", s.pen);
-      w.pair(66, "1");
-      w.point(10, { x: 0, y: 0 });
-      w.pair(70, s.closed ? "1" : "0");
-      for (const p of s.pts) {
-        w.pair(0, "VERTEX");
-        w.pair(8, LAYER_OF[s.pen]);
-        w.point(10, p);
-      }
-      w.pair(0, "SEQEND");
-      w.pair(8, LAYER_OF[s.pen]);
-      return;
+      if (s.pts.length === 2 && !s.closed) out.push({ type: "LINE", ...style, a: m(s.pts[0]), b: m(s.pts[1]) });
+      else out.push({ type: "LWPOLYLINE", ...style, pts: s.pts.map(m), closed: s.closed });
+      return out;
     }
     case "circle":
-      entity(w, "CIRCLE", s.pen);
-      w.point(10, s.c);
-      w.pair(40, s.r);
-      return;
+      return [{ type: "CIRCLE", ...style, c: m(s.c), r: s.r }];
     case "arc": {
-      const { start, end } = dxfArcAngles(s.a0, s.a1);
-      entity(w, "ARC", s.pen);
-      w.point(10, s.c);
-      w.pair(40, s.r);
-      w.pair(50, start);
-      w.pair(51, end);
-      return;
+      const { start, end } = dxfArcAngles(s.a0 - frame.turn, s.a1 - frame.turn);
+      return [{ type: "ARC", ...style, c: m(s.c), r: s.r, start, end }];
     }
     case "text":
-      writeText(w, s, ps);
-      return;
+      return textEntities(s, frame, ps, layer);
     case "dim": {
       const e = expandDim(s, ps);
-      for (const [a, b] of e.lines) writeLine(w, "dim", a, b);
-      writeText(w, e.text, ps);
-      return;
+      return [...e.lines.map(([a, b]): DxfEntity => ({ type: "LINE", layer, ...penStyle("dim"), a: m(a), b: m(b) })), ...textEntities(e.text, frame, ps, layer)];
     }
   }
+}
+
+function textEntities(s: TextShape, frame: Frame, ps: number, layer: string): DxfEntity[] {
+  const em = s.size * ps;
+  const height = em * CAP_HEIGHT_PER_EM;
+  const lineweight = penStyle(s.pen).lineweight;
+  if (s.circled) {
+    const c = frame.map({ x: s.p.x, y: s.p.y - em * CIRCLE_CENTER_RISE });
+    return [
+      { type: "CIRCLE", layer, lineweight: penStyle("detail").lineweight, c, r: em * CIRCLE_RADIUS },
+      { type: "TEXT", layer, lineweight, p: c, height, text: s.text, halign: 4 },
+    ];
+  }
+  // Screen angles turn clockwise, DXF angles counter-clockwise.
+  const rotation = deg360(frame.turn - (s.angle ?? 0));
+  return [{ type: "TEXT", layer, lineweight, p: frame.map(s.p), height, text: s.text, rotation, halign: JUSTIFY[s.anchor] }];
+}
+
+// ---- Units as blocks ----
+
+/**
+ * The blocks of a file, one per catalog variant and drawn size: units that look alike share
+ * one, so in CAD a change to the block changes them all. Two units of one variant whose
+ * drawings differ (another size, seen from the side) get blocks of their own.
+ */
+class BlockSet {
+  readonly list: DxfBlock[] = [];
+  private readonly bySignature = new Map<string, string>();
+  private readonly names = new Set<string>();
+
+  /** The name of the block with these entities and attributes, defining it on first use. */
+  use(base: string, entities: DxfEntity[], attdefs: DxfAttDef[]): string {
+    const sig = signature(entities);
+    const known = this.bySignature.get(`${base}\n${sig}`);
+    if (known) return known;
+    let name = base;
+    for (let i = 2; this.names.has(name); i++) name = `${base}_${i}`;
+    this.names.add(name);
+    this.bySignature.set(`${base}\n${sig}`, name);
+    this.list.push({ name, entities, attdefs });
+    return name;
+  }
+}
+
+/** The geometry of a block as text, rounded so that float noise from turning back does not count. */
+function signature(entities: DxfEntity[]): string {
+  return JSON.stringify(entities, (_, v: unknown) => (typeof v === "number" ? Math.round(v * 100) / 100 : v));
+}
+
+/** Characters a block name may hold in every CAD program; the rest become "_". */
+function blockName(s: string): string {
+  return s.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+/** The layer of a unit's reference: building parts with the walls, hanging units on their own. */
+function insertLayer(shapes: readonly Shape[]): string {
+  const pen = shapes[0].pen;
+  return pen === "wall" ? "WAENDE" : pen === "overhead" ? "AUSSTATTUNG_OBEN" : "AUSSTATTUNG";
+}
+
+/** One attribute of a unit: its tag, prompt (German, as the layers), layer and value. */
+interface AttrSpec {
+  tag: string;
+  prompt: string;
+  layer: string;
+  value: (it: Item) => string;
+}
+
+const num = (v: number | undefined) => (v === undefined ? "" : dxfNumber(v));
+const yes = (v: boolean | undefined) => (v ? "ja" : "nein");
+const whole = (v: number) => String(Math.round(v));
+
+/**
+ * The attributes every unit carries, in this order: what it is, its size, then its connection
+ * values each on the layer of its trade. All invisible: they are the unit's data (for attribute
+ * extraction and lists), the plan shows the position number and name as labels already.
+ */
+export const DXF_ATTRIBUTES: readonly AttrSpec[] = [
+  { tag: "POS", prompt: "Pos.", layer: LABEL_LAYER, value: (it) => String(it.pos) },
+  { tag: "BEZEICHNUNG", prompt: "Bezeichnung", layer: LABEL_LAYER, value: (it) => it.name },
+  { tag: "KATALOG", prompt: "Katalog-Nr.", layer: LABEL_LAYER, value: (it) => it.catalogId },
+  { tag: "ENERGIE", prompt: "Energie", layer: LABEL_LAYER, value: (it) => (it.energy === "gas" ? "Gas" : it.energy === "electric" ? "Elektro" : "") },
+  { tag: "BREITE", prompt: "Breite (mm)", layer: LABEL_LAYER, value: (it) => whole(it.width) },
+  { tag: "TIEFE", prompt: "Tiefe (mm)", layer: LABEL_LAYER, value: (it) => whole(it.depth) },
+  { tag: "HOEHE", prompt: "Höhe (mm)", layer: LABEL_LAYER, value: (it) => whole(it.height) },
+  { tag: "HERSTELLER", prompt: "Hersteller", layer: LABEL_LAYER, value: (it) => it.spec?.manufacturer ?? "" },
+  { tag: "TYP", prompt: "Typ", layer: LABEL_LAYER, value: (it) => it.spec?.model ?? "" },
+  { tag: "ARTIKELNR", prompt: "Artikel-Nr.", layer: LABEL_LAYER, value: (it) => it.spec?.article ?? "" },
+  { tag: "ELEKTRO_KW", prompt: "Elektro (kW)", layer: CONNECTION_LAYER.electric, value: (it) => num(it.connections.electricKw) },
+  { tag: "SPANNUNG_V", prompt: "Spannung (V)", layer: CONNECTION_LAYER.electric, value: (it) => num(it.connections.voltage) },
+  { tag: "GAS_KW", prompt: "Gas (kW)", layer: CONNECTION_LAYER.gas, value: (it) => num(it.connections.gasKw) },
+  { tag: "KALTWASSER", prompt: "Kaltwasser", layer: CONNECTION_LAYER.water, value: (it) => yes(it.connections.coldWater) },
+  { tag: "WARMWASSER", prompt: "Warmwasser", layer: CONNECTION_LAYER.water, value: (it) => yes(it.connections.hotWater) },
+  { tag: "ABLAUF", prompt: "Ablauf", layer: CONNECTION_LAYER.drain, value: (it) => yes(it.connections.drain) },
+  { tag: "BODENABLAUF", prompt: "Bodenablauf", layer: CONNECTION_LAYER.drain, value: (it) => yes(it.connections.floorDrain) },
+  { tag: "ABLUFT_M3H", prompt: "Abluft (m³/h)", layer: CONNECTION_LAYER.exhaust, value: (it) => num(it.connections.exhaustM3h) },
+];
+
+/** Attribute definitions stacked below the block's base point, small text. */
+function attdefs(ps: number): DxfAttDef[] {
+  const height = TEXT.small * ps * CAP_HEIGHT_PER_EM;
+  return DXF_ATTRIBUTES.map((a, i) => ({ tag: a.tag, prompt: a.prompt, layer: a.layer, p: { x: 0, y: -(i + 1) * height * 1.6 }, height, invisible: true }));
+}
+
+function itemInsert(it: Item, shapes: readonly Shape[], view: DxfOptions["view"], ps: number, blocks: BlockSet): DxfEntity {
+  let frame: Frame;
+  let at: Pt;
+  let rotation: number;
+  let size: string;
+  if (view === "plan") {
+    frame = itemFrame(it);
+    at = MODEL.map(it);
+    // Clockwise on screen is counter-clockwise in DXF.
+    rotation = deg360(-it.rotation);
+    size = `${whole(it.width)}x${whole(it.depth)}`;
+  } else {
+    const b = drawingBounds({ shapes: [...shapes] }, ps);
+    const origin = { x: b.minX, y: b.maxY };
+    frame = offsetFrame(origin);
+    at = MODEL.map(origin);
+    rotation = 0;
+    size = `${whole(b.maxX - b.minX)}x${whole(b.maxY - b.minY)}`;
+  }
+  // Inside the block a unit's own lines go on layer 0, so they take the reference's layer and
+  // colour; details keep their own layer, so they can be hidden in every unit at once.
+  const entities = shapes.flatMap((s) => shapeEntities(s, frame, ps, s.pen === "detail" || s.pen === "hidden" ? LAYER_OF[s.pen] : "0"));
+  const defs = attdefs(ps);
+  const variant = it.energy ? `${it.catalogId}_${it.energy}` : it.catalogId;
+  const base = blockName(view === "plan" ? `${variant}_${size}` : `${variant}_ANSICHT_${size}`);
+  const name = blocks.use(base, entities, defs);
+  const attribs: DxfAttrib[] = DXF_ATTRIBUTES.map((a, i) => ({
+    tag: a.tag,
+    value: a.value(it),
+    layer: a.layer,
+    p: place(defs[i].p, rotation, at),
+    height: defs[i].height,
+    rotation,
+  }));
+  return { type: "INSERT", layer: insertLayer(shapes), block: name, p: at, rotation, attribs };
 }
 
 /**

@@ -11,6 +11,8 @@ pub enum ErrorKind {
     TooLarge,
     NotUtf8,
     NotProject,
+    /// Meant to be a project (it starts like one) but no valid JSON: cut off or garbled.
+    Corrupt,
     ReadOnly,
     /// The target is held open by another program (a CSV in Excel on Windows).
     InUse,
@@ -32,6 +34,8 @@ pub enum FileError {
     NotUtf8 { path: String },
     #[error("„{path}“ ist keine Kitchenplaner-Projektdatei: {reason}")]
     NotProject { path: String, reason: String },
+    #[error("„{path}“ ist beschädigt: {reason}")]
+    Corrupt { path: String, reason: String },
     #[error("„{path}“ ist schreibgeschützt. Speichere unter einem anderen Namen oder hebe den Schreibschutz auf.")]
     ReadOnly { path: String },
     #[error("„{path}“ ist in einem anderen Programm geöffnet und kann nicht ersetzt werden: {source}")]
@@ -59,6 +63,7 @@ impl FileError {
             FileError::TooLarge { .. } => ErrorKind::TooLarge,
             FileError::NotUtf8 { .. } => ErrorKind::NotUtf8,
             FileError::NotProject { .. } => ErrorKind::NotProject,
+            FileError::Corrupt { .. } => ErrorKind::Corrupt,
             FileError::ReadOnly { .. } => ErrorKind::ReadOnly,
             FileError::InUse { .. } => ErrorKind::InUse,
             FileError::BadExtension { .. } => ErrorKind::BadExtension,
@@ -78,6 +83,7 @@ impl FileError {
             FileError::TooLarge { path, .. }
             | FileError::NotUtf8 { path }
             | FileError::NotProject { path, .. }
+            | FileError::Corrupt { path, .. }
             | FileError::ReadOnly { path }
             | FileError::InUse { path, .. }
             | FileError::BadExtension { path, .. }
@@ -149,10 +155,11 @@ mod tests {
 
     #[test]
     fn every_kind_the_user_can_hit_has_its_own_name() {
-        let cases: [(FileError, &str); 11] = [
+        let cases: [(FileError, &str); 12] = [
             (FileError::TooLarge { path: "a".into(), size: 2, limit: 1 }, "tooLarge"),
             (FileError::NotUtf8 { path: "a".into() }, "notUtf8"),
             (FileError::NotProject { path: "a".into(), reason: "x".into() }, "notProject"),
+            (FileError::Corrupt { path: "a".into(), reason: "x".into() }, "corrupt"),
             (FileError::ReadOnly { path: "a".into() }, "readOnly"),
             (FileError::InUse { path: "a".into(), source: io::Error::other("OS-Text") }, "inUse"),
             (FileError::BadExtension { path: "a".into(), allowed: ".kplan".into() }, "badExtension"),

@@ -72,7 +72,8 @@ const SPECS: readonly Spec[] = [
   { catalogId: "shelving-5", face: "south", x: 1200, y: 0, zone: "store" },
   { catalogId: "shelving-5", face: "east", x: 0, y: 600, width: 1600, zone: "store" },
   { catalogId: "dunnage-rack", face: "north", x: 600, y: 1900, width: 800, zone: "store" },
-  { catalogId: "cold-room", face: "east", x: 0, y: 2550, zone: "store" },
+  // The small cold room: the large one's side would leave the vegetable sink below it 750 mm.
+  { catalogId: "cold-room-small", face: "east", x: 0, y: 2550, zone: "store" },
   { catalogId: "freezer-room", face: "south", x: 4000, y: 0, zone: "store" },
 
   // Preparation along the north face of the dish partition: vegetables, then meat and fish.
@@ -135,8 +136,8 @@ const SPECS: readonly Spec[] = [
   { catalogId: "saladette", face: "north", x: 11405, y: 5700, width: 1795, zone: "pass" },
 
   // Dish wash: pot wash along the partition, the dish line along the south wall from the dish
-  // return (east) to the clean store (west).
-  { catalogId: "mop-sink", face: "east", x: 0, y: 6550, zone: "dish" },
+  // return (east) to the clean store (west), the mop sink between the clean-dish shelves.
+  { catalogId: "mop-sink", face: "east", x: 0, y: 8600, zone: "dish" },
   { catalogId: "shelving", face: "south", x: 600, y: 6550, zone: "dish" },
   { catalogId: "pot-sink", face: "south", x: 1900, y: 6550, zone: "dish" },
   { catalogId: "wall-shelf", face: "south", x: 1900, y: 6550, width: 1400, zone: "dish" },

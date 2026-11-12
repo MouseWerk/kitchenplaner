@@ -1,11 +1,12 @@
 // File commands and exports, shared by the toolbar, the menus and the keyboard shortcuts.
 
-import { elevationDrawing, type ElevationCut } from "../model/elevation";
+import { elevationDrawing, resolveElevation, standardElevations, type ElevationCut, type ElevationId } from "../model/elevation";
+import { elevationName, elevationTitle } from "../model/elevationNames";
 import { equipmentCsv } from "../model/equipment";
 import { planDrawing } from "../model/plan";
 import { newProject } from "../model/project";
 import { parseProject, serializeProject } from "../model/serialize";
-import { FACINGS, type Facing, type Project } from "../model/types";
+import type { Project } from "../model/types";
 import { drawingBounds, TEXT, type Drawing, type Shape } from "../render/drawing";
 import { drawingToDxf } from "../render/dxf";
 import { svgToPng } from "../render/png";
@@ -112,14 +113,16 @@ export async function saveFile(as = false): Promise<boolean> {
 
 export type ExportKind = "plan-svg" | "plan-dxf" | "plan-png" | "elevation-svg" | "elevation-dxf" | "elevations-svg" | "3d-png" | "list-csv";
 
-/** Runs one export; `facing` picks the elevation for the single-elevation exports. */
-export async function runExport(kind: ExportKind, facing: Facing) {
+/** Runs one export; `view` picks the elevation (a compass view or a wall) for the single-elevation exports. */
+export async function runExport(kind: ExportKind, view: ElevationId) {
   // As for saving: the export shows the project without a running operator's half-done move.
   cancelActiveOperator();
   const { project, prefs } = useStore.getState();
   const base = safeFileName(project.info.name);
   const lang = currentLang();
-  const facingName = t(`facing.${facing}` as const);
+  // A wall view whose wall is gone exports what the pane shows instead.
+  const facing = resolveElevation(project.room, view);
+  const facingName = elevationName(facing);
   try {
     let written: string | null = null;
     switch (kind) {
@@ -130,7 +133,7 @@ export async function runExport(kind: ExportKind, facing: Facing) {
       }
       case "plan-dxf": {
         const s = sheetDrawing((paperScale) => planDrawing(project, { showNames: prefs.showNames, showDims: true, paperScale }), project.info, t("view.plan"), lang);
-        written = await saveText(null, `${base} - ${t("view.plan")}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale));
+        written = await saveText(null, `${base} - ${t("view.plan")}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "plan" }));
         break;
       }
       case "plan-png": {
@@ -146,7 +149,7 @@ export async function runExport(kind: ExportKind, facing: Facing) {
         written =
           kind === "elevation-svg"
             ? await saveText(null, `${base} - ${title}.svg`, SVG, drawingToSvg(s.drawing, { paperScale: s.paperScale, bounds: s.bounds }))
-            : await saveText(null, `${base} - ${title}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale));
+            : await saveText(null, `${base} - ${title}.dxf`, DXF, drawingToDxf(s.drawing, s.paperScale, { items: project.items, view: "elevation" }));
         break;
       }
       case "elevations-svg": {
@@ -191,17 +194,18 @@ export async function exportPlanSet(opts: PlanSetOptions): Promise<boolean> {
 }
 
 /**
- * The four elevations stacked on one drawing, each with its title above it, cut at `cut` and laid
- * out for `paperScale` (titles, gaps and position numbers are spaced in paper mm).
+ * The four elevations and one of each slanted wall (`standardElevations`) stacked on one drawing,
+ * each with its title above it, cut at `cut` and laid out for `paperScale` (titles, gaps and
+ * position numbers are spaced in paper mm).
  */
 export function allElevations(project: Project, cut: ElevationCut = "wall", paperScale = 50): Drawing {
   const shapes: Shape[] = [];
   let y = 0;
-  for (const facing of FACINGS) {
+  for (const facing of standardElevations(project.room)) {
     const d = elevationDrawing(project, facing, { showDims: true, cut, paperScale });
     const b = drawingBounds(d, paperScale);
     const dy = y - b.minY + TEXT.large * paperScale * 2;
-    shapes.push({ t: "text", pen: "frame", p: { x: b.minX, y: y + TEXT.large * paperScale }, text: t("view.elevation", { facing: t(`facing.${facing}` as const) }), size: TEXT.large, anchor: "start" });
+    shapes.push({ t: "text", pen: "frame", p: { x: b.minX, y: y + TEXT.large * paperScale }, text: elevationTitle(facing), size: TEXT.large, anchor: "start" });
     for (const s of d.shapes) shapes.push(translate(s, 0, dy));
     y = dy + b.maxY + SHEET_GAP * paperScale;
   }

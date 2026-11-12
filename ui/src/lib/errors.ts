@@ -27,6 +27,8 @@ const KIND_KEYS: Record<string, TKey> = {
   // A file that is not UTF-8 text cannot be a project; the user needs no encoding lesson.
   notUtf8: "error.notProjectFile",
   notProject: "error.notProjectFile",
+  // A project file cut off or garbled: the same text as one whose content does not check out.
+  corrupt: "error.invalid",
   readOnly: "error.readOnly",
   inUse: "error.inUse",
   notFound: "error.notFound",

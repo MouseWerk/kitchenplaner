@@ -1,14 +1,18 @@
-// One elevation (Ansicht) of the room: read-only drawing with pan, zoom and click to select.
+// One elevation (Ansicht) of the room: read-only drawing with pan, zoom and click to select, and
+// the chooser in its pane head that picks a compass view or a single wall.
 
 import { useCallback, useMemo, useRef, type PointerEvent as RPointerEvent } from "react";
 import { DrawingShapes, SCREEN_PAPER_SCALE } from "../components/DrawingSvg";
-import { elevationDrawing } from "../model/elevation";
-import type { Facing } from "../model/types";
+import { elevationDrawing, elevationExists, resolveElevation, wallElevation, type ElevationId } from "../model/elevation";
+import { elevationName, elevationTitle, wallEntryLabel } from "../model/elevationNames";
+import { walls } from "../model/geometry";
+import { FACINGS } from "../model/types";
 import type { Box } from "../model/geometry";
 import { drawingBounds, TEXT, type Drawing } from "../render/drawing";
 import { useStore } from "../store/store";
 import { fitViewport, useViewport } from "../lib/viewport";
 import { useT } from "../lib/i18n";
+import { Menu, type MenuEntry } from "../components/Menu";
 
 /** Pointer movement (px) that turns a click into a pan. */
 const CLICK_SLOP = 4;
@@ -48,15 +52,15 @@ export function elevationFitBox(at: (paperScale: number) => Drawing, width: numb
   return box;
 }
 
-export function ElevationView(props: { facing: Facing; fitSignal: number }) {
-  const t = useT();
+export function ElevationView(props: { view: ElevationId; fitSignal: number }) {
   const project = useStore((s) => s.project);
   const selection = useStore((s) => s.selection);
   const showDims = useStore((s) => s.prefs.showDims);
   const cut = useStore((s) => s.prefs.elevationCut);
-  const at = useCallback((paperScale: number) => elevationDrawing(project, props.facing, { showDims, cut, paperScale }), [project, props.facing, showDims, cut]);
+  const view = resolveElevation(project.room, props.view);
+  const at = useCallback((paperScale: number) => elevationDrawing(project, view, { showDims, cut, paperScale }), [project, view, showDims, cut]);
   const fitBox = useCallback((w: number, h: number) => elevationFitBox(at, w, h), [at]);
-  const { ref, vp, setVp, size } = useViewport(fitBox, `${props.fitSignal}-${props.facing}`);
+  const { ref, vp, setVp, size } = useViewport(fitBox, `${props.fitSignal}-${view}`);
   const paperScale = annotationScale(vp.k);
   const drawing = useMemo(() => at(paperScale), [at, paperScale]);
   const pan = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
@@ -89,7 +93,7 @@ export function ElevationView(props: { facing: Facing; fitSignal: number }) {
   };
 
   return (
-    <div ref={ref} className="view2d" role="img" aria-label={t("view.elevation", { facing: t(`facing.${props.facing}`) })}>
+    <div ref={ref} className="view2d" role="img" aria-label={elevationTitle(view)}>
       {size.w > 0 && (
         <svg width={size.w} height={size.h} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onContextMenu={(e) => e.preventDefault()}>
           <g transform={`translate(${vp.ox} ${vp.oy}) scale(${vp.k})`}>
@@ -100,4 +104,26 @@ export function ElevationView(props: { facing: Facing; fitSignal: number }) {
       )}
     </div>
   );
+}
+
+/**
+ * Picks an elevation: one menu with the four compass views and every single wall (a slanted
+ * wall's only true view). One compact button rather than a row of buttons, so the pane head
+ * fits a quarter of a narrow window. Shows what the pane draws, so a wall that no longer exists
+ * reads as the north view it falls back to.
+ */
+export function ElevationSwitch(props: { value: ElevationId; onChange: (id: ElevationId) => void }) {
+  const t = useT();
+  const room = useStore((s) => s.project.room);
+  const value = resolveElevation(room, props.value);
+  // The walls the pane can draw: the same test as elevationExists, so a listed wall never falls
+  // back to the north view.
+  const wallList = room.points.length >= 3 ? walls(room).filter((w) => elevationExists(room, wallElevation(w.index))) : [];
+  const entries: MenuEntry[] = FACINGS.map((f) => ({ label: t(`facing.${f}` as const), checked: value === f, radio: true, onSelect: () => props.onChange(f) }));
+  if (wallList.length > 0) entries.push("sep");
+  for (const w of wallList) {
+    const id = wallElevation(w.index);
+    entries.push({ label: wallEntryLabel(room, w.index), checked: id === value, radio: true, onSelect: () => props.onChange(id) });
+  }
+  return <Menu className="tb-btn pane-menu" label={elevationName(value)} title={t("view.facing")} entries={entries} />;
 }

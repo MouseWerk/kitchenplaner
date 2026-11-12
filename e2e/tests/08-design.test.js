@@ -1,6 +1,7 @@
 // Rendered design guards (AICodeGuidelines design/guard-tests.md): no horizontal overflow at the
-// usual window widths, a top bar whose buttons all stay inside the window and never overlap, no
-// cut text without a tooltip, and keyboard focus shown only on :focus-visible with the neutral ring.
+// usual window widths, a top bar whose buttons all stay inside the window and never overlap, pane
+// heads whose buttons stay inside their pane, no cut text without a tooltip, and keyboard focus
+// shown only on :focus-visible with the neutral ring.
 
 import assert from "node:assert/strict";
 import { Key } from "../lib/harness.js";
@@ -67,6 +68,26 @@ const cutWithoutTooltip = (app) =>
       .map((e) => `${e.tagName.toLowerCase()}.${[...e.classList].join(".")}: „${e.textContent.trim().slice(0, 40)}“`),
   );
 
+/**
+ * Pane heads whose buttons do not wholly show: every visible button in a `.pane-head` lies inside
+ * its pane (a quarter of a narrow window clips the rest, and a clipped menu cannot be opened).
+ */
+const paneHeadProblems = (app) =>
+  app.exec(() => {
+    const problems = [];
+    for (const pane of document.querySelectorAll("main section.pane")) {
+      const p = pane.getBoundingClientRect();
+      for (const b of [...pane.querySelectorAll(".pane-head button")].filter((e) => e.getClientRects().length > 0)) {
+        const r = b.getBoundingClientRect();
+        if (r.left < p.left - 0.5 || r.right > p.right + 0.5 || r.top < p.top - 0.5 || r.bottom > p.bottom + 0.5 || r.width < 1) {
+          const name = (b.getAttribute("aria-label") || b.innerText || b.getAttribute("title") || "").trim();
+          problems.push(`„${name}“ in „${pane.getAttribute("aria-label")}“ at ${Math.round(r.left)}–${Math.round(r.right)}, the pane ${Math.round(p.left)}–${Math.round(p.right)}`);
+        }
+      }
+    }
+    return problems;
+  });
+
 /** Waits briefly for the bar to settle after a change, then asserts it has no problems. */
 async function assertToolbar(app, where) {
   let last = [];
@@ -95,6 +116,9 @@ for (const width of [1000, 1280, 1440, 1920]) {
       const o = await overflow(app);
       assert.ok(o.scroll <= o.inner && o.body <= o.inner, `${layout} at ${width} px overflows: ${JSON.stringify(o)}`);
       assert.deepEqual(await cutWithoutTooltip(app), [], `cut text without a tooltip in „${layout}“ at ${width} px`);
+      let heads = [];
+      await app.waitUntil(async () => (heads = await paneHeadProblems(app)).length === 0, "", 2000).catch(() => {});
+      assert.deepEqual(heads, [], `pane head buttons outside their pane in „${layout}“ at ${width} px`);
     }
     await app.shot(`layout-${width}`);
     for (const mode of ["Raum", "Einrichten"]) {

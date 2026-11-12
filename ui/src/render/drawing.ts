@@ -42,6 +42,11 @@ interface Base {
   pen: Pen;
   /** The item this shape belongs to (selection and hit testing). */
   itemId?: string;
+  /**
+   * Annotation of its item (a leader to the position number), not part of the item's drawing:
+   * the DXF export puts it on the label layer instead of into the item's block. Texts always are.
+   */
+  label?: boolean;
 }
 
 export interface PolyShape extends Base {

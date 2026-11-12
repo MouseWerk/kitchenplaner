@@ -96,6 +96,33 @@ describe("PlanSetDialog", () => {
     expect(button(dialog, "Exportieren…")!.disabled).toBe(true);
   });
 
+  it("adds the elevations of single walls by a rule and remembers it", () => {
+    let dialog = mount();
+    const walls = select(dialog, "Ansichten einzelner Wände");
+    // The example kitchen has no slanted wall: no extra sheet, no hint about them.
+    expect(walls.value).toBe("slanted");
+    expect([...walls.options].map((o) => o.textContent)).toEqual(["Keine", "Schräge Wände (0 Blätter)", "Jede Wand (6 Blätter)"]);
+    expect(dialog.textContent).not.toContain("Schräge Wände sieht keine");
+    for (const label of ["Grundriss", "Ansicht Nord", "Ansicht Ost", "Ansicht Süd", "Ansicht West", "Geräteliste"]) act(() => check(dialog, label).click());
+    expect(dialog.textContent).toContain("Wähle mindestens ein Blatt.");
+    choose(walls, "all");
+    expect(dialog.textContent).toContain("Ansicht Wand 6");
+    expect(dialog.textContent).toContain("6 Blätter");
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toMatchObject({ wallSheets: "all", elevations: [] });
+    act(() => root.unmount());
+    root = createRoot(host);
+    // A chamfered corner: one slanted wall, and the hint why it gets a sheet of its own.
+    const p = example();
+    const [a, ...rest] = p.room.points;
+    p.room.points = [{ x: a.x, y: a.y + 1000 }, { x: a.x + 1000, y: a.y }, ...rest];
+    p.room.openings = [];
+    useStore.getState().load(p, null);
+    dialog = mount();
+    expect(select(dialog, "Ansichten einzelner Wände").value).toBe("all");
+    expect([...select(dialog, "Ansichten einzelner Wände").options].map((o) => o.textContent)).toContain("Schräge Wand (1 Blatt)");
+    expect(dialog.textContent).toContain("Schräge Wände sieht keine der vier Ansichten von vorn");
+  });
+
   it("remembers the choices on this computer", () => {
     let dialog = mount();
     choose(select(dialog, "Papierformat"), "A2");

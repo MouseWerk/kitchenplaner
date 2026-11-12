@@ -67,7 +67,7 @@ export function planDrawing(project: Project, opts: PlanOptions): Drawing {
     // Circled text hangs its circle above the baseline; lower it so the circle sits on the centre.
     const p = { x: centres[i].x, y: centres[i].y + CIRCLE_CENTER_RISE * TEXT.normal * ps };
     const leader = leaderLine(it, centres[i], TEXT.normal * CIRCLE_RADIUS * ps);
-    if (leader) shapes.push({ t: "poly", pen: "detail", itemId: it.id, pts: leader, closed: false });
+    if (leader) shapes.push({ t: "poly", pen: "detail", itemId: it.id, label: true, pts: leader, closed: false });
     shapes.push({ t: "text", pen: "item", itemId: it.id, p, text: String(pos.get(it.id) ?? ""), size: TEXT.normal, anchor: "middle", circled: true });
   });
   if (opts.showNames) {

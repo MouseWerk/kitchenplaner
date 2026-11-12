@@ -46,7 +46,9 @@ pub fn check_path(path: impl AsRef<Path>, allowed: &[&str]) -> Result<(), FileEr
 /// Reads a project file and checks its envelope: a JSON object with `"format": "kitchenplaner"`
 /// and a numeric `"version"`. The UI validates and migrates the content itself; this only makes
 /// sure it receives text that is meant to be a project. Returns the text without a UTF-8 BOM.
-/// Only absolute `.kplan` paths are read (see [`check_path`]).
+/// Only absolute `.kplan` paths are read (see [`check_path`]). A file that starts like a JSON
+/// object but does not parse (a copy that broke off) is [`FileError::Corrupt`], not
+/// [`FileError::NotProject`]: it was meant to be a project, and the user should hear it is damaged.
 pub fn read_project(path: impl AsRef<Path>) -> Result<String, FileError> {
     let path = path.as_ref();
     check_path(path, PROJECT_EXTENSIONS)?;
@@ -67,22 +69,34 @@ pub fn read_project(path: impl AsRef<Path>) -> Result<String, FileError> {
         Some(rest) => rest.to_owned(),
         None => text,
     };
-    check_envelope(&text).map_err(|reason| FileError::NotProject { path: path.display().to_string(), reason })?;
+    check_envelope(&text).map_err(|e| match e {
+        Envelope::Damaged(reason) => FileError::Corrupt { path: path.display().to_string(), reason },
+        Envelope::Foreign(reason) => FileError::NotProject { path: path.display().to_string(), reason },
+    })?;
     Ok(text)
+}
+
+/// Why a text is no project: damaged (an object that does not parse) or something else entirely.
+enum Envelope {
+    Damaged(String),
+    Foreign(String),
 }
 
 fn too_large(path: &Path, size: u64) -> FileError {
     FileError::TooLarge { path: path.display().to_string(), size, limit: MAX_PROJECT_BYTES }
 }
 
-fn check_envelope(text: &str) -> Result<(), String> {
-    let value: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("kein gültiges JSON ({e})."))?;
-    let object = value.as_object().ok_or("kein JSON-Objekt.")?;
+fn check_envelope(text: &str) -> Result<(), Envelope> {
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|e| {
+        let reason = format!("kein gültiges JSON ({e}).");
+        if text.trim_start().starts_with('{') { Envelope::Damaged(reason) } else { Envelope::Foreign(reason) }
+    })?;
+    let object = value.as_object().ok_or_else(|| Envelope::Foreign("kein JSON-Objekt.".into()))?;
     if object.get("format").and_then(|f| f.as_str()) != Some(PROJECT_FORMAT) {
-        return Err(format!("das Feld „format“ ist nicht „{PROJECT_FORMAT}“."));
+        return Err(Envelope::Foreign(format!("das Feld „format“ ist nicht „{PROJECT_FORMAT}“.")));
     }
     if !object.get("version").is_some_and(|v| v.is_number()) {
-        return Err("das Feld „version“ fehlt oder ist keine Zahl.".into());
+        return Err(Envelope::Foreign("das Feld „version“ fehlt oder ist keine Zahl.".into()));
     }
     Ok(())
 }
@@ -257,13 +271,32 @@ mod tests {
             r#"{"format":"kitchenplaner"}"#,
             r#"{"format":"kitchenplaner","version":"1"}"#,
             r#"{"format":"kitchenplaner","version":null}"#,
-            r#"{"format":"kitchenplaner","version":1} trailing"#,
         ];
         for (i, text) in cases.iter().enumerate() {
             let path = dir.path().join(format!("{i}.kplan"));
             fs::write(&path, text).unwrap();
             let err = read_project(&path).unwrap_err();
             assert_eq!(err.kind(), ErrorKind::NotProject, "case {text:?}");
+        }
+    }
+
+    #[test]
+    fn a_project_that_does_not_parse_is_damaged() {
+        let dir = tempfile::tempdir().unwrap();
+        let full = r#"{"format":"kitchenplaner","version":3,"items":[{"id":"a"}]}"#;
+        let cases = [
+            // Cut off in the middle, as a copy that broke off.
+            &full[..full.len() / 2],
+            // After a BOM and white space.
+            "\u{feff}\n  {\"format\":\"kitchenplaner\",",
+            r#"{"format":"kitchenplaner","version":1} trailing"#,
+            "{",
+        ];
+        for (i, text) in cases.iter().enumerate() {
+            let path = dir.path().join(format!("{i}.kplan"));
+            fs::write(&path, text).unwrap();
+            let err = read_project(&path).unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::Corrupt, "case {text:?}");
         }
     }
 

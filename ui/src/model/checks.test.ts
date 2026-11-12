@@ -2,17 +2,24 @@ import { describe, expect, it } from "vitest";
 import { checkProject } from "./checks";
 import { testItem, testProject } from "./testProject";
 import { lRoom } from "./geometry";
-import type { Opening, Partition } from "./types";
+import type { Opening, Partition, Project } from "./types";
+
+/**
+ * The findings of the layout rules (overlaps, outside, partitions, doors, height). The workplace
+ * rules (free space, hoods, hand-wash basins) have their own tests in clearances.test.ts.
+ */
+const LAYOUT = new Set(["check.outlineInvalid", "check.overlap", "check.outside", "check.partitionOverlap", "check.partitionOutside", "check.doorBlocked", "check.tooHigh"]);
+const layout = (p: Project) => checkProject(p).filter((i) => LAYOUT.has(i.key));
 
 describe("checkProject", () => {
   it("reports a room outline that crosses itself (opened from a file)", () => {
     const p = testProject();
     p.room = { ...p.room, points: [{ x: 0, y: 0 }, { x: 8000, y: 6000 }, { x: 8000, y: 0 }, { x: 0, y: 6000 }], openings: [] };
-    expect(checkProject(p)).toEqual([{ key: "check.outlineInvalid", vars: {}, itemIds: [] }]);
+    expect(layout(p)).toEqual([{ key: "check.outlineInvalid", vars: {}, itemIds: [] }]);
   });
 
   it("finds nothing in a clean plan", () => {
-    const p = testProject([testItem("r", "range-6", 4000, 450), testItem("h", "hood-wall", 4000, 550)]);
+    const p = testProject([testItem("r", "range-6", 4000, 450), testItem("h", "hood-wall", 4000, 550), testItem("hw", "handwash", 2000, 175)]);
     // The hood above the range is the normal case, not an overlap.
     expect(checkProject(p)).toEqual([]);
   });
@@ -26,7 +33,7 @@ describe("checkProject", () => {
       testItem("h2", "wall-shelf", 2500, 175),
     ]);
     // a: 1400-2600, b: 2000-3200 overlap; c: 3200-4400 only touches b.
-    expect(checkProject(p)).toEqual([
+    expect(layout(p)).toEqual([
       { key: "check.overlap", vars: { a: 1, b: 2 }, itemIds: ["a", "b"] },
       { key: "check.overlap", vars: { a: 4, b: 5 }, itemIds: ["h1", "h2"] },
     ]);
@@ -38,10 +45,10 @@ describe("checkProject", () => {
     const [hw, s1] = p.items;
     expect(hw.elevation + hw.height).toBeLessThanOrEqual(s1.elevation);
     p.items.push(testItem("s2", "wall-shelf", 1000, 175, 0, { width: 400, elevation: s1.elevation + s1.height }));
-    expect(checkProject(p)).toEqual([]);
+    expect(layout(p)).toEqual([]);
     // Lowered into the basin's range, the shelf collides with it.
     p.items[1] = { ...s1, elevation: hw.elevation + hw.height - 50 };
-    expect(checkProject(p)).toEqual([{ key: "check.overlap", vars: { a: 1, b: 2 }, itemIds: ["hw", "s1"] }]);
+    expect(layout(p)).toEqual([{ key: "check.overlap", vars: { a: 1, b: 2 }, itemIds: ["hw", "s1"] }]);
   });
 
   it("lets table-top units stand on a table and collide only with each other", () => {
@@ -54,7 +61,7 @@ describe("checkProject", () => {
       testItem("w", "prep-scale", 2575, 200),
       testItem("h", "wall-shelf", 2000, 175),
     ]);
-    expect(checkProject(p)).toEqual([{ key: "check.overlap", vars: { a: 2, b: 3 }, itemIds: ["s", "m"] }]);
+    expect(layout(p)).toEqual([{ key: "check.overlap", vars: { a: 2, b: 3 }, itemIds: ["s", "m"] }]);
   });
 
   it("lets flat units (drains, channels, platforms) lie under and across anything", () => {
@@ -66,21 +73,21 @@ describe("checkProject", () => {
       testItem("pf", "platform", 2000, 400),
       testItem("t", "table", 2000, 350),
     ]);
-    expect(checkProject(p)).toEqual([]);
+    expect(layout(p)).toEqual([]);
   });
 
   it("lets only floor units block a door, and flat units lie across a partition", () => {
     // The door spans x 695 to 1705 in the south wall; its free square reaches up to y 4990.
     const door = testProject([testItem("d", "floor-drain", 1200, 5300), testItem("t", "table", 1200, 5300), testItem("s", "prep-slicer", 1200, 5300)]);
-    expect(checkProject(door)).toEqual([{ key: "check.doorBlocked", vars: { pos: 2 }, itemIds: ["t"] }]);
+    expect(layout(door)).toEqual([{ key: "check.doorBlocked", vars: { pos: 2 }, itemIds: ["t"] }]);
     const p = testProject([testItem("d", "drain-channel-200", 3000, 1500, 90)]);
     p.room.partitions = [{ id: "n", a: { x: 3000, y: 0 }, b: { x: 3000, y: 3000 }, thickness: 100, height: 3000 }];
-    expect(checkProject(p)).toEqual([]);
+    expect(layout(p)).toEqual([]);
   });
 
   it("reports items reaching outside the room", () => {
     const p = testProject([testItem("a", "table", 300, 3000), testItem("b", "table", 4000, 3000)]);
-    expect(checkProject(p)).toEqual([{ key: "check.outside", vars: { pos: 1 }, itemIds: ["a"] }]);
+    expect(layout(p)).toEqual([{ key: "check.outside", vars: { pos: 1 }, itemIds: ["a"] }]);
   });
 
   it("reports an item turned across the inner corner of an L-shaped room, though all its corners are inside", () => {
@@ -88,18 +95,18 @@ describe("checkProject", () => {
     const p = testProject([testItem("t", "table", 4900, 3900, -45), testItem("ok", "table", 3000, 3600)]);
     p.room.points = lRoom(8000, 6000, 3000, 2000);
     p.room.openings = [];
-    expect(checkProject(p)).toEqual([{ key: "check.outside", vars: { pos: 1 }, itemIds: ["t"] }]);
+    expect(layout(p)).toEqual([{ key: "check.outside", vars: { pos: 1 }, itemIds: ["t"] }]);
   });
 
   it("reports floor items in front of a door, but not hoods above it", () => {
     // The door spans x 695 to 1705 in the south wall; its free square reaches up to y 4990.
     const p = testProject([testItem("t", "table", 1200, 5300), testItem("h", "wall-shelf", 1200, 5700), testItem("ok", "table", 1200, 4500)]);
-    expect(checkProject(p)).toEqual([{ key: "check.doorBlocked", vars: { pos: 1 }, itemIds: ["t"] }]);
+    expect(layout(p)).toEqual([{ key: "check.doorBlocked", vars: { pos: 1 }, itemIds: ["t"] }]);
   });
 
   it("reports items higher than the room", () => {
     const p = testProject([testItem("h", "hood-wall", 4000, 550, 0, { elevation: 2700 })]);
-    expect(checkProject(p)).toEqual([{ key: "check.tooHigh", vars: { pos: 1 }, itemIds: ["h"] }]);
+    expect(layout(p)).toEqual([{ key: "check.tooHigh", vars: { pos: 1 }, itemIds: ["h"] }]);
   });
 
   it("lists findings in a stable order: overlaps, outside, doors, height", () => {
@@ -109,7 +116,7 @@ describe("checkProject", () => {
       testItem("out", "table", 300, 3000),
       testItem("o1", "table", 4000, 3300),
     ]);
-    expect(checkProject(p).map((i) => i.key)).toEqual(["check.overlap", "check.outside", "check.doorBlocked", "check.tooHigh"]);
+    expect(layout(p).map((i) => i.key)).toEqual(["check.overlap", "check.outside", "check.doorBlocked", "check.tooHigh"]);
     expect(checkProject(p)).toEqual(checkProject(structuredClone(p)));
   });
 });
@@ -127,33 +134,33 @@ describe("checkProject partitions", () => {
 
   it("accepts a partition joined to the walls and items standing against it", () => {
     // A table with its side against the partition's east face (x 3050 to 4250).
-    expect(checkProject(withPartitions([testItem("t", "table", 3650, 1000)], [N]))).toEqual([]);
+    expect(layout(withPartitions([testItem("t", "table", 3650, 1000)], [N]))).toEqual([]);
     // From wall face to wall face across the room, and into the wall's middle.
     const across: Partition = { id: "x", a: { x: -120, y: 4000 }, b: { x: 8000, y: 4000 }, thickness: 100, height: 3000 };
-    expect(checkProject(withPartitions([], [across]))).toEqual([]);
+    expect(layout(withPartitions([], [across]))).toEqual([]);
   });
 
   it("reports floor items standing in a partition", () => {
     const p = withPartitions([testItem("t", "table", 3400, 1000), testItem("ok", "table", 5000, 1000)], [N]);
-    expect(checkProject(p)).toEqual([{ key: "check.partitionOverlap", vars: { pos: 1 }, itemIds: ["t"], partitionIds: ["n"] }]);
+    expect(layout(p)).toEqual([{ key: "check.partitionOverlap", vars: { pos: 1 }, itemIds: ["t"], partitionIds: ["n"] }]);
   });
 
   it("lets overhead items hang above a half-height partition, but not cross a full one", () => {
     const shelf = testItem("s", "wall-shelf", 3000, 1500, 90);
-    expect(checkProject(withPartitions([shelf], [{ ...N, height: 1200 }]))).toEqual([]);
-    expect(checkProject(withPartitions([shelf], [N])).map((i) => i.key)).toEqual(["check.partitionOverlap"]);
+    expect(layout(withPartitions([shelf], [{ ...N, height: 1200 }]))).toEqual([]);
+    expect(layout(withPartitions([shelf], [N])).map((i) => i.key)).toEqual(["check.partitionOverlap"]);
   });
 
   it("reports partitions reaching outside the room", () => {
     const out: Partition = { id: "o", a: { x: 4000, y: 3000 }, b: { x: 9000, y: 3000 }, thickness: 100, height: 3000 };
-    expect(checkProject(withPartitions([], [N, out]))).toEqual([{ key: "check.partitionOutside", vars: {}, itemIds: [], partitionIds: ["o"] }]);
+    expect(layout(withPartitions([], [N, out]))).toEqual([{ key: "check.partitionOutside", vars: {}, itemIds: [], partitionIds: ["o"] }]);
   });
 
   it("reports a partition across the notch of an L-shaped room, though both ends are inside", () => {
     const p = withPartitions([], [{ id: "d", a: { x: 4000, y: 5000 }, b: { x: 7000, y: 3000 }, thickness: 100, height: 3000 }]);
     p.room.points = lRoom(8000, 6000, 3000, 2000);
     p.room.openings = [];
-    expect(checkProject(p).map((i) => i.key)).toEqual(["check.partitionOutside"]);
+    expect(layout(p).map((i) => i.key)).toEqual(["check.partitionOutside"]);
   });
 
   it("reports floor items in front of a door in a partition, on the side it opens to", () => {
@@ -162,13 +169,13 @@ describe("checkProject partitions", () => {
     const east = testItem("e", "table", 3650, 1450, 90);
     const west = testItem("w", "table", 2600, 1450, 90);
     const p = withPartitions([east, west], [N], [door]);
-    expect(checkProject(p)).toEqual([{ key: "check.doorBlocked", vars: { pos: 1 }, itemIds: ["e"] }]);
+    expect(layout(p)).toEqual([{ key: "check.doorBlocked", vars: { pos: 1 }, itemIds: ["e"] }]);
   });
 });
 
 describe("position numbers in the findings", () => {
   it("names items by their stable numbers, the lower first", () => {
     const p = testProject([testItem("a", "table", 2000, 350, 0, { pos: 12 }), testItem("b", "table", 2500, 350, 0, { pos: 3 })]);
-    expect(checkProject(p).find((i) => i.key === "check.overlap")?.vars).toEqual({ a: 3, b: 12 });
+    expect(layout(p).find((i) => i.key === "check.overlap")?.vars).toEqual({ a: 3, b: 12 });
   });
 });
