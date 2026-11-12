@@ -1,5 +1,7 @@
 // Every German text of the website. en.mjs has the same keys (scripts/check-i18n.mjs). The site
-// says "du", like the app; terms follow docs/i18n.md. {v} and {date} are filled in by the pages.
+// says "du", like the app; terms follow docs/i18n.md. {v}, {date}, {units} and {positions} are filled
+// in by the pages, {positions} from src/data/example.mjs; a ...Unknown text stands in for one with
+// {positions} when the build cannot read the release.
 export const de = {
   lang: 'de',
   locale: 'de_DE',
@@ -36,7 +38,8 @@ export const de = {
     },
     example: {
       title: 'Beispielküche „Restaurant Lindenhof“ – Kitchenplaner',
-      description: 'Eine fertig geplante Restaurantküche mit 65 Positionen zum Ausprobieren: Grundriss, Ansichten, 3D, Geräteliste und die Exporte als Dateien zum Ansehen.',
+      description: 'Eine fertig geplante Restaurantküche mit {positions} Positionen zum Ausprobieren: Grundriss, Ansichten, 3D, Geräteliste und die Exporte als Dateien zum Ansehen.',
+      descriptionUnknown: 'Eine fertig geplante Restaurantküche zum Ausprobieren und Vorzeigen: Grundriss, Ansichten, 3D, Geräteliste und die Exporte als Dateien zum Ansehen.',
     },
     download: {
       title: 'Kitchenplaner herunterladen – Windows, macOS, Linux',
@@ -92,7 +95,7 @@ export const de = {
         {
           title: 'Grundriss in Millimetern',
           text: 'Raum und Geräte maßstäblich, mit Bemaßung, Raster und Einrasten. Geräte rasten mit der Rückseite an Wänden ein und richten sich an ihren Nachbarn aus; Hilfslinien zeigen, woran.',
-          alt: 'Bemaßter Grundriss einer Restaurantküche mit 65 Positionen',
+          alt: 'Bemaßter Grundriss einer Restaurantküche mit {positions} Positionen',
           caption: 'Ausschnitt aus dem Grundriss: Kochinsel und Kochwand mit Positionsnummern und Bemaßung.',
         },
         {
@@ -131,8 +134,16 @@ export const de = {
       moreTitle: 'Außerdem',
       more: [
         { title: 'Geräteliste mit Anschlusswerten', text: 'Jede Position mit Maßen, Elektro (kW und Spannung), Gas, Kalt- und Warmwasser, Abwasser und Abluft, mit Summen.' },
-        { title: 'Prüfung', text: 'Findet Geräte, die sich überschneiden, aus dem Raum ragen, eine Tür versperren, höher als der Raum sind oder in einer Trennwand stehen.' },
+        // Connection points and the installation plan are new in 0.3.0. The elevations per wall, the
+        // DXF with blocks and the clearance checks came with 0.2.3; they show with the 0.3.0 texts.
+        { title: 'Anschlusspunkte', text: 'Jedes Gerät hat Anschlusspunkte für seine Gewerke: Elektro, Kalt-, Warm- und enthärtetes Wasser, Abwasser, Bodenablauf, Gas, Abluft, Zuluft, Dampf und Kälte (Verbund), jeder mit Lage und Höhe über Fertigfußboden. Kitchenplaner leitet sie aus dem Katalog ab; Strom, Absicherung, Anschlussart, Nennweite, „fetthaltig“ und eine Bemerkung änderst du im Eigenschaftenfeld.', since: '0.3.0' },
+        { title: 'Installationsplan', text: 'Unter „Darstellung“ wählst du, welche Anschlusspunkte Grundriss und 3D zeigen: alle oder nur Elektro, Sanitär, Gas, Lüftung oder Kälte und Dampf. Der Plansatz als PDF bekommt je Gewerk einen Installationsplan mit Anschlusstabelle; einzeln exportierst du ihn als SVG, DXF und PNG, die Anschlussliste als CSV.', since: '0.3.0' },
+        { title: 'Prüfung', text: 'Findet Geräte, die sich überschneiden, aus dem Raum ragen, eine Tür versperren, höher als der Raum sind oder in einer Trennwand stehen.', until: '0.3.0' },
+        { title: 'Prüfung', text: 'Findet Geräte, die sich überschneiden, aus dem Raum ragen, eine Tür versperren, höher als der Raum sind oder in einer Trennwand stehen. Dazu die Abstände einer Profiküche: Bewegungsflächen, Gänge, Haubenüberstand und ein Handwaschbecken in Reichweite, jeweils mit gemessenem und nötigem Wert.', since: '0.3.0' },
+        { title: 'Prüfung der Anschlüsse', text: 'Die Prüfung meldet Gasgeräte ohne Haube, Wasser-, Abwasser- und Gasanschlüsse weit von der Wand ohne Bodentank, Geräte mit Bodenablauf ohne Rinne oder Gully in Reichweite, Hauben mit zu wenig Abluft für die Wärme darunter (als Richtwert) und eine Absicherung unter dem Strom.', since: '0.3.0' },
         { title: 'Export', text: 'Grundriss als SVG, DXF und PNG, Ansichten als SVG und DXF, die 3D-Ansicht als PNG und die Geräteliste als CSV für Excel.' },
+        { title: 'DXF für CAD', text: 'DXF im Format AutoCAD 2000, in Millimetern. Jedes Gerät ist ein Block mit Pos., Name, Maßen, Hersteller und Anschlusswerten als Attributen, jeder Anschlusspunkt ein Block mit seinen Werten; die Layer folgen den Gewerken.', since: '0.3.0' },
+        { title: 'Eine Ansicht pro Wand', text: 'Jede Wand hat ihre eigene Ansicht, schräge Wände eingeschlossen. „Alle Ansichten als SVG…“ legt für jede schräge Wand ein Blatt an; im Plansatz wählst du keine, die schrägen oder alle Wände.', since: '0.3.0' },
         { title: 'Eine Datei pro Projekt', text: 'Ein Projekt ist eine einzelne .kplan-Datei. Ein Doppelklick öffnet sie in Kitchenplaner; Rückgängig und Wiederholen gelten für jede Änderung.' },
         { title: 'Plansatz als PDF', text: 'Grundriss, die vier Ansichten, Geräteliste und 3D-Ansicht in einem PDF, von A4 bis A0, im festen Maßstab von 1:20 bis 1:200, jedes Blatt mit Rahmen und Plankopf.', since: '0.2.0' },
         { title: 'Hersteller und Preise', text: 'Hersteller, Typ, Artikelnummer und Nettopreis je Position, in der Geräteliste, der CSV und dem PDF, mit dem Gesamtpreis.', since: '0.2.0' },
@@ -157,11 +168,12 @@ export const de = {
   },
   example: {
     title: 'Beispielküche „Restaurant Lindenhof“',
-    lead: 'Eine vollständig geplante À-la-carte-Restaurantküche für rund 120 Gedecke, zum Ausprobieren und Vorzeigen. Das Restaurant ist erfunden, die Planung ist echt: 65 Positionen, vom Wareneingang bis zur Geschirrrückgabe.',
+    lead: 'Eine vollständig geplante À-la-carte-Restaurantküche für rund 120 Gedecke, zum Ausprobieren und Vorzeigen. Das Restaurant ist erfunden, die Planung ist echt: {positions} Positionen, vom Wareneingang bis zur Geschirrrückgabe.',
+    leadUnknown: 'Eine vollständig geplante À-la-carte-Restaurantküche für rund 120 Gedecke, zum Ausprobieren und Vorzeigen. Das Restaurant ist erfunden, die Planung ist echt, vom Wareneingang bis zur Geschirrrückgabe.',
     factsTitle: 'Kennzahlen',
     facts: [
       ['Raum', 'L-förmig, Innenmaß 13,2 × 9,6 m, 104,6 m², 3,20 m hoch'],
-      ['Geräte und Einrichtung', '65 Positionen'],
+      ['Geräte und Einrichtung', '{positions} Positionen'],
       ['Anschlussleistung', '283 kW elektrisch, kein Gas'],
       ['Abluft', '11 600 m³/h (zwei Inselhauben, Wandhaube, Bandspülmaschine)'],
       ['Wasser', '15 Kaltwasser-, 11 Warmwasseranschlüsse, 20 Abläufe, 2 Bodenabläufe'],
@@ -239,7 +251,8 @@ export const de = {
     },
     example: {
       title: 'Beispielküche',
-      text: 'Zum Ausprobieren gibt es eine fertig geplante Restaurantküche mit 65 Positionen.',
+      text: 'Zum Ausprobieren gibt es eine fertig geplante Restaurantküche mit {positions} Positionen.',
+      textUnknown: 'Zum Ausprobieren gibt es eine fertig geplante Restaurantküche.',
       link: 'Zur Beispielküche',
     },
     updates: {

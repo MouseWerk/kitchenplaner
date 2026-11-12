@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { parseNotes, inline, publishedNotes, readNotes, NOTES_DIR } from '../src/data/notes.mjs';
 import { CATALOG_SIZES, catalogUnits } from '../src/data/catalog.mjs';
 import { ANCHORS } from '../src/data/site.mjs';
-import { toDownloads, compareVersions, available } from '../src/data/release.mjs';
+import { toDownloads, compareVersions, available, shown } from '../src/data/release.mjs';
+import { EXAMPLE_POSITIONS, examplePositions } from '../src/data/example.mjs';
 import { CROPS } from '../src/data/crops.mjs';
 import { checkCatalogs } from './check-i18n.mjs';
 import { checkSheet, checkContrast } from './check-design.mjs';
@@ -160,5 +161,81 @@ test('section anchors are in the language of their page', () => {
   for (const [k, v] of Object.entries(ANCHORS)) {
     assert.match(v.en, /^[a-z-]+$/, k);
     assert.ok(!/ae|oe|ue|fuer/.test(v.en), `${k}: ${v.en}`);
+  }
+});
+
+test('an entry shows from its since on and before its until; old and new text never show together', () => {
+  const at = (v) => toDownloads(v ? [rel(`v${v}`)] : null);
+  const old = { until: '0.3.0' };
+  const neu = { since: '0.3.0' };
+  for (const [v, want] of [['0.2.3', [true, false]], ['0.3.0', [false, true]], ['0.3.1', [false, true]], [null, [true, false]]]) {
+    assert.deepEqual([shown(at(v), old), shown(at(v), neu)], want, String(v));
+  }
+  assert.equal(shown(at('0.2.3'), {}), true);
+});
+
+/** The titles of the home page's „Außerdem“ list that a site built with a given release shows. */
+const moreTitles = (dict, version) => dict.home.features.more.filter((m) => shown(toDownloads([rel(`v${version}`)]), m)).map((m) => m.title);
+
+test('until 0.3.0 is published the feature list is the one of 0.2.x; with 0.3.0 it adds the connection points', () => {
+  const before = ['Geräteliste mit Anschlusswerten', 'Prüfung', 'Export', 'Eine Datei pro Projekt', 'Plansatz als PDF', 'Hersteller und Preise',
+    'Gleichzeitigkeitsfaktor', 'Türen nach DIN', 'Feste Positionsnummern', 'Sicherung und Updates', 'Hell und dunkel'];
+  assert.deepEqual(moreTitles(de, '0.2.3'), before);
+  assert.deepEqual(moreTitles(de, '0.2.2'), before);
+  const after = moreTitles(de, '0.3.0');
+  for (const t of ['Anschlusspunkte', 'Installationsplan', 'Prüfung der Anschlüsse', 'DXF für CAD', 'Eine Ansicht pro Wand']) assert.ok(after.includes(t), t);
+  assert.equal(after.filter((t) => t === 'Prüfung').length, 1);
+  assert.equal(moreTitles(en, '0.3.0').length, after.length);
+  // The old check text is the one of 0.2.x, the new one says more.
+  const check = (v) => de.home.features.more.find((m) => m.title === 'Prüfung' && shown(toDownloads([rel(`v${v}`)]), m)).text;
+  assert.ok(!check('0.2.3').includes('Bewegungsflächen'));
+  assert.ok(check('0.3.0').includes('Bewegungsflächen'));
+});
+
+test('since and until name versions that exist: not newer than the workspace version', async () => {
+  const cargo = await readFile(join(NOTES_DIR, '..', '..', 'Cargo.toml'), 'utf8');
+  const version = cargo.match(/\[workspace\.package\][^[]*?version\s*=\s*"([\d.]+)"/)?.[1];
+  assert.ok(version, 'no version in Cargo.toml');
+  const gates = [];
+  const walk = (o) => {
+    if (!o || typeof o !== 'object') return;
+    for (const k of ['since', 'until']) if (typeof o[k] === 'string') gates.push(o[k]);
+    for (const v of Object.values(o)) walk(v);
+  };
+  walk(de);
+  walk(en);
+  assert.ok(gates.length > 0);
+  // A gate one minor version ahead is allowed: texts for the release being prepared.
+  const [maj, min] = version.split('.').map(Number);
+  for (const g of gates) assert.ok(compareVersions(g, `${maj}.${min + 1}.0`) <= 0, `gate ${g} is beyond ${version}`);
+});
+
+test('the example position count follows the release people download', () => {
+  assert.equal(examplePositions('0.2.3'), 65);
+  assert.equal(examplePositions('0.2.0'), 65);
+  assert.equal(examplePositions('0.3.0'), 67);
+  assert.equal(examplePositions('0.3.1'), 67);
+  assert.equal(examplePositions(null), null);
+  assert.equal(examplePositions('0.0.9'), null);
+  assert.equal(examplePositions(toDownloads([rel('v0.2.3'), rel('v0.2.2')]).latest?.version), 65);
+});
+
+test('the newest example position count is the one of the example files in examples/', async () => {
+  for (const name of ['Beispielkueche-Restaurant.kplan', 'Example-Kitchen-Restaurant.kplan']) {
+    const file = JSON.parse(await readFile(join(NOTES_DIR, '..', '..', 'examples', name), 'utf8'));
+    assert.equal(file.items.length, EXAMPLE_POSITIONS[0].positions, name);
+  }
+});
+
+test('texts carry no position count of their own; it comes from example.mjs', () => {
+  const strings = (o, out = []) => {
+    if (typeof o === 'string') out.push(o);
+    else if (o && typeof o === 'object') for (const v of Object.values(o)) strings(v, out);
+    return out;
+  };
+  for (const dict of [de, en]) {
+    const all = strings(dict);
+    assert.ok(!all.some((s) => /\d+\s+(Positionen|positions)\b/.test(s)), dict.lang);
+    assert.ok(all.filter((s) => s.includes('{positions}')).length >= 5, dict.lang);
   }
 });

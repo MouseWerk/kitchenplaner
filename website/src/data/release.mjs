@@ -144,3 +144,12 @@ export function formatDate(iso, lang) {
  * @param {string | undefined} since
  */
 export const available = (d, since) => !since || (!!d.latest && compareVersions(d.latest.version, since) >= 0);
+
+/**
+ * Whether an entry of a list on the site shows: from its `since` on, and before its `until`. An
+ * entry with `until` is the old text of an entry that a newer one with that `since` replaces, so
+ * exactly one of the two shows, also when the API cannot be read (then the old one).
+ * @param {Downloads} d
+ * @param {{ since?: string, until?: string }} entry
+ */
+export const shown = (d, entry) => available(d, entry.since) && !(entry.until && available(d, entry.until));

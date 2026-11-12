@@ -21,7 +21,8 @@ npm run dev              # development server (no CSP in development)
 Where the content comes from:
 
 - texts: `src/i18n/de.mjs` and `en.mjs` (same keys; „du“; terms from `docs/i18n.md` and the app's
-  catalogs). An entry with `since: '0.x.0'` shows only once that version is released.
+  catalogs). An entry with `since: '0.x.0'` shows only once that version is released; an entry with
+  `until: '0.x.0'` is the old text that such an entry replaces and shows only before it.
 - screenshots: `pitch/*.png`, converted to AVIF and WebP at build time (`src/components/Shot.astro`);
   below 960 px a crop of each (`src/data/crops.mjs`, cut by `scripts/crops.mjs` into the ignored
   `src/assets/crops/`)
@@ -31,6 +32,8 @@ Where the content comes from:
   version show once its release is published
 - the number of catalog units per release: `src/data/catalog.mjs` (add a row when a release changes
   the catalog; a unit test checks it against that version's release notes)
+- the number of positions of the example kitchen per release: `src/data/example.mjs` (a unit test
+  checks the newest row against `examples/`; `PITCH_POSITIONS` is the number in the screenshots)
 - section anchors per language: `ANCHORS` in `src/data/site.mjs`
 - example kitchen exports: `pitch/exports/`, published under `/beispiel/`
 - legal notice, privacy policy and the Organization in the structured data: `src/data/legal.mjs`

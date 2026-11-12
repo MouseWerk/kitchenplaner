@@ -15,7 +15,8 @@ const pdfLiteral = (s) => [...s].map((c) => (c.charCodeAt(0) > 0x7e ? "\\" + c.c
 function pdfText(bytes) {
   const raw = bytes.toString("latin1");
   let out = raw;
-  const re = /stream\r?\n/g;
+  // Not the "stream" inside "endstream": that would cut every later stream from the wrong start.
+  const re = /(?<!end)stream\r?\n/g;
   let m;
   while ((m = re.exec(raw))) {
     const start = m.index + m[0].length;

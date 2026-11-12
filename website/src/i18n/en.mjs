@@ -1,5 +1,5 @@
 // Every English text of the website, with the same keys as de.mjs (scripts/check-i18n.mjs).
-// Terms follow docs/i18n.md. {v} and {date} are filled in by the pages.
+// Terms follow docs/i18n.md. {v}, {date}, {units} and {positions} are filled in by the pages (de.mjs).
 export const en = {
   lang: 'en',
   locale: 'en_GB',
@@ -36,7 +36,8 @@ export const en = {
     },
     example: {
       title: 'Example kitchen “Restaurant Lindenhof” – Kitchenplaner',
-      description: 'A fully planned restaurant kitchen with 65 positions to try out: floor plan, elevations, 3D, equipment list and the exported files to look at.',
+      description: 'A fully planned restaurant kitchen with {positions} positions to try out: floor plan, elevations, 3D, equipment list and the exported files to look at.',
+      descriptionUnknown: 'A fully planned restaurant kitchen to try out and to show: the floor plan, the elevations, 3D, the equipment list and the exported files to look at.',
     },
     download: {
       title: 'Download Kitchenplaner – free for Windows, macOS and Linux',
@@ -92,7 +93,7 @@ export const en = {
         {
           title: 'Floor plan in millimetres',
           text: 'The room and every unit to scale, with dimensions, a grid and snapping. Units snap with their back to walls and line up with their neighbours; guide lines show where.',
-          alt: 'Dimensioned floor plan of a restaurant kitchen with 65 positions',
+          alt: 'Dimensioned floor plan of a restaurant kitchen with {positions} positions',
           caption: 'Detail of the floor plan: cooking island and cooking wall with position numbers and dimensions.',
         },
         {
@@ -130,8 +131,14 @@ export const en = {
       moreTitle: 'Also',
       more: [
         { title: 'Equipment list with connection values', text: 'Every position with its size, electric power and voltage, gas, cold and hot water, drain and exhaust air, with the totals.' },
-        { title: 'Check', text: 'Finds units that overlap, stand outside the room, block a door, are higher than the room or stand in a partition.' },
+        { title: 'Connection points', text: 'Every unit has connection points for its trades: electric, cold, hot and softened water, drain, floor drain, gas, exhaust air, supply air, steam and remote refrigeration, each with its place and its height above the finished floor. Kitchenplaner derives them from the catalog; you change current, fuse, connection type, nominal size, “greasy” and a note in the properties panel.', since: '0.3.0' },
+        { title: 'Installation plan', text: 'Under “View” you choose which connection points the plan and the 3D view show: all, or only electric, plumbing, gas, ventilation, or refrigeration and steam. The PDF plan set gets an installation plan with a connection table for each trade; on its own, the installation plan exports as SVG, DXF and PNG, the connection list as CSV.', since: '0.3.0' },
+        { title: 'Check', text: 'Finds units that overlap, stand outside the room, block a door, are higher than the room or stand in a partition.', until: '0.3.0' },
+        { title: 'Check', text: 'Finds units that overlap, stand outside the room, block a door, are higher than the room or stand in a partition. It also knows the clearances of a commercial kitchen: movement areas, aisles, hood overhang and a hand wash basin within reach, each with the measured and the required value.', since: '0.3.0' },
+        { title: 'Checking the connections', text: 'The check reports gas units without a hood, water, drain and gas connections far from a wall without a floor box, units with a floor drain but no channel or gully within reach, hoods with too little exhaust air for the heat below them (as a typical value) and a fuse below the current.', since: '0.3.0' },
         { title: 'Export', text: 'The floor plan as SVG, DXF and PNG, the elevations as SVG and DXF, the 3D view as PNG and the equipment list as CSV for Excel.' },
+        { title: 'DXF for CAD', text: 'DXF in AutoCAD 2000 format, in millimetres. Every unit is a block with its Pos., name, size, manufacturer and connection values as attributes, every connection point a block with its values; the layers follow the trades.', since: '0.3.0' },
+        { title: 'An elevation per wall', text: 'Every wall has its own elevation, slanted walls included. “All elevations as SVG…” adds a sheet for each slanted wall; in the plan set you choose none, the slanted walls or every wall.', since: '0.3.0' },
         { title: 'One file per project', text: 'A project is a single .kplan file. Double-click it to open it in Kitchenplaner; undo and redo work for every change.' },
         { title: 'PDF plan set', text: 'The floor plan, the four elevations, the equipment list and the 3D view in one PDF, A4 to A0, at a fixed scale from 1:20 to 1:200, each sheet with a frame and a title block.', since: '0.2.0' },
         { title: 'Manufacturers and prices', text: 'Manufacturer, type, article number and net price for each position, in the equipment list, the CSV and the PDF, with the total price.', since: '0.2.0' },
@@ -156,11 +163,12 @@ export const en = {
   },
   example: {
     title: 'Example kitchen “Restaurant Lindenhof”',
-    lead: 'A fully planned à la carte restaurant kitchen for about 120 covers, to try out and to show. The restaurant is made up, the planning is real: 65 positions, from the goods entrance to the dish return.',
+    lead: 'A fully planned à la carte restaurant kitchen for about 120 covers, to try out and to show. The restaurant is made up, the planning is real: {positions} positions, from the goods entrance to the dish return.',
+    leadUnknown: 'A fully planned à la carte restaurant kitchen for about 120 covers, to try out and to show. The restaurant is made up, the planning is real, from the goods entrance to the dish return.',
     factsTitle: 'Key figures',
     facts: [
       ['Room', 'L-shaped, inside 13.2 × 9.6 m, 104.6 m², 3.20 m high'],
-      ['Units and furniture', '65 positions'],
+      ['Units and furniture', '{positions} positions'],
       ['Connected load', '283 kW electric, no gas'],
       ['Exhaust air', '11,600 m³/h (two island hoods, a wall hood, a conveyor dishwasher)'],
       ['Water', '15 cold and 11 hot water connections, 20 drains, 2 floor drains'],
@@ -238,7 +246,8 @@ export const en = {
     },
     example: {
       title: 'Example kitchen',
-      text: 'To try it out, there is a fully planned restaurant kitchen with 65 positions.',
+      text: 'To try it out, there is a fully planned restaurant kitchen with {positions} positions.',
+      textUnknown: 'To try it out, there is a fully planned restaurant kitchen.',
       link: 'Go to the example kitchen',
     },
     updates: {

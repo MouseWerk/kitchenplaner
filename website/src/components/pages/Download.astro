@@ -3,6 +3,7 @@ import Base from '../../layouts/Base.astro';
 import { dicts, fill, type Lang } from '../../i18n';
 import { getDownloads, button, formatSize, formatDate, available } from '../../data/release.mjs';
 import { ANCHORS, ROUTES, RELEASES_URL } from '../../data/site.mjs';
+import { examplePositions } from '../../data/example.mjs';
 
 interface Props { lang: Lang }
 const { lang } = Astro.props;
@@ -18,6 +19,9 @@ const platforms = [
   { id: 'linux', text: dl.linux, primary: button(d, 'linux-appimage'), secondary: button(d, 'linux-deb') },
 ] as const;
 const sums = button(d, 'checksums');
+// The positions of the example in this release (example.mjs); without the API the text has no number.
+const positions = examplePositions(d.latest?.version);
+const exampleText = positions ? fill(dl.example.text, { positions: String(positions) }) : dl.example.textUnknown;
 // The button names the variant and size ("x64-setup.exe, 1,9 MB"); the whole file name is the title.
 const meta = (b: { file: string | null; size: number | null }) => [b.file?.replace(/^Kitchenplaner_[\d.]+_/, ''), formatSize(b.size, lang)].filter(Boolean).join(', ');
 ---
@@ -78,7 +82,7 @@ const meta = (b: { file: string | null; size: number | null }) => [b.file?.repla
         )}
         <section class="block" aria-labelledby="example-h">
           <h2 id="example-h">{dl.example.title}</h2>
-          <p class="muted">{dl.example.text}</p>
+          <p class="muted">{exampleText}</p>
           <p><a href={ROUTES.example[lang]}>{dl.example.link}</a></p>
           <p class="muted">{dl.older}: <a href={RELEASES_URL} rel="noopener">{dl.releases}</a></p>
         </section>

@@ -2,9 +2,10 @@
 import Base from '../../layouts/Base.astro';
 import Shot from '../Shot.astro';
 import { dicts, fill, type Lang } from '../../i18n';
-import { getDownloads, available } from '../../data/release.mjs';
+import { getDownloads, shown } from '../../data/release.mjs';
 import { ANCHORS, ROUTES, REPO_URL, ISSUES_URL, LATEST_URL } from '../../data/site.mjs';
 import { catalogUnits } from '../../data/catalog.mjs';
+import { PITCH_POSITIONS } from '../../data/example.mjs';
 import { softwareApplication } from '../../data/jsonld';
 import { shot, crop, type ShotName } from '../../data/shots';
 import { variant, DESKTOP_WIDTHS, PHONE_WIDTHS, PHONE, PHONE_SIZES } from '../../data/images';
@@ -18,12 +19,14 @@ const d = await getDownloads();
 const FEATURE_SHOTS: ShotName[] = ['02-grundriss', '08-ansichten', '04-3d-uebersicht', '10-katalog-vorschau', '11-operator-verschieben', '12-raum-wand'];
 // From 960 px a feature's screenshot takes 7 of 12 columns of the 1180 px page, less the 48 px gap.
 const FEATURE_SIZES = '(min-width: 1244px) 660px, (min-width: 960px) calc(58.34vw - 66px), (min-width: 720px) calc(100vw - 64px), calc(100vw - 32px)';
-const more = h.features.more.filter((m) => available(d, 'since' in m ? m.since : undefined));
+const more = h.features.more.filter((m) => shown(d, m));
 // The catalog's size is that of the release people download (catalog.mjs), never main's.
 const units = catalogUnits(d.latest?.version);
 const features = h.features.items.map((f) => ({
   ...f,
   title: 'titleUnknown' in f ? (units ? fill(f.title, { units: units.toLocaleString(lang === 'de' ? 'de-DE' : 'en-GB') }) : f.titleUnknown) : f.title,
+  // The alt texts describe the screenshots, so they name the positions shown in them (example.mjs).
+  alt: fill(f.alt, { positions: String(PITCH_POSITIONS) }),
 }));
 
 // The hero is the largest paint: preload the one variant the browser will show (same files as Shot).

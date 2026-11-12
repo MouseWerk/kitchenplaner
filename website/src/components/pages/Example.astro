@@ -1,10 +1,11 @@
 ---
 import Base from '../../layouts/Base.astro';
 import Shot from '../Shot.astro';
-import { dicts, type Lang } from '../../i18n';
+import { dicts, fill, type Lang } from '../../i18n';
 import { getDownloads, button, formatSize } from '../../data/release.mjs';
 import { ANCHORS, ROUTES } from '../../data/site.mjs';
 import { EXPORTS } from '../../data/exports.mjs';
+import { examplePositions } from '../../data/example.mjs';
 import type { ShotName } from '../../data/shots';
 
 interface Props { lang: Lang }
@@ -12,6 +13,15 @@ const { lang } = Astro.props;
 const t = dicts[lang];
 const e = t.example;
 const d = await getDownloads();
+// The positions of the example in the release people download (example.mjs); without the API the
+// texts leave the number out.
+const positions = examplePositions(d.latest?.version);
+const withPositions = (s: string, unknown: string) => (positions ? fill(s, { positions: String(positions) }) : unknown);
+const lead = withPositions(e.lead, e.leadUnknown);
+const description = withPositions(t.meta.example.description, t.meta.example.descriptionUnknown);
+const facts = e.facts
+  .filter(([, v]) => positions || !v.includes('{positions}'))
+  .map(([k, v]) => [k, fill(v, { positions: String(positions) })]);
 // The file in the page's language first, then the other one; both name their size.
 const files = (lang === 'de'
   ? [[button(d, 'example-de'), e.fileDe], [button(d, 'example-en'), e.fileEn]]
@@ -26,10 +36,10 @@ const SIZES = '(min-width: 1244px) 578px, (min-width: 860px) calc(50vw - 44px), 
 const A = Object.fromEntries(Object.entries(ANCHORS).map(([k, v]) => [k, v[lang]])) as Record<keyof typeof ANCHORS, string>;
 const plan = EXPORTS.find((x) => x.name === 'grundriss.svg')!;
 ---
-<Base lang={lang} page="example" title={t.meta.example.title} description={t.meta.example.description}>
+<Base lang={lang} page="example" title={t.meta.example.title} description={description}>
   <div class="wrap page-head">
     <h1>{e.title}</h1>
-    <p class="lead">{e.lead}</p>
+    <p class="lead">{lead}</p>
   </div>
   <div class="page-body">
     <div class="wrap">
@@ -37,7 +47,7 @@ const plan = EXPORTS.find((x) => x.name === 'grundriss.svg')!;
         <section class="block" id={A.facts} aria-labelledby={`${A.facts}-h`}>
           <h2 id={`${A.facts}-h`}>{e.factsTitle}</h2>
           <dl class="kv">
-            {e.facts.map(([k, v]) => (<><dt>{k}</dt><dd>{v}</dd></>))}
+            {facts.map(([k, v]) => (<><dt>{k}</dt><dd>{v}</dd></>))}
           </dl>
         </section>
         <section class="block" id={A.open} aria-labelledby={`${A.open}-h`}>
