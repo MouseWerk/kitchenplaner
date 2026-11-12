@@ -352,9 +352,11 @@ async function waitReady(app) {
   );
   await app.waitUntil(
     async () => {
-      const ms = await app.browser.executeAsync((done) => {
+      // An async function: WebdriverIO runs it as an asynchronous script and returns what it resolves to.
+      const ms = await app.exec(async () => {
         const t0 = performance.now();
-        requestAnimationFrame(() => requestAnimationFrame(() => done(performance.now() - t0)));
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        return performance.now() - t0;
       });
       return ms < 250;
     },

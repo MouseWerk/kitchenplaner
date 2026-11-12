@@ -11,7 +11,9 @@ if ($LASTEXITCODE) { exit $LASTEXITCODE }
 Push-Location $PSScriptRoot
 try {
   Remove-Item screenshots\FAIL-* -ErrorAction SilentlyContinue
-  if (-not (Test-Path node_modules)) { npm ci --no-audit --no-fund; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
+  # Installs again when the lockfile changed since the last install (npm writes its own copy last).
+  $installed = Get-Item node_modules\.package-lock.json -ErrorAction SilentlyContinue
+  if (-not $installed -or $installed.LastWriteTime -le (Get-Item package-lock.json).LastWriteTime) { npm ci --no-audit --no-fund; if ($LASTEXITCODE) { exit $LASTEXITCODE } }
   $files = if ($args.Count) { $args } else { Get-ChildItem tests\*.test.js | ForEach-Object { "tests\$($_.Name)" } }
   $env:KITCHENPLANER_APP = "$root\target\debug\kitchenplaner.exe"
   node --test --test-concurrency=1 --test-reporter=spec @files

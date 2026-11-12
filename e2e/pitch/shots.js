@@ -320,21 +320,24 @@ async function lookDown(px) {
 /** Waits until the 3D camera has stopped: the view cube keeps its turn over several frames. */
 async function camAtRest() {
   if (!(await app.exec((s) => !!document.querySelector(`${s} canvas`), V3D))) return;
-  await b.executeAsync((done) => {
-    let last = null;
-    let same = 0;
-    const step = () => {
-      const t = document.querySelector(".v3d-cube")?.dataset.turn ?? "";
-      if (t === last) same++;
-      else {
-        same = 0;
-        last = t;
-      }
-      if (same >= 6) done(true);
-      else requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  });
+  await b.execute(
+    async () =>
+      new Promise((done) => {
+        let last = null;
+        let same = 0;
+        const step = () => {
+          const t = document.querySelector(".v3d-cube")?.dataset.turn ?? "";
+          if (t === last) same++;
+          else {
+            same = 0;
+            last = t;
+          }
+          if (same >= 6) done(true);
+          else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
+  );
 }
 
 /** Screen point of a plan point (mm), from the plan's own viewport transform. */
@@ -472,7 +475,7 @@ async function settle({ toasts = true, catalog = true, park = true } = {}) {
       120000,
     );
   await camAtRest();
-  await b.executeAsync((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true))));
+  await b.execute(async () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(true)))));
 }
 
 async function shot(name) {

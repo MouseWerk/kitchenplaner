@@ -6,6 +6,12 @@ with fresh data and checks what a user sees and what lands on disk.
 
 ## Running
 
+Node 22.23.4 or later (WebdriverIO 10; CI uses the latest Node 22). `package.json` overrides
+`readdir-glob` under `archiver` (pulled in by WebdriverIO) to 4.x: archiver 8, its latest release,
+still asks for readdir-glob 3, whose minimatch 10 has a known denial of service; readdir-glob 4
+differs only in that dependency (minimatch 11). Drop the override once archiver asks for it.
+`run.sh` and `run.ps1` install the packages again when `package-lock.json` changed.
+
 Linux (also CI):
 
 ```

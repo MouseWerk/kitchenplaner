@@ -9,6 +9,7 @@ npm --prefix ui run build
 cargo build -p kitchenplaner --features custom-protocol
 cd e2e
 rm -f screenshots/FAIL-*
-[ -d node_modules ] || npm ci --no-audit --no-fund
+# Installs again when the lockfile changed since the last install (npm writes its own copy last).
+[ node_modules/.package-lock.json -nt package-lock.json ] || npm ci --no-audit --no-fund
 files=("${@:-tests/*.test.js}")
 KITCHENPLANER_APP="$PWD/../target/debug/kitchenplaner" node --test --test-concurrency=1 --test-reporter=spec ${files[*]}

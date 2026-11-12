@@ -2,11 +2,19 @@
   "name": "kitchenplaner-e2e",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1"
+  },
   "scripts": {
     "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.js",
     "pitch": "node pitch/shots.js"
   },
   "dependencies": {
-    "webdriverio": "^9.32.0"
+    "webdriverio": "^10.2.0"
+  },
+  "overrides": {
+    "archiver": {
+      "readdir-glob": "^4.0.0"
+    }
   }
 }
